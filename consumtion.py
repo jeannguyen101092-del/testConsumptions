@@ -101,9 +101,8 @@ def get_secure_gemini_key():
 def save_to_supabase_techpack_table(payload_data, raw_file_bytes=None, file_name=""):
     """
     Hàm xử lý đồng bộ dữ liệu nạp kho của Chức năng 1.
-    ✨ ĐÃ SỬA TRIỆT ĐỂ LỖI MÙ THỊ GIÁC: Ép hệ thống dùng đúng cú pháp Gemini Vision thế hệ mới,
-    tự động phân tích Flat Sketch thành chuỗi đặc trưng hình học chi tiết (form dáng, túi, cạp) 
-    và lưu vào cột 'sketch_vector' trên Supabase để làm gốc cho Chức năng 3 đối soát bằng hình ảnh.
+    ✨ ĐÃ SỬA LỖI ĐẨY ẢNH STORAGE: Khai báo chính xác tham số headers=storage_headers 
+    để ép Supabase Storage chấp nhận tệp ảnh Jpeg, dọn sạch bucket trống trơn.
     """
     try:
         style_name_db = payload_data.get("style_number_parsed", "").strip()
@@ -155,7 +154,7 @@ def save_to_supabase_techpack_table(payload_data, raw_file_bytes=None, file_name
             except Exception:
                 pass
 
-        # 2. Đẩy tập tin hình ảnh sản phẩm lên Supabase Storage kho_anh phục vụ hiển thị
+        # 2. Đẩy tập tin hình ảnh sản phẩm lên Supabase Storage kho_anh (Đã sửa lỗi định vị headers)
         if image_data:
             try:
                 storage_headers = {
@@ -166,15 +165,16 @@ def save_to_supabase_techpack_table(payload_data, raw_file_bytes=None, file_name
                 }
                 clean_filename = re.sub(r'[^a-zA-Z0-9_-]', '', style_name_db)
                 storage_url = f"{SB_URL.rstrip('/')}/storage/v1/object/kho_anh/{clean_filename}.jpg"
-                upload_res = requests.post(storage_url, storage_headers, data=image_data, timeout=20)
+                
+                # SỬA LỖI MẤU CHỐT: Thêm chữ headers= bọc ngoài cấu trúc tiêu đề xác thực
+                upload_res = requests.post(storage_url, headers=storage_headers, data=image_data, timeout=20)
                 if 200 <= upload_res.status_code <= 299:
                     public_image_url = f"{SB_URL.rstrip('/')}/storage/v1/object/public/kho_anh/{clean_filename}.jpg"
             except Exception: 
                 pass
 
-        # 3. ⚡ LUỒNG KÍCH HOẠT MẮT THẦN AI VISION: TRÍCH XUẤT CHUỖI ĐẶC TRƯNG HÌNH HỌC CHI TIẾT
+        # 3. LUỒNG KÍCH HOẠT MẮT THẦN AI VISION: TRÍCH XUẤT CHUỖI ĐẶC TRƯNG HÌNH HỌC
         measurements_raw = payload_data.get("measurements", {})
-        # Khởi tạo chuỗi đặc trưng nền mặc định bằng văn bản thông số đo để phòng hờ rớt mạng API
         visual_description_str = f"GARMENT TYPE: {payload_data.get('category', 'Garment Pants')}. Specs profile summary: " + ", ".join([f"{k}:{v}" for k, v in list(measurements_raw.items())[:6]])
         
         if image_data:
@@ -191,7 +191,6 @@ def save_to_supabase_techpack_table(payload_data, raw_file_bytes=None, file_name
                     Output a single dense string of these visual characteristics for apparel similarity vector matching.
                     Do not include greetings, just return the raw dense characteristic description string.
                     """
-                    # Gọi cổng AI Vision chụp ảnh bản vẽ phẳng dịch sang chuỗi đặc trưng hình dạng
                     vision_res = client_db.models.generate_content(
                         model='gemini-2.5-flash',
                         contents=[
@@ -200,7 +199,6 @@ def save_to_supabase_techpack_table(payload_data, raw_file_bytes=None, file_name
                         ]
                     )
                     if vision_res and vision_res.text:
-                        # Ghi nhận chuỗi mô tả siêu chi tiết thay thế chữ rác cũ
                         visual_description_str = vision_res.text.strip()
                 except Exception as ai_vision_err:
                     print(f"[AI VISION RE-EXTRACT ERROR]: {str(ai_vision_err)}")
@@ -222,7 +220,7 @@ def save_to_supabase_techpack_table(payload_data, raw_file_bytes=None, file_name
             "BaseSize": payload_data.get("base_size_name"),
             "DetailedMeasurements": clean_dict,
             "SketchURL": public_image_url,
-            "sketch_vector": visual_description_str # Cột lưu trữ mắt thần đối soát hình ảnh
+            "sketch_vector": visual_description_str
         }
         
         response = requests.post(insert_url, headers=headers, json=[db_payload], timeout=15)
@@ -230,6 +228,7 @@ def save_to_supabase_techpack_table(payload_data, raw_file_bytes=None, file_name
     except Exception as e:
         st.sidebar.error(f"Lỗi xử lý hệ thống nạp kho: {str(e)}")
         return False
+
 
 
 
