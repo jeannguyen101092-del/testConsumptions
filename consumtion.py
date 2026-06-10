@@ -748,7 +748,7 @@ try:
 except ImportError:
     pass
 
-# HÀM QUY ĐỔI PHÂN SỐ NGÀNH MAY CHUẨN (Đã sửa lỗi cấu trúc mảng)
+# HÀM QUY ĐỔI PHÂN SỐ NGÀNH MAY CHUẨN
 def parse_fraction(val_str):
     if not val_str: 
         return 0.0
@@ -790,9 +790,9 @@ def ai_consumption_analyst_engine(client, user_message, matched_techpack, bom_re
     shrinkage_length = re.findall(r'(?:CO RÚT DỌC|DỌC)\s*(\d+(?:\.\d+)?)\s*%', user_message.upper())
     new_fabric_width = re.findall(r'(?:KHỔ VẢI|KHỔ)\s*(\d+)\s*(?:\"|INCH|INCHES)?', user_message.upper())
 
-    w_shrink = float(shrinkage_width[0]) if shrinkage_width else 0.0
-    l_shrink = float(shrinkage_length[0]) if shrinkage_length else 0.0
-    f_width = float(new_fabric_width[0]) if new_fabric_width else 0.0
+    w_shrink = float(shrinkage_width) if shrinkage_width else 0.0
+    l_shrink = float(shrinkage_length) if shrinkage_length else 0.0
+    f_width = float(new_fabric_width) if new_fabric_width else 0.0
 
     system_instruction = f"""
     You are an expert Garment Engineer and Techpack Costing Analyst at PPJ Group.
@@ -837,7 +837,7 @@ def ai_consumption_analyst_engine(client, user_message, matched_techpack, bom_re
     except Exception as e:
         return f"🚨 Lỗi cổng phân tích định mức: {str(e)}"
 
-# Khởi tạo token API bảo mật
+# Bộ bóc chìa khóa API đồng bộ chính quy
 if "get_secure_gemini_key" in globals():
     gemini_key = get_secure_gemini_key()
 else:
@@ -875,28 +875,27 @@ if has_file:
                 page_img.convert("RGB").save(img_buf, format="JPEG", quality=75)
                 img_payload.append(types.Part.from_bytes(data=img_buf.getvalue(), mime_type='image/jpeg'))
             
+            # ĐÃ ÉP PROMPT CHỈ THỊ JSON: Đảm bảo AI luôn trả về định dạng sạch mà không cần tham số config
             extraction_prompt = (
                 "You are an expert Garment Specification Auditor at PPJ Group. Analyze all attached sheets page by page. "
                 "1. Locate the core 'Base Size' / 'Sample Size' specified by the buyer (e.g., Size 32 with Inseam 32, written as 32/32 or 32x32). "
                 "2. CRITICAL MEASUREMENT SELECTION RULE: Look closely at the grading table sheet. "
                 "If the table contains multiple inseam length columns (e.g., columns for Inseam 30, 32, 34), you MUST extract the target point of measurement (POM) values that belong ONLY to the specified Sample length column (which is 32\"). "
-                "STRICTLY FORBIDDEN: Do not blindly extract the value from the first column if it represents an Inseam of 30\". "
                 "You must output the true Inseam target value which is 32\" for a 32/32 profile garment. "
                 "3. Extract at least 15-20 distinct Points of Measurement (POM) for this specific sample size only. "
                 "4. Find the exact 'Style ID' / 'Style Number' (e.g., 1P001369), 'Category' / 'Product Line', and 'Buyer' name. "
                 "5. Detect the exact PAGE INDEX (0-based) containing the pure black and white line art TECHNICAL FLAT SKETCH. "
-                "Return a completely valid raw JSON string with this exact schema (no markdown blocks): "
+                "OUTPUT REQUIREMENT: Return ONLY a raw valid JSON string with no markdown code blocks or wrapper, matching this exact schema: "
                 "{\"detected_style_id\": \"string\", \"category\": \"string\", \"fabric_code\": \"string\", \"base_size_detected\": \"string\", \"measurements\": {}, \"sketch_page_index_detected\": 0}"
             )
 
             extraction_payload = list(img_payload)
             extraction_payload.append(extraction_prompt)
             
-            # Khắc phục triệt để lỗi 400 bằng cấu hình dictionary thô gọn nhẹ
+            # TRIỆT TIÊU LỖI 400: Loại bỏ hoàn toàn tham số config lỗi thời, chạy luồng gọi nguyên bản siêu ổn định
             extraction_res = client.models.generate_content(
                 model='gemini-2.5-flash', 
-                contents=extraction_payload,
-                config={"response_mime_type": "application/json"}
+                contents=extraction_payload
             )
             clean_json_text = extraction_res.text.strip().replace("```json", "").replace("```", "").strip()
             
@@ -989,7 +988,7 @@ if menu_selection == "🧵 BOM & Consumption Matrix":
                     {json.dumps(styles_pool_summary)}
                     
                     Analyze every style in the pool step by step based on the rules. Select the single best style that yields the highest cumulative score.
-                    Return ONLY a raw valid JSON object with no markdown code blocks, using this exact schema:
+                    OUTPUT REQUIREMENT: Return ONLY a raw valid JSON object with no markdown code blocks or wrapper, using this exact schema:
                     {{"selected_pool_index": integer, "reasoning_vietnamese": "string"}}
                     """
                     
@@ -997,11 +996,10 @@ if menu_selection == "🧵 BOM & Consumption Matrix":
                     if target_new_sketch_bytes:
                         match_contents.append(types.Part.from_bytes(data=target_new_sketch_bytes, mime_type='image/jpeg'))
                         
-                    # Loại bỏ hoàn toàn lớp cấu hình Config lỗi thời, thay bằng dictionary thô dứt điểm lỗi 400
+                    # TRIỆT TIÊU LỖI 400: Bỏ config=, đưa về luồng gọi trơn, ép cấu trúc JSON cứng thông qua Prompt chỉ thị phía trên
                     res_match = client.models.generate_content(
                         model='gemini-2.5-flash',
-                        contents=match_contents,
-                        config={"response_mime_type": "application/json"}
+                        contents=match_contents
                     )
                     
                     clean_match_json = res_match.text.strip().replace("```json", "").replace("```", "").strip()
@@ -1070,6 +1068,7 @@ if menu_selection == "🧵 BOM & Consumption Matrix":
             st.dataframe(pd.DataFrame(formatted_bom), use_container_width=True, hide_index=True)
         else:
             st.warning("⚠️ Không tìm thấy bảng chi tiết phụ liệu BOM lịch sử của mã hàng đối chiếu này trong kho dữ liệu.")
+
 
 
 
