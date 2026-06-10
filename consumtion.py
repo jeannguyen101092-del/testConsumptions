@@ -100,10 +100,10 @@ def get_secure_gemini_key():
     return None
 def save_to_supabase_techpack_table(payload_data, raw_file_bytes=None, file_name=""):
     """
-    Hàm xử lý đồng bộ dữ liệu, tự động tìm đúng trang có hình thiết kế phẳng (Sketch) sạch,
-    đẩy ảnh rập lên Storage kho_anh và số hóa chuỗi đặc trưng hình học đồng bộ với luồng đối soát.
-    ✨ ĐÃ SỬA TRIỆT ĐỂ LỖI CHUỖI MẶC ĐỊNH: Ép hệ thống dùng đúng cú pháp thư viện GenAI mới 
-    để trích xuất chuỗi đặc trưng hình học chi tiết, tuyệt đối không ghi đè chữ "technical garment layout specs".
+    Hàm xử lý đồng bộ dữ liệu nạp kho của Chức năng 1.
+    ✨ ĐÃ SỬA TRIỆT ĐỂ LỖI MÙ THỊ GIÁC: Ép hệ thống dùng đúng cú pháp Gemini Vision thế hệ mới,
+    tự động phân tích Flat Sketch thành chuỗi đặc trưng hình học chi tiết (form dáng, túi, cạp) 
+    và lưu vào cột 'sketch_vector' trên Supabase để làm gốc cho Chức năng 3 đối soát bằng hình ảnh.
     """
     try:
         style_name_db = payload_data.get("style_number_parsed", "").strip()
@@ -114,7 +114,7 @@ def save_to_supabase_techpack_table(payload_data, raw_file_bytes=None, file_name
         public_image_url = ""
         image_data = None
 
-        # 1. Luồng trích xuất hình ảnh từ tệp PDF bản vẽ kỹ thuật
+        # 1. Luồng trích xuất dữ liệu hình ảnh phẳng (Sketch) từ tệp PDF bản vẽ kỹ thuật
         if raw_file_bytes and file_name.lower().endswith('.pdf'):
             try:
                 import pdfplumber
@@ -155,7 +155,7 @@ def save_to_supabase_techpack_table(payload_data, raw_file_bytes=None, file_name
             except Exception:
                 pass
 
-        # 2. Đẩy tập tin hình ảnh sản phẩm lên Supabase Storage kho_anh
+        # 2. Đẩy tập tin hình ảnh sản phẩm lên Supabase Storage kho_anh phục vụ hiển thị
         if image_data:
             try:
                 storage_headers = {
@@ -166,22 +166,21 @@ def save_to_supabase_techpack_table(payload_data, raw_file_bytes=None, file_name
                 }
                 clean_filename = re.sub(r'[^a-zA-Z0-9_-]', '', style_name_db)
                 storage_url = f"{SB_URL.rstrip('/')}/storage/v1/object/kho_anh/{clean_filename}.jpg"
-                upload_res = requests.post(storage_url, headers=storage_headers, data=image_data, timeout=20)
+                upload_res = requests.post(storage_url, storage_headers, data=image_data, timeout=20)
                 if 200 <= upload_res.status_code <= 299:
                     public_image_url = f"{SB_URL.rstrip('/')}/storage/v1/object/public/kho_anh/{clean_filename}.jpg"
             except Exception: 
                 pass
 
-        # 3. ⚡ LUỒNG FIX LỖI VECTƠ THỊ GIÁC CHÍ MẠNG: SỬ DỤNG ĐÚNG CÚ PHÁP GOOGLE GENAI ĐỂ TRÍCH XUẤT CHUỖI CHI TIẾT
-        # Thay vì đặt chữ mặc định rác, khởi tạo chuỗi mô tả thô từ text để làm lớp bảo vệ dự phòng nền
+        # 3. ⚡ LUỒNG KÍCH HOẠT MẮT THẦN AI VISION: TRÍCH XUẤT CHUỖI ĐẶC TRƯNG HÌNH HỌC CHI TIẾT
         measurements_raw = payload_data.get("measurements", {})
+        # Khởi tạo chuỗi đặc trưng nền mặc định bằng văn bản thông số đo để phòng hờ rớt mạng API
         visual_description_str = f"GARMENT TYPE: {payload_data.get('category', 'Garment Pants')}. Specs profile summary: " + ", ".join([f"{k}:{v}" for k, v in list(measurements_raw.items())[:6]])
         
         if image_data:
             gemini_key = get_secure_gemini_key()
             if gemini_key:
                 try:
-                    # Gọi import thư viện chính quy chính xác tuyệt đối
                     from google import genai
                     from google.genai import types
                     
@@ -192,6 +191,7 @@ def save_to_supabase_techpack_table(payload_data, raw_file_bytes=None, file_name
                     Output a single dense string of these visual characteristics for apparel similarity vector matching.
                     Do not include greetings, just return the raw dense characteristic description string.
                     """
+                    # Gọi cổng AI Vision chụp ảnh bản vẽ phẳng dịch sang chuỗi đặc trưng hình dạng
                     vision_res = client_db.models.generate_content(
                         model='gemini-2.5-flash',
                         contents=[
@@ -200,12 +200,12 @@ def save_to_supabase_techpack_table(payload_data, raw_file_bytes=None, file_name
                         ]
                     )
                     if vision_res and vision_res.text:
-                        # Khóa giữ chuỗi mô tả siêu chi tiết trích xuất được từ hình họa rập vẽ nhị phân
+                        # Ghi nhận chuỗi mô tả siêu chi tiết thay thế chữ rác cũ
                         visual_description_str = vision_res.text.strip()
                 except Exception as ai_vision_err:
                     print(f"[AI VISION RE-EXTRACT ERROR]: {str(ai_vision_err)}")
 
-        # 4. Đẩy gói payload hoàn chỉnh lên bảng thong_so_techpack của Supabase
+        # 4. Đẩy gói dữ liệu sạch đồng bộ lên bảng thong_so_techpack của Supabase
         headers = {
             "apikey": SB_KEY, 
             "Authorization": f"Bearer {SB_KEY}",
@@ -222,7 +222,7 @@ def save_to_supabase_techpack_table(payload_data, raw_file_bytes=None, file_name
             "BaseSize": payload_data.get("base_size_name"),
             "DetailedMeasurements": clean_dict,
             "SketchURL": public_image_url,
-            "sketch_vector": visual_description_str # Chuỗi ký tự vectơ thị giác đặc trưng dày đặc chống trùng lặp mã hàng
+            "sketch_vector": visual_description_str # Cột lưu trữ mắt thần đối soát hình ảnh
         }
         
         response = requests.post(insert_url, headers=headers, json=[db_payload], timeout=15)
@@ -230,6 +230,7 @@ def save_to_supabase_techpack_table(payload_data, raw_file_bytes=None, file_name
     except Exception as e:
         st.sidebar.error(f"Lỗi xử lý hệ thống nạp kho: {str(e)}")
         return False
+
 
 
 
