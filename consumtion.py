@@ -759,11 +759,11 @@ def parse_fraction(val_str):
         if ' ' in val_str:
             parts = [p for p in val_str.split(' ') if p.strip()]
             if len(parts) >= 2:
-                whole = float(parts[0])
-                frac = parts[1]
+                whole = float(parts)
+                frac = parts
             else:
                 whole = 0.0
-                frac = parts[0]
+                frac = parts
         else:
             whole = 0.0
             frac = val_str
@@ -809,12 +809,6 @@ def ai_consumption_analyst_engine(client, user_message, matched_techpack, bom_re
        - Fabric Width requested: {f_width if f_width > 0 else 'Keep database standard'}
        - Width Shrinkage (Co rút ngang): {w_shrink}%
        - Length Shrinkage (Co rút dọc): {l_shrink}%
-       
-    EXECUTION LOGIC BASED ON 2 MAIN SCENARIOS:
-    - SCENARIO A (MỤC ĐÍCH 2 - Có mã tương đồng): Calculate based on the old consumption value found in database. Apply Shrinkage multiplier: New Consumption = Old Consumption * (1 + Length Shrinkage%) * (1 + Width Shrinkage%). Adjust further based on the Marker Area Delta parameter provided in the size context.
-    - SCENARIO B (MỤC ĐÍCH 3 - KHÔNG CÓ MÃ TƯƠNG ĐỒNG / MÃ MỚI HOÀN TOÀN): Perform a pure Geometric Surface Area Estimation task using the attached Flat Sketch Image and the New Spec (POM). Estimate layout blocking area (Width * Length of panels like Front panel, Back panel, Waistband, Pockets) + Seam allowances (Đường may) + Waste factor (Hao hụt đi sơ đồ 5-8%) to yield the initial consumption rate.
-    
-    OUTPUT REQUIREMENT: Answer directly, professionally in Vietnamese like ChatGPT with clear mathematical steps and final metric values. Keep it highly scannable. Do not reply generically.
     """
 
     chat_contents = [types.Part.from_text(text=system_instruction)]
@@ -837,7 +831,6 @@ def ai_consumption_analyst_engine(client, user_message, matched_techpack, bom_re
     except Exception as e:
         return f"🚨 Lỗi cổng phân tích định mức: {str(e)}"
 
-# Bộ bóc chìa khóa API đồng bộ từ Secrets
 if "get_secure_gemini_key" in globals():
     gemini_key = get_secure_gemini_key()
 else:
@@ -853,7 +846,6 @@ new_style_base_size = "32"
 img_payload = [] 
 target_new_sketch_bytes = None 
 
-# Đồng bộ hóa cấu trúc lấy tệp đính kèm từ Uploader lưu trong bộ nhớ hệ thống
 target_file_object = None
 if 'uploaded_file' in st.session_state and st.session_state['uploaded_file'] is not None:
     target_file_object = st.session_state['uploaded_file']
@@ -877,20 +869,13 @@ if has_file:
             
             extraction_prompt = (
                 "You are an expert Garment Specification Auditor at PPJ Group. Analyze all attached sheets page by page. "
-                "1. Locate the core 'Base Size' / 'Sample Size' specified by the buyer (e.g., Size 32 with Inseam 32, written as 32/32 or 32x32). "
-                "2. CRITICAL MEASUREMENT SELECTION RULE: Look closely at the grading table sheet. "
-                "If the table contains multiple inseam length columns (e.g., columns for Inseam 30, 32, 34), you MUST extract the target point of measurement (POM) values that belong ONLY to the specified Sample length column (which is 32\"). "
-                "3. Extract at least 15-20 distinct Points of Measurement (POM) for this specific sample size only. "
-                "4. Find the exact 'Style ID' / 'Style Number' (e.g., 1P001369), 'Category' / 'Product Line', and 'Buyer' name. "
-                "5. Detect the exact PAGE INDEX (0-based) containing the pure black and white line art TECHNICAL FLAT SKETCH. "
-                "OUTPUT REQUIREMENT: Return ONLY a raw valid JSON string with no markdown code blocks or wrapper, matching this exact schema: "
+                "Return ONLY a raw valid JSON string with no markdown code blocks or wrapper, matching this exact schema: "
                 "{\"detected_style_id\": \"string\", \"category\": \"string\", \"fabric_code\": \"string\", \"base_size_detected\": \"string\", \"measurements\": {}, \"sketch_page_index_detected\": 0}"
             )
 
             extraction_payload = list(img_payload)
             extraction_payload.append(extraction_prompt)
             
-            # Loại bỏ hoàn toàn tham số config lỗi thời gãy cổng để tránh lỗi 400 sidebar
             extraction_res = client.models.generate_content(
                 model='gemini-2.5-flash', 
                 contents=extraction_payload
@@ -973,19 +958,7 @@ with st.spinner("🧠 Hệ thống thị giác máy tính đang quét kết cấ
             
             match_prompt = f"""
             You are a Computer Vision Ingestion System specialized in Apparel Manufacturing.
-            Your sole task is to analyze the ATTACHED NEW FLAT SKETCH IMAGE and select the single closest matching style from the historical pool.
-            
-            STRICT EXTRACTION RULES (LOOK AT THE IMAGE LIKE A HUMAN GARMENT MERCHANDISER):
-            1. SILHOUETTE & SHAPE: Match the exact leg opening flow, width of thighs, and overall drape structure (e.g., Slim vs Baggy Curve vs Regular Straight).
-            2. WAISTBAND & CLOSURE: Match the waistband shape (straight vs contoured), button fly, zip fly, and placement of belt loops.
-            3. POCKETING SYSTEM: Strictly check the front pocket style (scoop jeans pocket vs slant chinos pocket) and back pocket types (patch pockets with specific stitching vs welt pockets).
-            4. PANELING & SEAMS: Scan for panels, back yoke lines, side seams, and stitching features.
-            
-            HISTORICAL POOL DATA (Describing the shapes already in store):
-            {json.dumps(styles_pool_summary)}
-            
-            Compare the attached image visual cues against each 'sketch_features_vector' text description. 
-            Select the index that represents the identical or most visually similar garment.
+            Analyze the ATTACHED NEW FLAT SKETCH IMAGE and select the single closest matching style from the historical pool.
             Return a raw valid JSON object inside your response, using this exact schema:
             {{"selected_pool_index": 0}}
             """
@@ -1013,40 +986,31 @@ with st.spinner("🧠 Hệ thống thị giác máy tính đang quét kết cấ
                 best_idx = match_result.get("selected_pool_index", -1)
                 if 0 <= best_idx < len(all_historical_styles):
                     st.session_state["matched_techpack"] = all_historical_styles[best_idx]
-            else:
-                st.sidebar.warning("⚠️ Không thể trích xuất cấu trúc định vị chỉ mục từ mô hình AI.")
                     
     except Exception as match_err:
         st.sidebar.error(f"Lỗi hệ thống đối soát hình ảnh: {str(match_err)}")
 
-# --- LUỒNG TRUY XUẤT BOM LỊCH SỬ CHÍNH XÁC TUYỆT ĐỐI 100% (KHÓA CỨNG AN TOÀN ĐỐI SOÁT) ---
+# --- LUỒNG TRUY XUẤT BOM LỊCH SỬ CHÍNH XÁC TUYỆT ĐỐI THEO TÊN MÃ (STRICT eq) ---
 if st.session_state.get("matched_techpack"):
     try:
-        # Lấy chính xác tên mã tương đồng (Ví dụ: R09-490416)
         target_style_name = str(st.session_state["matched_techpack"].get("StyleName", "")).strip()
-        
         url_bom = f"{SB_URL.rstrip('/')}/rest/v1/san_pham"
-        
-        # CHỮA LỖI CHÍ MẠNG: Sử dụng toán tử eq chính xác tuyệt đối 100% cho Database
-        # Loại bỏ hoàn toàn luồng quét ilike mờ để ngăn cấm triệt để việc bốc nhầm mã vải BBB03940 của đơn hàng khác
         query_bom = {
             "select": "style_name,article_name,consumption_type,material_size,uom,consumption_value,notes",
             "style_name": f"eq.{target_style_name}"
         }
-        
-        res_bom = requests.get(url_bom, headers=headers_db, params=query_bom, timeout=15)
+        res_bom = requests.get(url_bom, headers=headers, params=query_bom, timeout=15)
         if res_bom.status_code == 200:
             st.session_state["bom_records"] = res_bom.json()
         else:
             st.session_state["bom_records"] = []
     except Exception:
         st.session_state["bom_records"] = []
-
 # Trích xuất dữ liệu hiển thị đồ họa trực diện
 matched_techpack = st.session_state.get("matched_techpack")
 bom_records = st.session_state.get("bom_records", [])
 
-# 1. HIỂN THỊ ĐỐI SOÁT HÌNH ẢNH HAI BÊN VÀ KHẮC PHỤC LỖI ẢNH VỠ
+# 1. HIỂN THỊ ĐỐI SOÁT HÌNH ẢNH HAI BÊN - GIẢI MÃ NHỊ PHÂN ÉP BUNG ẢNH THẬT BẢO MẬT BẰNG REQUESTS
 st.markdown("### 🖼️ ĐỐI CHIẾU SỰ TƯƠNG ĐỒNG HÌNH ẢNH THIẾT KẾ (FLAT SKETCH)")
 img_col1, img_col2 = st.columns(2)
 with img_col1:
@@ -1055,144 +1019,33 @@ with img_col1:
 with img_col2:
     if matched_techpack:
         target_style_name = matched_techpack.get("StyleName", "Mẫu tương đồng")
-        old_sketch_url = matched_techpack.get("SketchURL") or matched_techpack.get("sketch_url", "")
-        if not old_sketch_url:
-            clean_old_fn = re.sub(r'[^a-zA-Z0-9_-]', '', str(target_style_name))
-            old_sketch_url = f"{SB_URL.rstrip('/')}/storage/v1/object/public/kho_anh/{clean_old_fn}.jpg"
-            
-        st.markdown(f"<p style='color: #1E3A8A; font-size: 13px; font-weight: 700; margin-bottom: 8px; text-align: center;'>🎯 Mã tương đồng trong kho: {target_style_name}</p>", unsafe_allow_html=True)
-        try:
-            st.image(old_sketch_url, caption=f"Ảnh bản vẽ gốc của mã {target_style_name}", use_container_width=True)
-        except Exception:
-            st.image("https://unsplash.com", caption=f"⚠️ Tệp ảnh vật lý của mã {target_style_name} chưa được đồng bộ lên Storage. Hiển thị phom dáng Jeans tiêu chuẩn.", use_container_width=True)
-    else:
-        st.info("💡 Không tìm thấy mã tương đồng hình ảnh phù hợp trong kho lưu trữ.")
-
-# 2. ĐƯA RA 2 BẢNG SO SÁNH THÔNG SỐ RẬP ĐỘC LẬP
-st.markdown("<br>### 📐 SO SÁNH HAI BẢNG THÔNG SỐ KỸ THUẬT RẬP MẪU", unsafe_allow_html=True)
-spec_col1, spec_col2 = st.columns(2)
-
-with spec_col1:
-    st.markdown(f"📊 **Bảng 1: Thông số Mẫu mới nạp ({new_style_base_size})**")
-    df_new_spec = pd.DataFrame(list(new_style_measurements_dict.items()), columns=["Vị trí đo (POM Description)", "Thông số mới"]) if new_style_measurements_dict else pd.DataFrame(columns=["Vị trí đo (POM Description)", "Thông số mới"])
-    st.dataframe(df_new_spec, use_container_width=True, hide_index=True)
-    
-with spec_col2:
-    if matched_techpack:
-        old_style_title = matched_techpack.get("StyleName", "N/A")
-        old_size_title = matched_techpack.get("BaseSize", "N/A")
-        st.markdown(f"📋 **Bảng 2: Thông số Mã trong kho ({old_style_title}) [SIZE {old_size_title}]**")
-        old_specs = matched_techpack.get("DetailedMeasurements", {})
-        df_old_spec = pd.DataFrame(list(old_specs.items()), columns=["Vị trí đo (POM Description)", "Thông số cũ"]) if old_specs else pd.DataFrame(columns=["Vị trí đo (POM Description)", "Thông số cũ"])
-        st.dataframe(df_old_spec, use_container_width=True, hide_index=True)
-    else:
-        st.markdown("📋 **Bảng 2: Thông số Mã tương đồng trong kho**")
-        st.info("Trống - Hệ thống tự động chuyển qua chế độ tính toán vector hình học rập mẫu mới.")
-
-# Trích xuất dữ liệu hiển thị đồ họa trực diện
-matched_techpack = st.session_state.get("matched_techpack")
-bom_records = st.session_state.get("bom_records", [])
-
-# 1. HIỂN THỊ ĐỐI SOÁT HÌNH ẢNH HAI BÊN VÀ KHẮC PHỤC TRIỆT ĐỂ LỖI SAI LỆCH URL ẢNH VỠ
-st.markdown("### 🖼️ ĐỐI CHIẾU SỰ TƯƠNG ĐỒNG HÌNH ẢNH THIẾT KẾ (FLAT SKETCH)")
-img_col1, img_col2 = st.columns(2)
-with img_col1:
-    if target_new_sketch_bytes is not None:
-        st.image(target_new_sketch_bytes, caption=f"Mẫu mới tải lên ({new_style_id_detected})", use_container_width=True)
-with img_col2:
-    if matched_techpack:
-        target_style_name = matched_techpack.get("StyleName", "Mẫu tương đồng")
-        
-        # ⚡ SỬA LỖI MẤU CHỐT: Ép lọc bỏ hoàn toàn dấu gạch ngang '-' để đồng bộ 100% với tên file vật lý trên Storage
         style_clean_id = re.sub(r'[^a-zA-Z0-9]', '', str(target_style_name))
-        old_sketch_url = f"{SB_URL.rstrip('/')}/storage/v1/object/public/kho_anh/{style_clean_id}.jpg"
-            
+        
+        # Tạo chuỗi URL gọi ảnh trực tiếp qua cổng Public Xác thực
+        secure_img_url = f"{SB_URL.rstrip('/')}/storage/v1/object/public/kho_anh/{style_clean_id}.jpg"
         st.markdown(f"<p style='color: #1E3A8A; font-size: 13px; font-weight: 700; margin-bottom: 8px; text-align: center;'>🎯 Mã tương đồng trong kho: {target_style_name}</p>", unsafe_allow_html=True)
+        
         try:
-            st.image(old_sketch_url, caption=f"Ảnh bản vẽ gốc của mã {target_style_name}", use_container_width=True)
+            # ⚡ BẺ KHÓA BẢO MẬT: Gửi lệnh requests kèm apkey bảo mật bốc thẳng file nhị phân ảnh từ Supabase
+            auth_headers = {"apikey": SB_KEY, "Authorization": f"Bearer {SB_KEY}"}
+            img_response = requests.get(secure_img_url, headers=auth_headers, timeout=10)
+            
+            if img_response.status_code == 200 and len(img_response.content) > 100:
+                st.image(img_response.content, caption=f"Ảnh bản vẽ gốc của mã {target_style_name}", use_container_width=True)
+            else:
+                # Thử gọi bằng link có chứa dấu gạch ngang dự phòng
+                fallback_url = f"{SB_URL.rstrip('/')}/storage/v1/object/public/kho_anh/{target_style_name}.jpg"
+                img_res_fb = requests.get(fallback_url, headers=auth_headers, timeout=10)
+                if img_res_fb.status_code == 200 and len(img_res_fb.content) > 100:
+                    st.image(img_res_fb.content, caption=f"Ảnh bản vẽ gốc của mã {target_style_name}", use_container_width=True)
+                else:
+                    st.image("https://unsplash.com", caption=f"⚠️ File ảnh vật lý của mã {target_style_name} chưa được nạp lên Storage kho_anh.", use_container_width=True)
         except Exception:
-            st.image("https://unsplash.com", caption=f"⚠️ Tệp ảnh vật lý của mã {target_style_name} chưa được đồng bộ lên Storage. Hiển thị phom dáng Jeans tiêu chuẩn.", use_container_width=True)
+            st.image("https://unsplash.com", caption=f"⚠️ File ảnh vật lý của mã {target_style_name} chưa được nạp lên Storage kho_anh.", use_container_width=True)
     else:
         st.info("💡 Không tìm thấy mã tương đồng hình ảnh phù hợp trong kho lưu trữ.")
 
-# 2. ĐƯA RA 2 BẢNG SO SÁNH THÔNG SỐ RẬP ĐỘC LẬP
-st.markdown("<br>### 📐 SO SÁNH HAI BẢNG THÔNG SỐ KỸ THUẬT RẬP MẪU", unsafe_allow_html=True)
-spec_col1, spec_col2 = st.columns(2)
-
-with spec_col1:
-    st.markdown(f"📊 **Bảng 1: Thông số Mẫu mới nạp ({new_style_base_size})**")
-    df_new_spec = pd.DataFrame(list(new_style_measurements_dict.items()), columns=["Vị trí đo (POM Description)", "Thông số mới"]) if new_style_measurements_dict else pd.DataFrame(columns=["Vị trí đo (POM Description)", "Thông số mới"])
-    st.dataframe(df_new_spec, use_container_width=True, hide_index=True)
-    
-with spec_col2:
-    if matched_techpack:
-        old_style_title = matched_techpack.get("StyleName", "N/A")
-        old_size_title = matched_techpack.get("BaseSize", "N/A")
-        st.markdown(f"📋 **Bảng 2: Thông số Mã trong kho ({old_style_title}) [SIZE {old_size_title}]**")
-        old_specs = matched_techpack.get("DetailedMeasurements", {})
-        df_old_spec = pd.DataFrame(list(old_specs.items()), columns=["Vị trí đo (POM Description)", "Thông số cũ"]) if old_specs else pd.DataFrame(columns=["Vị trí đo (POM Description)", "Thông số cũ"])
-        st.dataframe(df_old_spec, use_container_width=True, hide_index=True)
-    else:
-        st.markdown("📋 **Bảng 2: Thông số Mã tương đồng trong kho**")
-        st.info("Trống - Hệ thống tự động chuyển qua chế độ tính toán vector hình học rập mẫu mới.")
-
-# Trích xuất dữ liệu hiển thị đồ họa trực diện từ bộ nhớ phiên hệ thống
-matched_techpack = st.session_state.get("matched_techpack")
-bom_records = st.session_state.get("bom_records", [])
-
-# 1. HIỂN THỊ ĐỐI SOÁT HÌNH ẢNH HAI BÊN - LUỒNG FIX ẢNH VỠ 3 CẤP ĐỘ KHẨN CẤP
-st.markdown("### 🖼️ ĐỐI CHIẾU SỰ TƯƠNG ĐỒNG HÌNH ẢNH THIẾT KẾ (FLAT SKETCH)")
-img_col1, img_col2 = st.columns(2)
-
-with img_col1:
-    if target_new_sketch_bytes is not None:
-        st.image(target_new_sketch_bytes, caption=f"Mẫu mới tải lên ({new_style_id_detected})", use_container_width=True)
-
-with img_col2:
-    if matched_techpack:
-        target_style_name = matched_techpack.get("StyleName", "Mẫu tương đồng")
-        st.markdown(f"<p style='color: #1E3A8A; font-size: 13px; font-weight: 700; margin-bottom: 8px; text-align: center;'>🎯 Mã tương đồng trong kho: {target_style_name}</p>", unsafe_allow_html=True)
-        
-        # --- THUẬT TOÁN TẠO BA CẤP ĐƯỜNG DẪN URL DỰ PHÒNG ÉP BUNG ẢNH THẬT ---
-        db_stored_url = matched_techpack.get("SketchURL") or matched_techpack.get("sketch_url", "")
-        style_no_dash = re.sub(r'[^a-zA-Z0-9]', '', str(target_style_name))
-        url_option_1 = f"{SB_URL.rstrip('/')}/storage/v1/object/public/kho_anh/{target_style_name}.jpg"
-        url_option_2 = f"{SB_URL.rstrip('/')}/storage/v1/object/public/kho_anh/{style_no_dash}.jpg"
-        
-        image_rendered = False
-        
-        # Lớp 1: Ưu tiên đường link gốc đã lưu cố định trong hàng dữ liệu DB
-        if db_stored_url and "public/kho_anh" not in str(db_stored_url):
-            try:
-                st.image(db_stored_url, caption=f"Ảnh bản vẽ gốc của mã {target_style_name}", use_container_width=True)
-                image_rendered = True
-            except Exception:
-                pass
-                
-        # Lớp 2: Nếu lớp 1 xịt, gọi đường dẫn chứa nguyên văn dấu gạch ngang R09-490416
-        if not image_rendered:
-            try:
-                st.image(url_option_1, caption=f"Ảnh bản vẽ gốc của mã {target_style_name}", use_container_width=True)
-                image_rendered = True
-            except Exception:
-                pass
-                
-        # Lớp 3: Nếu lớp 2 xịt, gọi đường dẫn đã gọt sạch ký tự viết liền R09490416
-        if not image_rendered:
-            try:
-                st.image(url_option_2, caption=f"Ảnh bản vẽ gốc của mã {target_style_name}", use_container_width=True)
-                image_rendered = True
-            except Exception:
-                pass
-                
-        # Lớp dự phòng cuối: Nếu file physical hoàn toàn chưa có trên Storage, hiện ảnh minh họa để giữ phom dáng nền sạch
-        if not image_rendered:
-            st.image("https://unsplash.com", 
-                     caption=f"⚠️ File ảnh vật lý của mã {target_style_name} chưa đồng bộ lên Storage. Hiển thị mô phỏng phom dáng.", use_container_width=True)
-    else:
-        st.info("💡 Không tìm thấy mã tương đồng hình ảnh phù hợp trong kho lưu trữ.")
-
-# 2. ĐƯA RA 2 BẢNG SO SÁNH THÔNG SỐ RẬP ĐỘC LẬP
+# 2. ĐƯA RA 2 BẢNG SO SÁNH THÔNG SỐ RẬP ĐỘC LẬP THEO QUY CHUẨN
 st.markdown("<br>### 📐 SO SÁNH HAI BẢNG THÔNG SỐ KỸ THUẬT RẬP MẪU", unsafe_allow_html=True)
 spec_col1, spec_col2 = st.columns(2)
 
