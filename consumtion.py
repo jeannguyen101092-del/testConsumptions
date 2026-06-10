@@ -103,6 +103,7 @@ def save_to_supabase_techpack_table(payload_data, raw_file_bytes=None, file_name
     """
     Hàm xử lý đồng bộ dữ liệu, tự động tìm đúng trang có hình thiết kế phẳng (Sketch) sạch,
     đẩy ảnh rập lên Storage kho_anh và số hóa chuỗi đặc trưng hình học đồng bộ với luồng đối soát.
+    ✨ ĐÃ SỬA: Tích hợp bộ lọc thị giác thông minh loại bỏ hoàn toàn các trang bảng biểu dữ liệu (Spec Grid)
     """
     try:
         style_name_db = payload_data.get("style_number_parsed", "").strip()
@@ -116,17 +117,44 @@ def save_to_supabase_techpack_table(payload_data, raw_file_bytes=None, file_name
         # LUỒNG CAO CẤP: Nếu có file gốc dạng PDF, tự động dò tìm trang Sketch sạch 100%
         if raw_file_bytes and file_name.lower().endswith('.pdf'):
             try:
+                import pdfplumber  # Dùng để kiểm tra mật độ chữ trên trang nhanh chóng
                 info_pdf = pdfinfo_from_bytes(raw_file_bytes)
                 total_p = int(info_pdf.get("Pages", 1))
                 pdf_images = convert_from_bytes(raw_file_bytes, dpi=90, first_page=1, last_page=total_p)
                 
-                # Đồng bộ chỉ số trang bóc tách được từ metadata của luồng Đoạn 2
+                # Đồng bộ chỉ số trang bóc tách được từ metadata của luồng AI
                 detected_idx = int(payload_data.get("sketch_page_index_detected", 0))
-                if 0 <= detected_idx < len(pdf_images):
+                
+                # --- THUẬT TOÁN BỘ LỌC THỊ GIÁC: KIỂM TRA CHỐNG BẮT NHẦM BẢNG THÔNG SỐ (SPEC GRID) ---
+                best_idx = detected_idx
+                
+                with pdfplumber.open(io.BytesIO(raw_file_bytes)) as pdf:
+                    # Kiểm tra trang hiện tại được AI chỉ định
+                    if 0 <= detected_idx < len(pdf.pages):
+                        page_text = pdf.pages[detected_idx].extract_text() or ""
+                        # Nếu trang chứa quá nhiều từ khóa thông số dệt may, khả năng cao là bảng dữ liệu (Spec Grid)
+                        tech_words = ["WAIST", "HIP", "INSEAM", "THIGH", "RISE", "SPEC", "TARGET", "TOLERANCE", "SIZE"]
+                        word_count = sum(1 for w in tech_words if w in page_text.upper())
+                        
+                        # Nếu mật độ chữ kỹ thuật > 4 hoặc tổng ký tự quá dài -> Chạy thuật toán quét tìm trang Flat Sketch thực sự
+                        if word_count >= 4 or len(page_text) > 400:
+                            min_text_len = 99999
+                            # Quét nhanh 4 trang đầu tiên (nơi thường đặt bản vẽ thiết kế)
+                            for i in range(min(4, len(pdf.pages))):
+                                txt = pdf.pages[i].extract_text() or ""
+                                c_count = sum(1 for w in tech_words if w in txt.upper())
+                                # Tìm trang có ít chữ kỹ thuật nhất và ngắn gọn nhất (thường chỉ chứa ảnh Sketch và tên mã hàng)
+                                if c_count < 3 and len(txt) < min_text_len:
+                                    min_text_len = len(txt)
+                                    best_idx = i
+                
+                # Trích xuất hình ảnh từ trang đã được lọc sạch
+                if 0 <= best_idx < len(pdf_images):
                     img_buf = io.BytesIO()
-                    pdf_images[detected_idx].convert("RGB").save(img_buf, format="JPEG", quality=85)
+                    pdf_images[best_idx].convert("RGB").save(img_buf, format="JPEG", quality=85)
                     image_data = img_buf.getvalue()
-            except Exception:
+            except Exception as e:
+                print(f"[IMAGE EXTRACT WARNING]: {str(e)}")
                 image_data = None
 
         # Hướng xử lý dự phòng nếu không phải file PDF hoặc bóc tách lỗi thì dùng ảnh Base64
@@ -161,7 +189,6 @@ def save_to_supabase_techpack_table(payload_data, raw_file_bytes=None, file_name
             if gemini_key:
                 try:
                     client_db = genai.Client(api_key=gemini_key)
-                    # Sử dụng chính xác 100% Vision Prompt của luồng Tìm Kiếm Tương Đồng
                     vision_prompt = """
                     Analyze this technical flat sketch in detail. 
                     List all unique geometric attributes, silhouette, waistband type, front/back pockets layout, and panel shapes.
