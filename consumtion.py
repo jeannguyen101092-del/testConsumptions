@@ -1252,10 +1252,21 @@ elif menu_selection == "🛒 Purchase Consumption":
                             st.dataframe(df_tp_show, use_container_width=True, hide_index=True)
                     else:
                         st.warning("⏳ Đang đợi AI xử lý hoặc tệp Techpack rỗng.")
-                                # --- 🛠️ KHỐI CHAT AI VÀ CỖ MÁY TOÁN HỌC TÍNH TOÁN ĐẶT HÀNG NÂNG CAO ---
+                             # --- 🛠️ KHỐI CHAT AI VÀ CỖ MÁY TOÁN HỌC TÍNH TOÁN ĐẶT HÀNG NÂNG CAO ---
                 st.markdown("<br><hr style='border:0.5px solid #E2E8F0;'>", unsafe_allow_html=True)
-                st.markdown("### 💬 TRỢ LÝ AI TÍNH TOÁN ĐỊNH MỨC TRUNG BÌNH ĐƠN HÀNG")
-                st.caption("Nhập định mức của size cơ bản. AI sẽ phân tích độ lệch thông số (Grading) của toàn bộ dải size để suy ra định mức từng size, từ đó tính ra Định mức trung bình chính xác cho cả đơn hàng.")
+                
+                # Giao diện tiêu đề kết hợp nút Xóa lịch sử Chat bên phải
+                chat_title_col, chat_btn_col = st.columns([4, 1])
+                with chat_title_col:
+                    st.markdown("### 💬 TRỢ LÝ AI TÍNH TOÁN ĐỊNH MỨC TRUNG BÌNH ĐƠN HÀNG")
+                    st.caption("Nhập định mức của size cơ bản. AI sẽ phân tích độ lệch thông số (Grading) của toàn bộ dải size để suy ra định mức từng size, từ đó tính ra Định mức trung bình chính xác cho cả đơn hàng.")
+                
+                with chat_btn_col:
+                    st.markdown("<div style='margin-top: 10px;'></div>", unsafe_allow_html=True)
+                    # NÚT BẤM XÓA LỊCH SỬ CHAT ĐỂ KHÔI PHỤC TRẠNG THÁI
+                    if st.button("🗑️ Xóa lịch sử Chat", type="secondary", use_container_width=True):
+                        st.session_state["purchase_chat_history"] = []
+                        st.rerun()
                 
                 if "purchase_chat_history" not in st.session_state:
                     st.session_state["purchase_chat_history"] = []
@@ -1301,8 +1312,9 @@ elif menu_selection == "🛒 Purchase Consumption":
                                Weighted Average Consumption = (Sum of Net Requirements for all sizes) / (Total PO Quantity of all sizes)
                             7. DO NOT add any default 3% wastage allowance. Focus on the raw mathematical consumption.
                             
-                            Provide a professional summary response in Vietnamese. You MUST prominently state the final calculated "Định mức trung bình toàn đơn hàng" (Weighted Average Consumption). Explain how the grading spec ratios affected the final average compared to the base size.
-                            Then, output a final raw JSON block inside a ```json ... ``` container matching this schema:
+                            Provide a clear professional markdown text explanation of your logic first in Vietnamese, explicitly stating the calculated Weighted Average Consumption for the order.
+                            Then, you MUST output a final raw JSON block at the very end of your response inside a ```json ... ``` container.
+                            The JSON schema must be exactly a list of objects like this:
                             ```json
                             [
                               {{"Kích thước (Size/Inseam)": "string", "Số lượng PO (Pcs)": 100, "Định mức phân bổ (Yds/Pcs)": 1.08, "Tổng lượng vải cần (Yds)": 108.0}}
@@ -1321,9 +1333,9 @@ elif menu_selection == "🛒 Purchase Consumption":
                                 
                                 if "```json" in ai_text:
                                     parts = ai_text.split("```json")
-                                    text_desc = parts[0]
-                                    raw_json_part = parts[1].split("```")
-                                    json_block = raw_json_part[0].strip()
+                                    text_desc = parts
+                                    raw_json_part = parts.split("```")
+                                    json_block = raw_json_part.strip()
                                 else:
                                     text_desc = ai_text
                                     
