@@ -293,3 +293,71 @@ with tab3:
 with tab4:
     st.markdown('<div class="component-title-box">Bài toán 4: Phân tích Rủi ro Định mức theo từng Khách hàng</div>', unsafe_allow_html=True)
     st.warning("Phân hệ nghiên cứu chuyên sâu: Đang cấu hình cổng đồng bộ dữ liệu Real-time qua API kết nối hệ thống Core ERP/MES.")
+
+
+# --- BÀI TOÁN 2: TÍNH ĐỊNH MỨC ĐẠT HÀNG (BULK PRODUCTION) ---
+with tab2:
+    st.markdown('<div class="component-title-box">Bài toán 2: Tính Định mức Đặt hàng (Dựa theo Rập, Tài liệu mới, SBD)</div>', unsafe_allow_html=True)
+    
+    col1, col3, col4 = st.columns(3)
+    with col1:
+        st.file_uploader("📁 Upload File Rập hình học (.DXF / .PLT / .AAMA)", key="rap_b2")
+    with col3:
+        st.file_uploader("📁 Upload Tài liệu kỹ thuật cập nhật mới", key="tp_b2")
+    with col4:
+        st.file_uploader("📁 Upload Bảng tỷ lệ cỡ vóc (Size Breakdown - SBD)", key="sbd_b2")
+
+    st.markdown('<div class="card-container"><h5>🔄 ĐỐI CHIẾU THÔNG SỐ: BÁO GIÁ vs SẢN XUẤT THỰC TẾ</h5>', unsafe_allow_html=True)
+    ts_b2_df = pd.DataFrame({
+        "Vị trí đo (POM)": ["Dài quần", "Vòng eo", "Vòng mông", "Vòng đùi", "Rộng ống"],
+        "T/S Chào Báo giá": ["102 cm", "76 cm", "98 cm", "58 cm", "18 cm"],
+        "T/S Sản xuất thực tế": ["103 cm", "76 cm", "99 cm", "58 cm", "17.5 cm"],
+        "Chênh lệch (Delta)": ["+ 1.0 cm (Tăng)", "0.0 cm", "+ 1.0 cm (Tăng)", "0.0 cm", "- 0.5 cm (Giảm)"],
+        "Đánh giá tác động": ["Tốn vải hơn sơ đồ cũ", "An toàn", "⚠️ Cần kiểm tra lại rập", "An toàn", "Tiết kiệm vải biên"]
+    })
+    st.dataframe(ts_b2_df, use_container_width=True, hide_index=True)
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    st.markdown('<div class="card-container"><h5>📦 BẢNG ĐỊNH MỨC ĐẶT HÀNG THỰC TẾ (PRODUCTION BOM)</h5>', unsafe_allow_html=True)
+    bom_b2_df = pd.DataFrame({
+        "STT":,
+        "Tên Nguyên Phụ Liệu": ["Vải chính Denim 12oz (Thực tế)", "Chỉ may 100% Spun Poly", "Nút dập kim loại PPJ", "Nhãn sườn Satin"],
+        "Khổ duyệt sản xuất": [f"{kho_vai_chinh}\"", "-", "14 mm", "-"],
+        "Độ co Rập kiểm duyệt": [f"Dọc {co_doc}% / Ngang {co_ngang}%", "0%", "0%", "0%"],
+        "Hiệu suất sơ đồ chạy rập": ["91.5 %", "95.0 %", "99.0 %", "100.0 %"],
+        "Định mức đặt mua / Sp": ["1.41 yds", "122.5 m", "1.01 pcs", "1.00 pc"]
+    })
+    st.dataframe(bom_b2_df, use_container_width=True, hide_index=True)
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    st.markdown('<div class="card-container"><h5>🧮 BẢNG TÍNH TÁC NGHIỆP TỔNG VÀ SẢN LƯỢNG MUA (SIZE MATRIC BUYING)</h5>', unsafe_allow_html=True)
+    tag_nghiep_df = pd.DataFrame({
+        "Màu sắc (Colorway)": ["Dark Wash (Xanh đậm)", "Light Wash (Xanh nhạt)"],
+        "Size 29":,
+        "Size 30":,
+        "Size 31":,
+        "Size 32":,
+        "Tổng sản lượng (Pcs)":,
+        "Định mức vải duyệt": ["1.41 yds", "1.41 yds"],
+        "TỔNG NHU CẦU MUA VẢI": ["1,128.0 yds", "705.0 yds"]
+    })
+    st.dataframe(tag_nghiep_df, use_container_width=True, hide_index=True)
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    st.markdown("""
+    <div class="idle-alert-box" style="background-color: #FEF2F2; border-left: 5px solid #EF4444; color: #991B1B;">
+        <strong>⚠️ AI COMMENT & CẢNH BÁO RỦI RO SẢN XUẤT BULK:</strong><br>
+        - <strong>Lệch thông số T/S:</strong> Vòng mông sản xuất tăng 1.0cm so với bảng báo giá costing. Định mức đặt hàng thực tế đã bị đẩy tăng từ 1.39 yds lên 1.41 yds. Phòng mua hàng cần đối chiếu biên độ tài chính.<br>
+        - <strong>Rủi ro Shading (Lệch màu vải):</strong> Đơn hàng Dark Wash có sản lượng tập trung lớn ở các size trung bình (Size 30, 31). Tổ trải vải cần thực hiện gom nhóm cây vải cùng ánh màu trước khi lên bàn cắt để tránh lỗi khác màu trên cùng một sản phẩm.
+    </div>
+    """, unsafe_allow_html=True)
+
+# --- BÀI TOÁN 3: LẬP TÁC NGHIỆP CẮT ---
+with tab3:
+    st.markdown('<div class="component-title-box">Bài toán 3: Phân hệ Lập Tác nghiệp Cắt (Cutting Room Planning)</div>', unsafe_allow_html=True)
+    st.info("Hệ thống tự động đồng bộ số liệu từ ma trận SBD tại Bài toán 2 để tính toán phương án phối ghép sơ đồ bàn cắt tối ưu.")
+
+# --- BÀI TOÁN 4: PHÂN TÍCH RỦI RO ĐỊNH MỨC THEO KHÁCH HÀNG ---
+with tab4:
+    st.markdown('<div class="component-title-box">Bài toán 4: Phân tích Rủi ro Định mức theo từng Khách hàng</div>', unsafe_allow_html=True)
+    st.warning("Phân hệ nghiên cứu chuyên sâu: Đang cấu hình cổng đồng bộ dữ liệu Real-time qua API kết nối hệ thống Core ERP/MES.")
