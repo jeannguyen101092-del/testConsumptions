@@ -1076,9 +1076,20 @@ with st.spinner("🧠 Hệ thống thị giác máy tính đang quét kết cấ
                     "sketch_features_vector": s.get("sketch_vector", "")
                 })
             
+            # PROMPT THỊ GIÁC CAO CẤP: ÉP AI BẮT BUỘC LOẠI TRỪ MẢNH RẬP RỜI VÀ SO KHỚP CHUẨN PHOM QUẦN DÀI/NGẮN
             match_prompt = f"""
-            You are a Computer Vision Ingestion System specialized in Apparel Manufacturing.
-            Your sole task is to analyze the ATTACHED NEW FLAT SKETCH IMAGE and select the single closest matching style from the historical pool.
+            You are an expert Computer Vision Ingestion System specialized in Apparel Manufacturing at PPJ Group.
+            Analyze the ATTACHED NEW SKETCH IMAGE and find the single closest matching historical garment style from the pool.
+            
+            CRITICAL APPRAISAL IMAGE RULES (MUST FOLLOW):
+            1. REJECT ISOLATED PATTERN PANELS: Look closely at the attached image. If the image shows an isolated, single sleeve, a single leg panel pattern outline, or a grading chart instead of a finished garment view, you MUST recognize that this is NOT a completed design sketch.
+            2. GARMENT CATEGORY MATCH: Distinguish clearly between Long Denim Pants (Quần Jeans dài), Shorts (Quần ngắn/Shorts), and Skorts. Do NOT match a long pant silhouette or a leg rập profile with a Short pant style in the database.
+            3. SILHOUETTE ALIGNMENT: Match the exact completed drape structure, leg openings width, pocket structures, and yoke line styling of the overall garment garment look.
+            
+            HISTORICAL POOL DATA (Describing the actual finished shapes in store):
+            {json.dumps(styles_pool_summary)}
+            
+            Select the single index that represents the visually matching garment architecture.
             Return a raw valid JSON object inside your response, using this exact schema:
             {{"selected_pool_index": 0}}
             """
@@ -1106,17 +1117,18 @@ with st.spinner("🧠 Hệ thống thị giác máy tính đang quét kết cấ
                 best_idx = match_result.get("selected_pool_index", -1)
                 if 0 <= best_idx < len(all_historical_styles):
                     st.session_state["matched_techpack"] = all_historical_styles[best_idx]
+            else:
+                st.sidebar.warning("⚠️ Không thể trích xuất cấu trúc định vị chỉ mục từ mô hình AI.")
                     
     except Exception as match_err:
         st.sidebar.error(f"Lỗi hệ thống đối soát hình ảnh: {str(match_err)}")
 
-# --- LUỒNG TRUY XUẤT BOM LỊCH SỬ THÔNG MINH ĐA LỚP CHỐNG LỆCH TÊN MÃ ĐƠN ĐỒNG ---
+# --- LUỒNG TRUY XUẤT BOM LỊCH SỬ THÔNG MINH ĐA LỚP CHỐNG LỆCH TÊN MÃ ---
 if st.session_state.get("matched_techpack"):
     try:
         target_style_name = str(st.session_state["matched_techpack"].get("StyleName", "")).strip()
         url_bom = f"{SB_URL.rstrip('/')}/rest/v1/san_pham"
         
-        # LỚP 1: Thử lọc chính xác tuyệt đối theo mã rập tìm thấy
         query_bom = {
             "select": "style_name,article_name,consumption_type,material_size,uom,consumption_value,notes",
             "style_name": f"eq.{target_style_name}"
@@ -1125,7 +1137,6 @@ if st.session_state.get("matched_techpack"):
         if res_bom.status_code == 200 and len(res_bom.json()) > 0:
             st.session_state["bom_records"] = res_bom.json()
         else:
-            # LỚP 2 DỰ PHÒNG THÔNG MINH: Nếu lớp 1 rỗng (do lệch ký tự đuôi của phòng KD), tự động gọt bốc dải số lõi cứng
             core_digits = re.findall(r'\d+', target_style_name)
             search_digits = max(core_digits, key=len) if core_digits else target_style_name
             
@@ -1141,9 +1152,7 @@ if st.session_state.get("matched_techpack"):
                 st.session_state["bom_records"] = []
     except Exception:
         st.session_state["bom_records"] = []
-# Trích xuất dữ liệu hiển thị đồ họa trực diện từ session_state bộ nhớ đệm
-matched_techpack = st.session_state.get("matched_techpack")
-bom_records = st.session_state.get("bom_records", [])
+
 
 # 1. HIỂN THỊ ĐỐI SOÁT HÌNH ẢNH HAI BÊN - GIẢI MÃ NHỊ PHÂN ĐỒNG BỘ CHỮ VIẾT HOA VÀ VALIDATE TRÁNH LỖI PIL vỡ ảnh
 st.markdown("### 🖼️ ĐỐI CHIẾU SỰ TƯƠNG ĐỒNG HÌNH ẢNH THIẾT KẾ (FLAT SKETCH)")
