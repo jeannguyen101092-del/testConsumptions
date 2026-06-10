@@ -486,6 +486,7 @@ if menu_selection == "📊 Upload Techpack":
 
 # -----------------------------------------------------------------------------
 # -----------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # CHỨC NĂNG 2: ĐỐI CHIẾU SO SÁNH HAI MÃ RẬP KHÁC NHAU (PATTERN SPEC COMPARISON)
 # -----------------------------------------------------------------------------
 elif menu_selection == "🔄 Pattern Spec Comparison":
@@ -509,43 +510,63 @@ elif menu_selection == "🔄 Pattern Spec Comparison":
             lbl_b = f"Mẫu B ({d2['style_number_parsed']}) [{d2.get('base_size_name','30').strip()}]"
             st.info(f"⚙️ **ĐANG ĐỐI CHIẾU MA TRẬN:** {lbl_a} ↔️ {lbl_b}")
             
-            # Hàm chuyển đổi phân số dệt may ngắn gọn
             def clean_num(v):
                 if not v or str(v).strip().upper() in ["N/A", ""]: return 0.0
                 try:
                     s = str(v).replace("INCH", "").strip()
-                    return float(s.split()[0]) + (float(s.split()[1].split('/')[0])/float(s.split()[1].split('/')[1])) if " " in s else (float(s.split('/')[0])/float(s.split('/')[1]) if "/" in s else float(s))
-                except: return float(re.findall(r"[-+]?\d*\.\d+|\d+", str(v))[0]) if re.findall(r"[-+]?\d*\.\d+|\d+", str(v)) else 0.0
+                    if " " in s:
+                        p = s.split()
+                        return float(p[0]) + (float(p[1].split('/')[0])/float(p[1].split('/')[1]))
+                    return float(s.split('/')[0])/float(s.split('/')[1]) if "/" in s else float(s)
+                except:
+                    import re
+                    nums = re.findall(r"[-+]?\d*\.\d+|\d+", str(v))
+                    return float(nums[0]) if nums else 0.0
 
-            # Thuật toán thu gọn & đồng bộ hóa POM rác bằng Pandas (Khắc phục lỗi lặp dòng)
-            df_a = pd.DataFrame(list(d1["measurements"].items()), columns=['raw_pom', lbl_a])
-            df_b = pd.DataFrame(list(d2["measurements"].items()), columns=['raw_pom', lbl_b])
+            # --- THUẬT TOÁN TRÍCH XUẤT MÃ CODE POM CHÍNH XÁC ---
+            def extract_pom_code(pom_str):
+                import re
+                if not pom_str: return ""
+                # Tìm các mã định danh chuẩn dệt may dạng AAA-000 hoặc AA-000 (Ví dụ: LEG-002, HIP-016)
+                match = re.search(r'([A-Za-z]{2,4}-\d{3})', str(pom_str))
+                return match.group(1).upper() if match else str(pom_str).lower().strip()
+
+            # Chuyển đổi dữ liệu sang DataFrame để xử lý map nâng cao
+            df_a = pd.DataFrame(list(d1["measurements"].items()), columns=['raw_pom_a', lbl_a])
+            df_b = pd.DataFrame(list(d2["measurements"].items()), columns=['raw_pom_b', lbl_b])
             
-            # Tạo key chuẩn hóa bằng cách xóa khoảng trắng thừa và dấu hai chấm ':'
-            df_a['norm_key'] = df_a['raw_pom'].str.lower().str.replace(':', '').str.strip().str.replace(r'\s+', ' ', regex=True)
-            df_b['norm_key'] = df_b['raw_pom'].str.lower().str.replace(':', '').str.strip().str.replace(r'\s+', ' ', regex=True)
+            df_a['pom_code'] = df_a['raw_pom_a'].apply(extract_pom_code)
+            df_b['pom_code'] = df_b['raw_pom_b'].apply(extract_pom_code)
             
-            # Gộp (Merge) dữ liệu thông minh theo key đã chuẩn hóa
-            df_res = pd.merge(df_a[['norm_key', 'raw_pom', lbl_a]], df_b[['norm_key', 'raw_pom', lbl_b]], on='norm_key', how='outer')
-            df_res['Vị trí đo (POM)'] = df_res['raw_pom_x'].fillna(df_res['raw_pom_y'])
-            df_res = df_res.fillna("N/A").sort_values('norm_key')
-
-            # Tính toán Delta chính xác
-            def calc_delta(r):
-                return round(clean_num(r[lbl_b]) - clean_num(r[lbl_a]), 3) if r[lbl_a] != "N/A" and r[lbl_b] != "N/A" else "N/A"
-            df_res['Sai lệch (Delta)'] = df_res.apply(calc_delta, axis=1)
-
-            # Khởi tạo chuỗi HTML Render bảng tinh giản hơn
-            t_rows = ""
+            # Khớp nối bảng dữ liệu theo Mã Code độc lập (LEG-002 sẽ tự đi cùng nhau)
+            df_res = pd.merge(df_a, df_b, on='pom_code', how='outer').fillna("N/A").sort_values('pom_code')
+            
+            table_body_html = ""
+            compare_rows_for_df = []
+            
             for _, r in df_res.iterrows():
-                d = r['Sai lệch (Delta)']
-                style = "color:#166534; font-weight:700; background:rgba(16,185,129,0.15); padding:2px 8px; border-radius:4px;" if d != "N/A" and d > 0 else ("color:#991B1B; font-weight:700; background:rgba(239,68,68,0.15); padding:2px 8px; border-radius:4px;" if d != "N/A" and d < 0 else "color:#64748B;")
-                t_rows += f"<tr style='background:#FFF;'><td style='padding:10px; border-bottom:1px solid #E2E8F0; font-weight:600;'>{r['Vị trí đo (POM)']}</td><td style='padding:10px; border-bottom:1px solid #E2E8F0;'>{r[lbl_a]}</td><td style='padding:10px; border-bottom:1px solid #E2E8F0;'>{r[lbl_b]}</td><td style='padding:10px; border-bottom:1px solid #E2E8F0; text-align:center;'><span style='{style}'>{f'+{d}' if (d != 'N/A' and d > 0) else d}</span></td></tr>"
+                # Ưu tiên lấy tên đầy đủ của Mẫu A, nếu không có thì lấy tên Mẫu B
+                display_pom = r['raw_pom_a'] if r['raw_pom_a'] != "N/A" else r['raw_pom_b']
+                val1, val2 = r[lbl_a], r[lbl_b]
+                
+                delta = round(clean_num(val2) - clean_num(val1), 3) if val1 != "N/A" and val2 != "N/A" else "N/A"
+                compare_rows_for_df.append({"Vị trí đo (POM)": display_pom, lbl_a: val1, lbl_b: val2, "Sai lệch (Delta)": delta})
+                
+                if delta == "N/A":
+                    style, txt = "color:#94A3B8; font-style:italic;", "N/A"
+                elif delta > 0:
+                    style, txt = "background:rgba(16,185,129,0.15); color:#166534; font-weight:700; padding:2px 8px; border-radius:4px; font-size:12px;", f"+{delta}"
+                elif delta < 0:
+                    style, txt = "background:rgba(239,68,68,0.15); color:#991B1B; font-weight:700; padding:2px 8px; border-radius:4px; font-size:12px;", f"{delta}"
+                else:
+                    style, txt = "color:#64748B; font-size:12px;", "0.00"
+                
+                table_body_html += f"<tr style='background:#FFF;'><td style='padding:10px 14px; border-bottom:1px solid #E2E8F0; font-weight:600; color:#1E293B;'>{display_pom}</td><td style='padding:10px 14px; border-bottom:1px solid #E2E8F0; color:#334155;'>{val1}</td><td style='padding:10px 14px; border-bottom:1px solid #E2E8F0; color:#334155;'>{val2}</td><td style='padding:10px 14px; border-bottom:1px solid #E2E8F0; text-align:center;'><span style='{style}'>{txt}</span></td></tr>"
             
-            st.markdown(f"<div style='max-height:420px; overflow-y:auto; border:1px solid #CBD5E1; border-radius:8px;'><table style='width:100%; border-collapse:collapse; text-align:left; font-family:sans-serif;'><thead style='background:linear-gradient(90deg, #1E3A8A, #2563EB); color:white;'><tr><th style='padding:12px; position:sticky; top:0; z-index:9;'>Vị trí đo (POM)</th><th style='padding:12px; position:sticky; top:0; z-index:9;'>{lbl_a}</th><th style='padding:12px; position:sticky; top:0; z-index:9;'>{lbl_b}</th><th style='padding:12px; text-align:center; position:sticky; top:0; z-index:9;'>Delta</th></tr></thead><tbody>{t_rows}</tbody></table></div>", unsafe_allow_html=True)
+            st.markdown(f"<div style='max-height:460px; overflow-y:auto; border:1px solid #CBD5E1; border-radius:12px;'><table style='width:100%; border-collapse:collapse; text-align:left; font-family:sans-serif;'><thead style='background:linear-gradient(90deg, #1E3A8A, #2563EB); color:white;'><tr><th style='padding:14px 16px; position:sticky; top:0; z-index:10;'>Vị trí đo (POM Description)</th><th style='padding:14px 16px; position:sticky; top:0; z-index:10;'>{lbl_a}</th><th style='padding:14px 16px; position:sticky; top:0; z-index:10;'>{lbl_b}</th><th style='padding:14px 16px; text-align:center; width:150px; position:sticky; top:0; z-index:10;'>Sai lệch (Delta)</th></tr></thead><tbody>{table_body_html}</tbody></table></div>", unsafe_allow_html=True)
             
-            # --- XUẤT FILE EXCEL RÚT GỌN ---
-            df_xl = df_res[['Vị trí đo (POM)', lbl_a, lbl_b, 'Sai lệch (Delta)']]
+            # --- XUẤT FILE EXCEL ĐÃ KHỚP MÃ HOÀN HẢO ---
+            df_xl = pd.DataFrame(compare_rows_for_df)
             towrite = io.BytesIO()
             with pd.ExcelWriter(towrite, engine='xlsxwriter') as writer:
                 df_xl.to_excel(writer, index=False, sheet_name='Spec_Report')
