@@ -1089,6 +1089,53 @@ with spec_col2:
         st.markdown("📋 **Bảng 2: Thông số Mã tương đồng trong kho**")
         st.info("Trống - Hệ thống tự động chuyển qua chế độ tính toán vector hình học rập mẫu mới.")
 
+# Trích xuất dữ liệu hiển thị đồ họa trực diện
+matched_techpack = st.session_state.get("matched_techpack")
+bom_records = st.session_state.get("bom_records", [])
+
+# 1. HIỂN THỊ ĐỐI SOÁT HÌNH ẢNH HAI BÊN VÀ KHẮC PHỤC TRIỆT ĐỂ LỖI SAI LỆCH URL ẢNH VỠ
+st.markdown("### 🖼️ ĐỐI CHIẾU SỰ TƯƠNG ĐỒNG HÌNH ẢNH THIẾT KẾ (FLAT SKETCH)")
+img_col1, img_col2 = st.columns(2)
+with img_col1:
+    if target_new_sketch_bytes is not None:
+        st.image(target_new_sketch_bytes, caption=f"Mẫu mới tải lên ({new_style_id_detected})", use_container_width=True)
+with img_col2:
+    if matched_techpack:
+        target_style_name = matched_techpack.get("StyleName", "Mẫu tương đồng")
+        
+        # ⚡ SỬA LỖI MẤU CHỐT: Ép lọc bỏ hoàn toàn dấu gạch ngang '-' để đồng bộ 100% với tên file vật lý trên Storage
+        style_clean_id = re.sub(r'[^a-zA-Z0-9]', '', str(target_style_name))
+        old_sketch_url = f"{SB_URL.rstrip('/')}/storage/v1/object/public/kho_anh/{style_clean_id}.jpg"
+            
+        st.markdown(f"<p style='color: #1E3A8A; font-size: 13px; font-weight: 700; margin-bottom: 8px; text-align: center;'>🎯 Mã tương đồng trong kho: {target_style_name}</p>", unsafe_allow_html=True)
+        try:
+            st.image(old_sketch_url, caption=f"Ảnh bản vẽ gốc của mã {target_style_name}", use_container_width=True)
+        except Exception:
+            st.image("https://unsplash.com", caption=f"⚠️ Tệp ảnh vật lý của mã {target_style_name} chưa được đồng bộ lên Storage. Hiển thị phom dáng Jeans tiêu chuẩn.", use_container_width=True)
+    else:
+        st.info("💡 Không tìm thấy mã tương đồng hình ảnh phù hợp trong kho lưu trữ.")
+
+# 2. ĐƯA RA 2 BẢNG SO SÁNH THÔNG SỐ RẬP ĐỘC LẬP
+st.markdown("<br>### 📐 SO SÁNH HAI BẢNG THÔNG SỐ KỸ THUẬT RẬP MẪU", unsafe_allow_html=True)
+spec_col1, spec_col2 = st.columns(2)
+
+with spec_col1:
+    st.markdown(f"📊 **Bảng 1: Thông số Mẫu mới nạp ({new_style_base_size})**")
+    df_new_spec = pd.DataFrame(list(new_style_measurements_dict.items()), columns=["Vị trí đo (POM Description)", "Thông số mới"]) if new_style_measurements_dict else pd.DataFrame(columns=["Vị trí đo (POM Description)", "Thông số mới"])
+    st.dataframe(df_new_spec, use_container_width=True, hide_index=True)
+    
+with spec_col2:
+    if matched_techpack:
+        old_style_title = matched_techpack.get("StyleName", "N/A")
+        old_size_title = matched_techpack.get("BaseSize", "N/A")
+        st.markdown(f"📋 **Bảng 2: Thông số Mã trong kho ({old_style_title}) [SIZE {old_size_title}]**")
+        old_specs = matched_techpack.get("DetailedMeasurements", {})
+        df_old_spec = pd.DataFrame(list(old_specs.items()), columns=["Vị trí đo (POM Description)", "Thông số cũ"]) if old_specs else pd.DataFrame(columns=["Vị trí đo (POM Description)", "Thông số cũ"])
+        st.dataframe(df_old_spec, use_container_width=True, hide_index=True)
+    else:
+        st.markdown("📋 **Bảng 2: Thông số Mã tương đồng trong kho**")
+        st.info("Trống - Hệ thống tự động chuyển qua chế độ tính toán vector hình học rập mẫu mới.")
+
 # Hiển thị bảng định mức BOM lịch sử sạch và bổ sung cột tên mã hàng đối chứng chạy dọc bảng
 if matched_techpack and bom_records:
     st.markdown("<br>📦 **Chi Tiết Định Mức Định Hình (BOM Lịch Sử của Mã hàng cũ):**", unsafe_allow_html=True)
