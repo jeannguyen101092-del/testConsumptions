@@ -1158,7 +1158,7 @@ elif menu_selection == "🛒 Purchase Consumption":
         if trigger_btn:
             st.session_state["purchase_ready"] = True
             
-            # 1. TIẾN HÀNH SỐ HÓA FILE SBD ĐƠN HÀNG (ĐÃ SỬA LỖI TRUYỀN THIẾU BIẾN EXCEL)
+            # 1. TIẾN HÀNH SỐ HÓA FILE SBD ĐƠN HÀNG (CẤU HÌNH PROMPT QUÉT MA TRẬN PHỨC TẠP CỦA PPJ)
             with st.spinner("🚀 AI đang xử lý ma trận số lượng đơn hàng từ File SBD..."):
                 gemini_key = get_secure_gemini_key()
                 client_ai = genai.Client(api_key=gemini_key)
@@ -1178,16 +1178,24 @@ elif menu_selection == "🛒 Purchase Consumption":
                 elif file_sbd.name.lower().endswith('.pdf'):
                     sbd_parts_payload.append(types.Part.from_bytes(data=sbd_bytes, mime_type='application/pdf'))
                 
+                # SIÊU PROMPT DỆT MAY: Ép AI đọc đúng kết cấu bảng cân đối PO thực tế của PPJ Group
                 sbd_prompt = f"""
-                Analyze this garment purchase order breakdown data (SBD).
-                Extract the style number/ID and total order quantity.
-                If the order matrix DOES NOT have separate Inseam parameters (flat simple size run like S, M, L, XL), extract them as a single uniform size row list. Do not create fake inseam values.
+                You are an expert Garment Order Planner. Analyze this raw CSV data converted from an industrial Excel Order Breakdown Sheet (SBD).
+                The sheet contains a complex matrix of order quantities distributed across size columns and breakdown summaries.
+                
+                YOUR DATA EXTRACTION MISSIONS:
+                1. Identify the Core Style Number/ID (e.g., look for patterns like '5765-01' or '5765' in the columns).
+                2. Find the total order quantity (Total PO) by summing up the quantities.
+                3. CRITICAL MATRIX ANALYSIS RULE: 
+                   Look for the rows or sections containing size labels (such as 000, 00, 0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24) or sub-tables titled 'INSEAM' / 'TOTAL'.
+                   Extract the exact final total order quantities for EACH size. For example, if a size column header is '4' or '4.0' and its total summary cell below is '495', extract that mapping. 
+                   Ignore any raw formulas, row indices, or placeholder text. 
+                   Only return a flat mapping of "Size_Name": total_quantity_integer for valid sizes that have quantities greater than 0.
                 
                 Return a strict raw JSON matching this schema:
                 {{"style_id": "string", "total_quantity": integer, "size_breakdown": {{"Size Name": integer}}}}
                 """
                 
-                # SỬA LỖI MẤU CHỐT: Nếu có dữ liệu văn bản trích xuất từ Excel, nạp trực tiếp vào danh sách gửi đi cho AI
                 if sbd_content_str:
                     sbd_parts_payload.append(f"Here is the text data extracted from the Excel order sheet:\n{sbd_content_str}")
                 
@@ -1245,13 +1253,14 @@ elif menu_selection == "🛒 Purchase Consumption":
                         st.markdown(f"**Vải chính / Chủng loại:** `{tp_data.get('category', 'N/A')}` | **Size Gốc:** `{tp_data.get('base_size_name', 'N/A')}`")
                         try:
                             df_matrix = pd.DataFrame.from_dict(matrix_data, orient='index')
-                            df_matrix.insert(0, "Vị trí đo (POM Description)", df_matrix.index)
+                            df_matrix.insert(0, "Vị trí mod (POM Description)", df_matrix.index)
                             st.dataframe(df_matrix, use_container_width=True, hide_index=True)
                         except Exception:
                             df_tp_show = pd.DataFrame(list(matrix_data.items()), columns=["POM Description", "Thông số"])
                             st.dataframe(df_tp_show, use_container_width=True, hide_index=True)
                     else:
                         st.warning("⏳ Đang đợi AI xử lý hoặc tệp Techpack rỗng.")
+
                  # --- 🛠️ KHỐI CHAT AI VÀ CỖ MÁY TOÁN HỌC TÍNH TOÁN ĐẶT HÀNG NÂNG CAO ---
                 st.markdown("<br><hr style='border:0.5px solid #E2E8F0;'>", unsafe_allow_html=True)
                 
