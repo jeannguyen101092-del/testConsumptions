@@ -1227,28 +1227,59 @@ if menu_selection == "🧵 BOM & Consumption Matrix":
         st.dataframe(pd.DataFrame(formatted_bom), use_container_width=True, hide_index=True)
 
     st.markdown("<br><hr style='border:0.5px solid #CBD5E1;'>", unsafe_allow_html=True)
-    st.markdown("### 💬 TRỢ LÝ AI PHÂN TÍCH ĐỊNH MỨC SẢN XUẤT (HỎI ĐÂU ĐÁP ĐÓ)")
+    
+    # THIẾT KẾ CỤM ĐIỀU KHIỂN CHAT BOX THÔNG MINH
+    chat_header_col1, chat_header_col2 = st.columns([3.2, 0.8])
+    with chat_header_col1:
+        st.markdown("### 💬 TRỢ LÝ AI PHÂN TÍCH ĐỊNH MỨC SẢN XUẤT (HỎI ĐÂU ĐÁP ĐÓ)")
+    with chat_header_col2:
+        # ✅ THÊM NÚT XÓA CHAT NHANH NGAY TẠI KHU VỰC KHUNG CHAT
+        if st.button("🗑️ XÓA LỊCH SỬ CHAT", key="direct_clear_chat_btn", use_container_width=True):
+            st.session_state["consumption_chat_history"] = []
+            st.success("♻️ Đã xóa sạch hội thoại!")
+            st.rerun()
 
-    for chat in st.session_state.get("consumption_chat_history", []):
-        with st.chat_message("user"): st.write(chat["user"])
-        with st.chat_message("assistant"): st.write(chat["ai"])
-        
+    # Tạo một khung chứa chat cố định (Container)
+    chat_container = st.container()
+    with chat_container:
+        for chat in st.session_state.get("consumption_chat_history", []):
+            with st.chat_message("user"): 
+                st.write(chat["user"])
+            with st.chat_message("assistant"): 
+                st.write(chat["ai"])
+                
     if user_query := st.chat_input("Nhập yêu cầu phân tích (Ví dụ: Tính định mức vải chính khi co rút ngang 5%, dọc 3%)..."):
-        with st.chat_message("user"):
-            st.write(user_query)
-            
-        with st.chat_message("assistant"):
-            with st.spinner("🤖 AI đang phân tích dữ liệu và tính toán định mức..."):
-                ai_reply = ai_consumption_analyst_engine(
-                    client=client,
-                    user_message=user_query,
-                    matched_techpack=matched_techpack,
-                    bom_records=bom_records,
-                    new_style_measurements=new_style_measurements_dict,
-                    target_new_sketch_bytes=target_new_sketch_bytes,
-                    detected_size=new_style_base_size
-                )
-                st.write(ai_reply)
+        with chat_container:
+            with st.chat_message("user"):
+                st.write(user_query)
+                
+            with st.chat_message("assistant"):
+                with st.spinner("🤖 AI đang phân tích dữ liệu và tính toán định mức..."):
+                    ai_reply = ai_consumption_analyst_engine(
+                        client=client,
+                        user_message=user_query,
+                        matched_techpack=matched_techpack,
+                        bom_records=bom_records,
+                        new_style_measurements=new_measurements_dict if 'new_measurements_dict' in locals() else new_style_measurements_dict,
+                        target_new_sketch_bytes=target_new_sketch_bytes,
+                        detected_size=new_style_base_size
+                    )
+                    st.write(ai_reply)
+        
+        # ✅ THUẬT TOÁN ĐÓNG ĐINH NEO CUỘN: Ép trình duyệt tự động scroll lướt màn hình xuống vị trí tin nhắn cuối cùng
+        st.components.v1.html(
+            """
+            <script>
+                var doc = window.parent.document;
+                var sections = doc.querySelectorAll('section.main');
+                if (sections.length > 0) {
+                    sections[0].scrollTo({top: sections[0].scrollHeight, behavior: 'smooth'});
+                }
+            </script>
+            """,
+            height=0,
+        )
+
 
 
 
