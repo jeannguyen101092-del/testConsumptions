@@ -865,8 +865,6 @@ if has_file:
                 page_img.convert("RGB").save(img_buf, format="JPEG", quality=75)
                 img_payload.append(types.Part.from_bytes(data=img_buf.getvalue(), mime_type='image/jpeg'))
             
-            # ÉP BỘ LỌC THỊ GIÁC: Ép AI tìm đúng số trang vẽ kĩ thuật lớn sạch, loại bỏ trang lưới bảng biểu BOM chữ
-            # --- 🚀 NÂNG CẤP ĐOẠN 3: ÉP AI KHÓA TRỤC INSEAM MẪU CHUẨN TRÊN TRANG ĐỐI SOÁT CHÍNH ---
             extraction_prompt = (
                 "You are an expert Garment Specification Auditor at PPJ Group. Analyze all attached sheets page by page. "
                 "1. Locate the core 'Base Size' / 'Sample Size' specified by the buyer (e.g., Size 32 with Inseam 32, written as 32/32 or 32x32). "
@@ -884,59 +882,7 @@ if has_file:
             extraction_payload = list(img_payload)
             extraction_payload.append(extraction_prompt)
             
-            extraction_res = client.models.generate_content(model='gemini-2.5-flash', contents=extraction_payload)
-            clean_json_text = extraction_res.text.strip().replace("```json", "").replace("```", "").strip()
-            
-            parsed_meta = json.loads(clean_json_text)
-           new_style_id_detected = "UNKNOWN_STYLE"
-new_style_category_detected = ""
-new_style_fabric_detected = "UNKNOWN_FABRIC"
-new_style_measurements_dict = {}
-new_style_base_size = "32"
-img_payload = [] 
-target_new_sketch_bytes = None 
-
-# Đồng bộ hóa cấu trúc lấy tệp đính kèm từ Uploader lưu trong bộ nhớ hệ thống
-target_file_object = None
-if 'uploaded_file' in st.session_state and st.session_state['uploaded_file'] is not None:
-    target_file_object = st.session_state['uploaded_file']
-elif 'chat_uploader' in st.session_state and st.session_state['chat_uploader'] is not None:
-    target_file_object = st.session_state['chat_uploader']
-
-has_file = target_file_object is not None
-
-if has_file:
-    file_bytes = target_file_object.getvalue()
-    file_name = target_file_object.name
-    if file_name.lower().endswith('.pdf'):
-        try:
-            info_chat = pdfinfo_from_bytes(file_bytes)
-            total_chat_pages = int(info_chat.get("Pages", 1))
-            chat_images = convert_from_bytes(file_bytes, dpi=90, first_page=1, last_page=total_chat_pages)
-            for idx, page_img in enumerate(chat_images):
-                img_buf = io.BytesIO()
-                page_img.convert("RGB").save(img_buf, format="JPEG", quality=75)
-                img_payload.append(types.Part.from_bytes(data=img_buf.getvalue(), mime_type='image/jpeg'))
-            
-            # --- 🚀 PROMPT CÔNG NGHIỆP ÉP AI TRÍCH XUẤT ĐA CHỨC NĂNG VÀ KHÓA TRỤC INSEAM ---
-            extraction_prompt = (
-                "You are an expert Garment Specification Auditor at PPJ Group. Analyze all attached sheets page by page. "
-                "1. Locate the core 'Base Size' / 'Sample Size' specified by the buyer (e.g., Size 32 with Inseam 32, written as 32/32 or 32x32). "
-                "2. CRITICAL MEASUREMENT SELECTION RULE: Look closely at the grading table sheet. "
-                "If the table contains multiple inseam length columns (e.g., columns for Inseam 30, 32, 34), you MUST extract the target point of measurement (POM) values that belong ONLY to the specified Sample length column (which is 32\"). "
-                "STRICTLY FORBIDDEN: Do not blindly extract the value from the first column if it represents an Inseam of 30\". "
-                "You must output the true Inseam target value which is 32\" for a 32/32 profile garment. "
-                "3. Extract at least 15-20 distinct Points of Measurement (POM) for this specific sample size only. "
-                "4. Find the exact 'Style ID' / 'Style Number' (e.g., 1P001369), 'Category' / 'Product Line', and 'Buyer' name. "
-                "5. Detect the exact PAGE INDEX (0-based) containing the pure black and white line art TECHNICAL FLAT SKETCH. "
-                "Return a completely valid raw JSON string with this exact schema (no markdown blocks): "
-                "{\"detected_style_id\": \"string\", \"category\": \"string\", \"fabric_code\": \"string\", \"base_size_detected\": \"string\", \"measurements\": {}, \"sketch_page_index_detected\": 0}"
-            )
-
-            extraction_payload = list(img_payload)
-            extraction_payload.append(extraction_prompt)
-            
-            # ⚡ SỬA LỖI MẤU CHỐT: Bọc response_mime_type vào cấu trúc config chính quy của thư viện google-genAI mới
+            # Sửa lỗi 400 bằng cách bọc cấu hình chuẩn hóa vào lớp GenerateContentConfig
             extraction_res = client.models.generate_content(
                 model='gemini-2.5-flash', 
                 contents=extraction_payload,
@@ -962,7 +908,6 @@ if has_file:
             pass
     else:
         target_new_sketch_bytes = file_bytes
-
 dynamic_keyword = str(new_style_id_detected).strip().upper()
 base_sb_url = SB_URL.rstrip('/')
 headers = {"apikey": SB_KEY, "Authorization": f"Bearer {SB_KEY}"}
@@ -989,8 +934,6 @@ if menu_selection == "🧵 BOM & Consumption Matrix":
             st.rerun()
 
     st.markdown("---")
-
-    # Hiển thị tiêu đề Size mẫu cơ sở đang bóc tách đối soát
     if has_file:
         if new_style_base_size and new_style_base_size != "32":
             st.info(f"📋 **CƠ SỞ ĐỐI SOÁT KIỂM TRA:** Mẫu mới số hóa mã hàng `{new_style_id_detected}` | Quy chuẩn kích thước hình học rập mẫu: **SIZE {new_style_base_size}**")
@@ -1004,7 +947,6 @@ if menu_selection == "🧵 BOM & Consumption Matrix":
         
         with st.spinner("🧠 AI đang quét kho lưu trữ, đối soát cấu trúc hình học và bảng thông số..."):
             try:
-                # 1. Tải danh mục rập mẫu hiện có từ bảng thong_so_techpack của Supabase
                 headers_db = {"apikey": SB_KEY, "Authorization": f"Bearer {SB_KEY}"}
                 url_db = f"{SB_URL.rstrip('/')}/rest/v1/thong_so_techpack"
                 query_params = {"select": "StyleName,Buyer,Category,BaseSize,DetailedMeasurements,SketchURL,sketch_vector", "limit": 100}
@@ -1022,7 +964,6 @@ if menu_selection == "🧵 BOM & Consumption Matrix":
                             "specs": s.get("DetailedMeasurements", {})
                         })
                     
-                    # Thiết lập Prompt chấm điểm hỗn hợp nâng cao (Trọng số ảnh 70% - Thông số 30%)
                     match_prompt = f"""
                     You are an expert Garment Pattern and Structural Ingestion Auditor at PPJ Group.
                     Your mission is to find the MOST SIMILAR historical garment style from our database pool to match the newly uploaded style.
@@ -1070,7 +1011,6 @@ if menu_selection == "🧵 BOM & Consumption Matrix":
             except Exception as match_err:
                 st.sidebar.error(f"Lỗi hệ thống đối soát tự động: {str(match_err)}")
 
-        # --- ĐOẠN TRUY XUẤT BOM LỊCH SỬ TỪ SUBAPASE ---
         if st.session_state.get("matched_techpack"):
             try:
                 target_style_name = st.session_state["matched_techpack"].get("StyleName", "").strip()
@@ -1087,7 +1027,6 @@ if menu_selection == "🧵 BOM & Consumption Matrix":
             except Exception as bom_err:
                 st.session_state["bom_records"] = []
 
-    # LẤY DỮ LIỆU TỪ BỘ NHỚ KHÓA ĐỂ HIỂN THỊ LÊN MÀN HÌNH MƯỢT MÀ CHỐNG RERUN TRẮNG TRƠN
     matched_techpack = st.session_state.get("matched_techpack")
     bom_records = st.session_state.get("bom_records", [])
 
@@ -1108,7 +1047,6 @@ if menu_selection == "🧵 BOM & Consumption Matrix":
         if bom_records:
             formatted_bom = []
             for r in bom_records:
-                # 🛠️ THUẬT TOÁN KHỬ LỖI NAN: Ép kiểu chuỗi ký tự sạch sẽ, ngăn chữ nan toán học hiển thị lên giao diện
                 def clean_nan_field(v):
                     return "" if (not v or str(v).lower() in ["nan", "none", "null"]) else str(v).strip()
                 
@@ -1124,6 +1062,7 @@ if menu_selection == "🧵 BOM & Consumption Matrix":
             st.dataframe(pd.DataFrame(formatted_bom), use_container_width=True, hide_index=True)
         else:
             st.warning("⚠️ Không tìm thấy bảng chi tiết phụ liệu BOM lịch sử của mã hàng đối chiếu này trong kho dữ liệu.")
+
 
 # -----------------------------------------------------------------------------
 # CHỨC NĂNG 3: QUẢN LÝ ĐỊNH MỨC MUA SẮM VÀ ĐẶT HÀNG (PURCHASE CONSUMPTION)
