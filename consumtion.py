@@ -933,6 +933,7 @@ if menu_selection == "🧵 BOM & Consumption Matrix":
             st.info(f"📋 **CƠ SỞ ĐỐI SOÁT KIỂM TRA:** Đang áp dụng quy chuẩn kích thước hình học rập mẫu cơ sở: **SIZE 32 / M (Mặc định)**")
 
             # =============================================================================
+               # =============================================================================
         # CỖ MÁY ĐỐI SOÁT MỚI: ƯU TIÊN HÌNH ẢNH TRƯỚC -> THÔNG SỐ SAU & LẤY BOM LỊCH SỬ
         # =============================================================================
         matched_style_db = None
@@ -983,10 +984,13 @@ if menu_selection == "🧵 BOM & Consumption Matrix":
                     if target_new_sketch_bytes:
                         match_contents.append(types.Part.from_bytes(data=target_new_sketch_bytes, mime_type='image/jpeg'))
                         
+                    # ⚡ SỬA LỖI MẤU CHỐT: Sử dụng đúng cấu pháp truyền response_mime_type của thư viện google-genai mới
                     res_match = client.models.generate_content(
                         model='gemini-2.5-flash',
                         contents=match_contents,
-                        config=types.GenerateContentConfig(response_mime_type="application/json")
+                        config=types.GenerateContentConfig(
+                            response_mime_type="application/json"
+                        )
                     )
                     
                     clean_match_json = res_match.text.strip().replace("```json", "").replace("```", "").strip()
@@ -996,7 +1000,6 @@ if menu_selection == "🧵 BOM & Consumption Matrix":
                     ai_reason = match_result.get("reasoning_vietnamese", "Đã tìm thấy mã tương đồng dựa trên phân tích cấu trúc hình học.")
                     
                     if 0 <= best_idx < len(all_historical_styles):
-                        # Gán dữ liệu mã hàng đối soát tìm thấy vào session_state của bạn
                         st.session_state["matched_techpack"] = all_historical_styles[best_idx]
                         st.success(f"🎯 AI MATCHING SUCCESS: {st.session_state['matched_techpack'].get('StyleName')}")
                         with st.expander("🔍 Xem lập luận phân tích hình dáng và thông số của AI"):
@@ -1012,7 +1015,6 @@ if menu_selection == "🧵 BOM & Consumption Matrix":
                 core_match = re.search(r'(\d+)', target_style_name)
                 search_term = core_match.group(0) if core_match else target_style_name
                 
-                # Gọi API Supabase bốc dữ liệu định mức san_pham gốc lên
                 url_bom = f"{SB_URL.rstrip('/')}/rest/v1/san_pham"
                 query_bom = {"select": "style_name,article_name,consumption_type,material_size,uom,consumption_value,notes"}
                 query_bom["style_name"] = f"ilike.*{search_term}*"
@@ -1022,6 +1024,7 @@ if menu_selection == "🧵 BOM & Consumption Matrix":
                     st.session_state["bom_records"] = res_bom.json()
             except Exception as bom_err:
                 st.session_state["bom_records"] = []
+
 
             # LẤY DỮ LIỆU TỪ BỘ NHỚ KHÓA ĐỂ HIỂN THỊ LÊN MÀN HÌNH MƯỢT MÀ CHỐNG RERUN TRẮNG TRƠN
     matched_techpack = st.session_state["matched_techpack"]
