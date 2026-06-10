@@ -1026,86 +1026,85 @@ if menu_selection == "🧵 BOM & Consumption Matrix":
 matched_techpack = st.session_state.get("matched_techpack")
 bom_records = st.session_state.get("bom_records", [])
 
-if has_file:
-    # 1. HIỂN THỊ ĐỐI SOÁT HÌNH ẢNH HAI BÊN (MỚI ↔️ CŨ)
-    st.markdown("### 🖼️ ĐỐI CHIẾU SỰ TƯƠNG ĐỒNG HÌNH ẢNH THIẾT KẾ (FLAT SKETCH)")
-    img_col1, img_col2 = st.columns(2)
-    with img_col1:
-        if target_new_sketch_bytes is not None:
-            st.image(target_new_sketch_bytes, caption=f"Mẫu mới tải lên ({new_style_id_detected})", use_container_width=True)
-    with img_col2:
-        if matched_techpack and matched_techpack.get("SketchURL"):
-            st.image(matched_techpack["SketchURL"], caption=f"Mã tương đồng tìm thấy trong kho ({matched_techpack.get('StyleName')})", use_container_width=True)
-        else:
-            st.info("💡 Không tìm thấy mã tương đồng hình ảnh phù hợp trong kho lưu trữ.")
+# 1. HIỂN THỊ ĐỐI SOÁT HÌNH ẢNH HAI BÊN (MỚI ↔️ CŨ)
+st.markdown("### 🖼️ ĐỐI CHIẾU SỰ TƯƠNG ĐỒNG HÌNH ẢNH THIẾT KẾ (FLAT SKETCH)")
+img_col1, img_col2 = st.columns(2)
+with img_col1:
+    if target_new_sketch_bytes is not None:
+        st.image(target_new_sketch_bytes, caption=f"Mẫu mới tải lên ({new_style_id_detected})", use_container_width=True)
+with img_col2:
+    if matched_techpack and matched_techpack.get("SketchURL"):
+        st.image(matched_techpack["SketchURL"], caption=f"Mã tương đồng tìm thấy trong kho ({matched_techpack.get('StyleName')})", use_container_width=True)
+    else:
+        st.info("💡 Không tìm thấy mã tương đồng hình ảnh phù hợp trong kho lưu trữ.")
 
-    # 2. ĐƯA RA 2 BẢNG SO SÁNH THÔNG SỐ RẬP ĐỘC LẬP
-    st.markdown("<br>### 📐 SO SÁNH HAI BẢNG THÔNG SỐ KỸ THUẬT RẬP MẪU", unsafe_allow_html=True)
-    spec_col1, spec_col2 = st.columns(2)
-    
-    with spec_col1:
-        st.markdown(f"📊 **Bảng 1: Thông số Mẫu mới nạp ({new_style_base_size})**")
-        if new_style_measurements_dict:
-            df_new_spec = pd.DataFrame(list(new_style_measurements_dict.items()), columns=["Vị trí đo (POM Description)", "Thông số mới"])
-            st.dataframe(df_new_spec, use_container_width=True, hide_index=True)
-        else:
-            st.caption("Không có dữ liệu thông số rập mẫu mới.")
-            
-    with spec_col2:
-        if matched_techpack:
-            old_style_title = matched_techpack.get("StyleName", "N/A")
-            old_size_title = matched_techpack.get("BaseSize", "N/A")
-            st.markdown(f"📋 **Bảng 2: Thông số Mã trong kho ({old_style_title}) [SIZE {old_size_title}]**")
-            old_specs = matched_techpack.get("DetailedMeasurements", {})
-            if old_specs:
-                df_old_spec = pd.DataFrame(list(old_specs.items()), columns=["Vị trí đo (POM Description)", "Thông số cũ"])
-                st.dataframe(df_old_spec, use_container_width=True, hide_index=True)
-            else:
-                st.caption("Mã hàng tương đồng này không có dữ liệu thông số rập chi tiết.")
-        else:
-            st.markdown("📋 **Bảng 2: Thông số Mã tương đồng trong kho**")
-            st.info("Trống - Hệ thống tự động chuyển qua chế độ tính toán vector hình học rập mẫu mới.")
+# 2. ĐƯA RA 2 BẢNG SO SÁNH THÔNG SỐ RẬP ĐỘC LẬP
+st.markdown("<br>### 📐 SO SÁNH HAI BẢNG THÔNG SỐ KỸ THUẬT RẬP MẪU", unsafe_allow_html=True)
+spec_col1, spec_col2 = st.columns(2)
 
-    # Hiển thị bảng định mức BOM lịch sử của mã hàng cũ
-    if matched_techpack and bom_records:
-        st.markdown("<br>📦 **Chi Tiết Định Mức Định Hình (BOM Lịch Sử của Mã hàng cũ):**", unsafe_allow_html=True)
-        formatted_bom = []
-        for r in bom_records:
-            def clean_nan(v): return "" if (not v or str(v).lower() in ["nan", "none", "null"]) else str(v).strip()
-            formatted_bom.append({
-                "Loại nguyên vật liệu": clean_nan(r.get("consumption_type")),
-                "Chi tiết vật tư (Article)": clean_nan(r.get("article_name")),
-                "Khổ / Cỡ vật tư": clean_nan(r.get("material_size")),
-                "Định mức gốc": clean_nan(r.get("consumption_value")),
-                "UOM": clean_nan(r.get("uom"))
-            })
-        st.dataframe(pd.DataFrame(formatted_bom), use_container_width=True, hide_index=True)
-
-    # 3. LUỒNG HỘI THOẠI CHAT AI HỎI ĐÂU TRẢ LỜI ĐÓ GIỐNG CHATGPT
-    st.markdown("<br><hr style='border:0.5px solid #CBD5E1;'>", unsafe_allow_html=True)
-    st.markdown("### 💬 TRỢ LÝ AI PHÂN TÍCH ĐỊNH MỨC SẢN XUẤT (HỎI ĐÂU ĐÁP ĐÓ)")
-    
-    for chat in st.session_state["consumption_chat_history"]:
-        with st.chat_message("user"): st.write(chat["user"])
-        with st.chat_message("assistant"): st.write(chat["ai"])
+with spec_col1:
+    st.markdown(f"📊 **Bảng 1: Thông số Mẫu mới nạp ({new_style_base_size})**")
+    if new_style_measurements_dict:
+        df_new_spec = pd.DataFrame(list(new_style_measurements_dict.items()), columns=["Vị trí đo (POM Description)", "Thông số mới"])
+        st.dataframe(df_new_spec, use_container_width=True, hide_index=True)
+    else:
+        st.caption("Không có dữ liệu thông số rập mẫu mới.")
         
-    if user_query := st.chat_input("Nhập yêu cầu phân tích (Ví dụ: Tính định mức vải chính khi co rút ngang 2%, dọc 3%)..."):
-        with st.chat_message("user"):
-            st.write(user_query)
-            
-        with st.chat_message("assistant"):
-            with st.spinner("🤖 AI đang phân tích dữ liệu và lập luận tính toán..."):
-                ai_response_text = ai_consumption_analyst_engine(
-                    client=client,
-                    user_message=user_query,
-                    matched_techpack=matched_techpack,
-                    bom_records=bom_records,
-                    new_style_measurements=new_style_measurements_dict,
-                    target_new_sketch_bytes=target_new_sketch_bytes,
-                    detected_size=new_style_base_size
-                )
-                st.write(ai_response_text)
-        st.rerun()
+with spec_col2:
+    if matched_techpack:
+        old_style_title = matched_techpack.get("StyleName", "N/A")
+        old_size_title = matched_techpack.get("BaseSize", "N/A")
+        st.markdown(f"📋 **Bảng 2: Thông số Mã trong kho ({old_style_title}) [SIZE {old_size_title}]**")
+        old_specs = matched_techpack.get("DetailedMeasurements", {})
+        if old_specs:
+            df_old_spec = pd.DataFrame(list(old_specs.items()), columns=["Vị trí đo (POM Description)", "Thông số cũ"])
+            st.dataframe(df_old_spec, use_container_width=True, hide_index=True)
+        else:
+            st.caption("Mã hàng tương đồng này không có dữ liệu thông số rập chi tiết.")
+    else:
+        st.markdown("📋 **Bảng 2: Thông số Mã tương đồng trong kho**")
+        st.info("Trống - Hệ thống tự động chuyển qua chế độ tính toán vector hình học rập mẫu mới.")
+
+# Hiển thị bảng định mức BOM lịch sử của mã hàng cũ
+if matched_techpack and bom_records:
+    st.markdown("<br>📦 **Chi Tiết Định Mức Định Hình (BOM Lịch Sử của Mã hàng cũ):**", unsafe_allow_html=True)
+    formatted_bom = []
+    for r in bom_records:
+        def clean_nan(v): return "" if (not v or str(v).lower() in ["nan", "none", "null"]) else str(v).strip()
+        formatted_bom.append({
+            "Loại nguyên vật liệu": clean_nan(r.get("consumption_type")),
+            "Chi tiết vật tư (Article)": clean_nan(r.get("article_name")),
+            "Khổ / Cỡ vật tư": clean_nan(r.get("material_size")),
+            "Định mức gốc": clean_nan(r.get("consumption_value")),
+            "UOM": clean_nan(r.get("uom"))
+        })
+    st.dataframe(pd.DataFrame(formatted_bom), use_container_width=True, hide_index=True)
+
+# 3. LUỒNG HỘI THOẠI CHAT AI HỎI ĐÂU TRẢ LỜI ĐÓ GIỐNG CHATGPT
+st.markdown("<br><hr style='border:0.5px solid #CBD5E1;'>", unsafe_allow_html=True)
+st.markdown("### 💬 TRỢ LÝ AI PHÂN TÍCH ĐỊNH MỨC SẢN XUẤT (HỎI ĐÂU ĐÁP ĐÓ)")
+
+for chat in st.session_state["consumption_chat_history"]:
+    with st.chat_message("user"): st.write(chat["user"])
+    with st.chat_message("assistant"): st.write(chat["ai"])
+    
+if user_query := st.chat_input("Nhập yêu cầu phân tích (Ví dụ: Tính định mức vải chính khi co rút ngang 2%, dọc 3%)..."):
+    with st.chat_message("user"):
+        st.write(user_query)
+        
+    with st.chat_message("assistant"):
+        with st.spinner("🤖 AI đang phân tích dữ liệu và lập luận tính toán..."):
+            ai_response_text = ai_consumption_analyst_engine(
+                client=client,
+                user_message=user_query,
+                matched_techpack=matched_techpack,
+                bom_records=bom_records,
+                new_style_measurements=new_style_measurements_dict,
+                target_new_sketch_bytes=target_new_sketch_bytes,
+                detected_size=new_style_base_size
+            )
+            st.write(ai_response_text)
+    st.rerun()
 
 
 
