@@ -1131,12 +1131,13 @@ if menu_selection == "🧵 BOM & Consumption Matrix":
     control_col1, control_col2 = st.columns([3.3, 0.7])
     with control_col1:
         st.markdown("<p style='font-weight:700; font-size:12px; color:#1E293B;'>📁 INGEST NEW STYLE REPRINTS (PDF/IMAGE)</p>", unsafe_allow_html=True)
-        # ✅ ĐÃ SỬA: Đổi key thành "bom_matrix_uploader" để tránh trùng lặp gây sập ứng dụng
+        # Khóa uploaded_file đã được đổi sang bom_matrix_uploader để tránh trùng ô tải file
         uploaded_file = st.file_uploader("Upload Techpack file", type=["pdf", "jpg", "jpeg", "png"], key="bom_matrix_uploader", label_visibility="collapsed")
             
     with control_col2:
         st.markdown("<p style='font-weight:700; font-size:12px; color:#1E293B;'>🧹 RESET CORE</p>", unsafe_allow_html=True)
-        if st.button("🗑️ PURGE CHAT CACHE", use_container_width=True, type="secondary"):
+        # ✅ ĐÃ SỬA: Thêm key="purge_cache_matrix_btn" để tránh trùng lặp ID nút bấm gây sập ứng dụng
+        if st.button("🗑️ PURGE CHAT CACHE", key="purge_cache_matrix_btn", use_container_width=True, type="secondary"):
             st.session_state["consumption_chat_history"] = []
             st.session_state["matched_techpack"] = None
             st.session_state["bom_records"] = []
@@ -1235,6 +1236,7 @@ with img_col2:
                 st.info("⚠️ Không có ảnh vật lý nào khớp trên Cloud Storage.")
     else:
         st.info("💡 Không tìm thấy mã tương đồng hình ảnh phù hợp trong kho lưu trữ.")
+
 
 # 2. ĐƯA RA 2 BẢNG SO SÁNH THÔNG SỐ RẬP ĐỘC LẬP THEO QUY CHUẨN
 st.markdown("<br>### 📐 SO SÁNH HAI BẢNG THÔNG SỐ KỸ THUẬT RẬP MẪU", unsafe_allow_html=True)
