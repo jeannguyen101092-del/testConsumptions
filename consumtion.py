@@ -741,7 +741,7 @@ try:
 except ImportError:
     pass
 
-# HÀM QUY ĐỔI PHÂN SỐ NGÀNH MAY CHUẨN (Ví dụ: "1 1/8 inches" -> 1.125)
+# HÀM QUY ĐỔI PHÂN SỐ NGÀNH MAY CHUẨN (Đã sửa lỗi cú pháp dải mảng parts)
 def parse_fraction(val_str):
     if not val_str: 
         return 0.0
@@ -751,11 +751,11 @@ def parse_fraction(val_str):
         if ' ' in val_str:
             parts = [p for p in val_str.split(' ') if p.strip()]
             if len(parts) >= 2:
-                whole = float(parts)
-                frac = parts
+                whole = float(parts[0])
+                frac = parts[1]
             else:
                 whole = 0.0
-                frac = parts
+                frac = parts[0]
         else:
             whole = 0.0
             frac = val_str
@@ -766,6 +766,7 @@ def parse_fraction(val_str):
         return float(val_str) if val_str else 0.0
     except Exception:
         return 0.0
+
 def ai_consumption_analyst_engine(client, user_message, matched_techpack, bom_records, new_style_measurements, target_new_sketch_bytes, detected_size):
     """
     Bộ não xử lý tính toán định mức nâng cao đáp ứng kịch bản có mã tương đồng (Mục đích 2)
@@ -782,9 +783,9 @@ def ai_consumption_analyst_engine(client, user_message, matched_techpack, bom_re
     shrinkage_length = re.findall(r'(?:CO RÚT DỌC|DỌC)\s*(\d+(?:\.\d+)?)\s*%', user_message.upper())
     new_fabric_width = re.findall(r'(?:KHỔ VẢI|KHỔ)\s*(\d+)\s*(?:\"|INCH|INCHES)?', user_message.upper())
 
-    w_shrink = float(shrinkage_width) if shrinkage_width else 0.0
-    l_shrink = float(shrinkage_length) if shrinkage_length else 0.0
-    f_width = float(new_fabric_width) if new_fabric_width else 0.0
+    w_shrink = float(shrinkage_width[0]) if shrinkage_width else 0.0
+    l_shrink = float(shrinkage_length[0]) if shrinkage_length else 0.0
+    f_width = float(new_fabric_width[0]) if new_fabric_width else 0.0
 
     system_instruction = f"""
     You are an expert Garment Engineer and Techpack Costing Analyst at PPJ Group.
@@ -825,10 +826,15 @@ def ai_consumption_analyst_engine(client, user_message, matched_techpack, bom_re
         return ai_reply
     except Exception as e:
         return f"🚨 Lỗi cổng phân tích định mức: {str(e)}"
-gemini_key = get_secure_gemini_key()
+
+# Đồng bộ hệ thống bốc chìa khóa API bảo mật chính quy từ Secrets
+if "get_secure_gemini_key" in globals():
+    gemini_key = get_secure_gemini_key()
+else:
+    gemini_key = st.secrets.get("GEMINI_API_KEY", "")
+
 if gemini_key:
     client = genai.Client(api_key=gemini_key, http_options=types.HttpOptions(api_version='v1'))
-
 new_style_id_detected = "UNKNOWN_STYLE"
 new_style_category_detected = ""
 new_style_fabric_detected = "UNKNOWN_FABRIC"
@@ -860,7 +866,7 @@ if has_file:
                 img_payload.append(types.Part.from_bytes(data=img_buf.getvalue(), mime_type='image/jpeg'))
             
             # ÉP BỘ LỌC THỊ GIÁC: Ép AI tìm đúng số trang vẽ kĩ thuật lớn sạch, loại bỏ trang lưới bảng biểu BOM chữ
-                        # --- 🚀 N N CẤP ĐOẠN 3: ÉP AI KHÓA TRỤC INSEAM MẪU CHUẨN TRÊN TRANG ĐỐI SOÁT CHÍNH ---
+            # --- 🚀 NÂNG CẤP ĐOẠN 3: ÉP AI KHÓA TRỤC INSEAM MẪU CHUẨN TRÊN TRANG ĐỐI SOÁT CHÍNH ---
             extraction_prompt = (
                 "You are an expert Garment Specification Auditor at PPJ Group. Analyze all attached sheets page by page. "
                 "1. Locate the core 'Base Size' / 'Sample Size' specified by the buyer (e.g., Size 32 with Inseam 32, written as 32/32 or 32x32). "
@@ -924,17 +930,15 @@ if menu_selection == "🧵 BOM & Consumption Matrix":
             st.rerun()
 
     st.markdown("---")
-
     # Hiển thị tiêu đề Size mẫu cơ sở đang bóc tách đối soát
     if has_file:
         if new_style_base_size and new_style_base_size != "32":
-            st.info(f"📋 **CƠ SỞ ĐỐI SOÁT KIẾM TRA:** Mẫu mới số hóa mã hàng `{new_style_id_detected}` | Quy chuẩn kích thước hình học rập mẫu: **SIZE {new_style_base_size}**")
+            st.info(f"📋 **CƠ SỞ ĐỐI SOÁT KIỂM TRA:** Mẫu mới số hóa mã hàng `{new_style_id_detected}` | Quy chuẩn kích thước hình học rập mẫu: **SIZE {new_style_base_size}**")
         else:
             st.info(f"📋 **CƠ SỞ ĐỐI SOÁT KIỂM TRA:** Đang áp dụng quy chuẩn kích thước hình học rập mẫu cơ sở: **SIZE 32 / M (Mặc định)**")
 
-            # =============================================================================
-               # =============================================================================
-        # CỖ MÁY ĐỐI SOÁT MỚI: ƯU TIÊN HÌNH ẢNH TRƯỚC -> THÔNG SỐ SAU & LẤY BOM LỊCH SỬ
+        # =============================================================================
+        # CỖ MÁY ĐỐI SOÁT MỚI: TRÍCH XUẤT HÌNH ẢNH TRƯỚC -> THÔNG SỐ SAU & LẤY BOM LỊCH SỬ
         # =============================================================================
         matched_style_db = None
         
@@ -949,7 +953,6 @@ if menu_selection == "🧵 BOM & Consumption Matrix":
                 all_historical_styles = db_res.json() if db_res.status_code == 200 else []
                 
                 if all_historical_styles:
-                    # 2. Đóng gói dữ liệu kho gửi cho AI lập luận chấm điểm kết cấu hình học
                     styles_pool_summary = []
                     for idx, s in enumerate(all_historical_styles):
                         styles_pool_summary.append({
@@ -984,7 +987,6 @@ if menu_selection == "🧵 BOM & Consumption Matrix":
                     if target_new_sketch_bytes:
                         match_contents.append(types.Part.from_bytes(data=target_new_sketch_bytes, mime_type='image/jpeg'))
                         
-                    # ⚡ SỬA LỖI MẤU CHỐT: Sử dụng đúng cấu pháp truyền response_mime_type của thư viện google-genai mới
                     res_match = client.models.generate_content(
                         model='gemini-2.5-flash',
                         contents=match_contents,
@@ -1008,7 +1010,7 @@ if menu_selection == "🧵 BOM & Consumption Matrix":
             except Exception as match_err:
                 st.sidebar.error(f"Lỗi hệ thống đối soát tự động: {str(match_err)}")
 
-        # --- ĐOẠN KHÔI PHỤC VÀ BẢO VỆ LUỒNG TRUY XUẤT BOM LỊCH SỬ CŨ CỦA BẠN ---
+        # --- ĐOẠN TRUY XUẤT BOM LỊCH SỬ TỪ SUBAPASE ---
         if st.session_state.get("matched_techpack"):
             try:
                 target_style_name = st.session_state["matched_techpack"].get("StyleName", "").strip()
@@ -1025,14 +1027,12 @@ if menu_selection == "🧵 BOM & Consumption Matrix":
             except Exception as bom_err:
                 st.session_state["bom_records"] = []
 
-
-            # LẤY DỮ LIỆU TỪ BỘ NHỚ KHÓA ĐỂ HIỂN THỊ LÊN MÀN HÌNH MƯỢT MÀ CHỐNG RERUN TRẮNG TRƠN
-    matched_techpack = st.session_state["matched_techpack"]
-    bom_records = st.session_state["bom_records"]
+    # LẤY DỮ LIỆU TỪ BỘ NHỚ KHÓA ĐỂ HIỂN THỊ LÊN MÀN HÌNH MƯỢT MÀ CHỐNG RERUN TRẮNG TRƠN
+    matched_techpack = st.session_state.get("matched_techpack")
+    bom_records = st.session_state.get("bom_records", [])
 
     if matched_techpack:
-        target_style_name = matched_techpack.get("StyleName")
-        st.success(f"🎯 MỤC ĐÍCH 2: ĐÃ TÌM THẤY MÃ HÀNG TƯƠNG ĐỒNG TRONG KHO: **{target_style_name}**")
+        target_style_name = matched_techpack.get("StyleName", "N/A")
         
         col1, col2 = st.columns(2)
         with col1: 
@@ -1048,135 +1048,23 @@ if menu_selection == "🧵 BOM & Consumption Matrix":
         if bom_records:
             formatted_bom = []
             for r in bom_records:
-                # 🛠️ THUẬT TOÁN KHỬ LỖI NAN: Kiểm tra và ép kiểu dữ liệu văn bản chuỗi sạch, cấm hiện chữ nan toán học
-                raw_c_type = r.get("consumption_type")
-                raw_art_name = r.get("article_name")
-                raw_m_size = r.get("material_size")
-                raw_uom = r.get("uom")
-                raw_val = r.get("consumption_value")
-                raw_notes = r.get("notes")
+                # 🛠️ THUẬT TOÁN KHỬ LỖI NAN: Ép kiểu chuỗi ký tự sạch sẽ, ngăn chữ nan toán học hiển thị lên giao diện
+                def clean_nan_field(v):
+                    return "" if (not v or str(v).lower() in ["nan", "none", "null"]) else str(v).strip()
                 
-                # Hàm ép kiểu chuỗi văn bản may mặc chuẩn, nếu dính NaN hoặc rỗng sẽ tự động đưa về khoảng trống sạch
-                def clean_db_string(val):
-                    if val is None or str(val).strip() == "" or str(val).lower() == "nan" or str(val).lower() == "<na>":
-                        return "EMPTY"
-                    return str(val).strip()
-
                 formatted_bom.append({
-                    "Mã hàng (Style)": clean_db_string(r.get("style_name") if r.get("style_name") else r.get("style_id")),
-                    "Tên vật tư": clean_db_string(raw_art_name),
-                    "Chủng loại tiêu hao": clean_db_string(raw_c_type), # Ép hiển thị rõ chữ POCKETING / MAIN FABRIC
-                    "Khổ nguyên liệu": clean_db_string(raw_m_size),
-                    "Đơn vị tính": clean_db_string(raw_uom),
-                    "Định mức cơ sở (Kho)": clean_db_string(raw_val),
-                    "Ghi chú phân xưởng": clean_db_string(raw_notes)
+                    "Loại nguyên vật liệu": clean_nan_field(r.get("consumption_type")),
+                    "Chi tiết vật tư (Article)": clean_nan_field(r.get("article_name")),
+                    "Khổ / Cỡ vật tư": clean_nan_field(r.get("material_size")),
+                    "Định mức tinh (Net)": clean_nan_field(r.get("consumption_value")),
+                    "Đơn vị tính (UOM)": clean_nan_field(r.get("uom")),
+                    "Ghi chú phân bổ": clean_nan_field(r.get("notes"))
                 })
-            st.table(formatted_bom)
             
-            # Quét vải chính an toàn không dính lỗi chuỗi nan
-            main_fabrics = list(set([str(r.get("article_name")).strip() for r in bom_records if "MAIN" in str(r.get("consumption_type", "")).upper() if r.get("article_name") and str(r.get("article_name")).lower() != "nan"]))
-            if main_fabrics: st.info(f"🧵 Mã vải chính của mã hàng gốc: **{', '.join(main_fabrics)}**")
+            st.dataframe(pd.DataFrame(formatted_bom), use_container_width=True, hide_index=True)
         else:
-            st.warning(f"⚠️ Không tìm thấy dữ liệu phụ liệu cho biến thể mã hàng gốc `{dynamic_keyword}` trong bảng san_pham.")
+            st.warning("⚠️ Không tìm thấy bảng chi tiết phụ liệu BOM lịch sử của mã hàng đối chiếu này trong kho dữ liệu.")
 
-        st.subheader("📊 Bảng Đối Soát Sai Lệch Thông Số Hình Học (Mẫu Gốc vs Mẫu Mới)")
-        db_measurements = matched_techpack.get("DetailedMeasurements", {})
-        specs_old = {}
-        if isinstance(db_measurements, dict): specs_old = db_measurements
-        else:
-            try: specs_old = json.loads(str(db_measurements))
-            except Exception:
-                pairs = re.findall(r'"([^"]+)":\s*"([^"]+)"', str(db_measurements))
-                if pairs: specs_old = {k: v for k, v in pairs}
-
-        specs_new = new_style_measurements_dict
-        
-        if specs_old and specs_new:
-            def normalize_core_garment_key(raw_key):
-                text = str(raw_key).strip().upper()
-                text = re.sub(r'^[A-Z]{2,4}-\d{2,4}\s*', '', text)
-                text = text.replace('"', '').replace('-', '').replace('\'', '').replace('’', '').replace(' ', '')
-                if "WAIST" in text: return "WAIST"
-                if "HIP" in text: return "HIP"
-                if "THIGH" in text: return "THIGH"
-                if "INSEAM" in text: return "INSEAM"
-                if "OUTSEAM" in text or "LENGTH" in text: return "OUTSEAM"
-                if "KNEE" in text: return "KNEE"
-                if "OPENING" in text or "SWEEP" in text: return "LEGOPENING"
-                if "RISE" in text or "CROTCH" in text: return "RISE"
-                if "CHEST" in text or "BUST" in text: return "CHEST"
-                if "SHOULDER" in text: return "SHOULDER"
-                if "SLEEVE" in text: return "SLEEVE"
-                return text
-
-            norm_map_old = {normalize_core_garment_key(k): (k, v) for k, v in specs_old.items()}
-            norm_map_new = {normalize_core_garment_key(k): (k, v) for k, v in specs_new.items()}
-
-            comparison_table = []
-            deviation_length_pct = 0.0
-            deviation_width_pct = 0.0
-            has_len = False
-            has_wid = False
-            
-            for core_key, (original_old_key, old_val) in norm_map_old.items():
-                if core_key in norm_map_new:
-                    original_new_key, new_val_str = norm_map_new[core_key]
-                    v_old = parse_fraction(old_val)
-                    v_new = parse_fraction(new_val_str)
-                    
-                    if v_old > 0 and v_new > 0:
-                        diff = v_new - v_old
-                        pct_diff = (diff / v_old) * 100
-                        
-                        if core_key in ["INSEAM", "OUTSEAM", "SLEEVE"]:
-                            if pct_diff != 0: deviation_length_pct = pct_diff; has_len = True
-                        if core_key in ["WAIST", "HIP", "THIGH", "CHEST"]:
-                            if pct_diff != 0: deviation_width_pct = pct_diff; has_wid = True
-                                
-                        comparison_table.append({
-                            "Vị trí đo (POM)": original_old_key,
-                            "Thông số gốc (Kho)": f"{old_val}\"",
-                            "Thông số mới (Quét)": f"{new_val_str}\"",
-                            "Chênh lệch": f"{diff:+.3f}\"",
-                            "Tỷ lệ biến động": f"{pct_diff:+.1f}%"
-                        })
-            
-            ui_col1, ui_col2, ui_col3 = st.columns([1.0, 0.5, 0.5])
-            with ui_col1:
-                st.markdown("<p style='font-weight:700; font-size:14px; color:#1E293B;'>📊 Bảng Đối Soát Sai Lệch Hình Học</p>", unsafe_allow_html=True)
-                if comparison_table: st.table(comparison_table)
-            with ui_col2:
-                st.markdown("<p style='font-weight:700; font-size:14px; color:#1E293B;'>🏛️ Dữ liệu gốc lưu trong Kho</p>", unsafe_allow_html=True)
-                st.table([{"Vị trí đo (Gốc)": k, "Thông số kho": v} for k, v in specs_old.items()])
-            with ui_col3:
-                st.markdown("<p style='font-weight:700; font-size:14px; color:#1E293B;'>📋 Thông số mẫu mới quét được</p>", unsafe_allow_html=True)
-                st.table([{"Vị trí đo (Quét sạch)": k, "Thông số quét": v} for k, v in specs_new.items()])
-                
-            if has_len or has_wid:
-                factor_len = 1.0 + (deviation_length_pct / 100.0)
-                factor_wid = 1.0 + (deviation_width_pct / 100.0)
-                total_area_deviation_pct = (factor_len * factor_wid - 1.0) * 100
-                
-                st.markdown(f"💡 **Phân tích hình học rập mẫu tự động bởi hệ thống:**")
-                st.write(f"- Biến động chiều dài thân rập chủ đạo: **{deviation_length_pct:+.1f}%**")
-                st.write(f"- Biến động chiều rộng thân rập chủ đạo: **{deviation_width_pct:+.1f}%**")
-                st.markdown(f"🎯 **Tỷ lệ biến động diện tích khối sơ đồ vải thực tế (Marker Area Deviation): {total_area_deviation_pct:+.1f}%**")
-                new_style_base_size = f"{new_style_base_size} (Marker Area Delta: {total_area_deviation_pct:+.2f}%)"
-        else:
-            st.info("💡 Điền file để chạy đối soát.")
-
-    st.markdown("### 💬 PPJ TEXTILE AI COSTING ENGINE - LUỒNG CHAT PHÂN TÍCH ĐỊNH MỨC TỰ ĐỘNG")
-    chat_container = st.container()
-    with chat_container:
-        for chat_block in st.session_state["consumption_chat_history"]:
-            with st.chat_message("user"): st.write(chat_block["user"])
-            with st.chat_message("assistant", avatar="🧵"): st.write(chat_block["ai"])
-
-    if prompt_input := st.chat_input("Nhập lệnh tính toán định mức nâng cao...", key="matrix_consumption_chat_input"):
-        st.session_state["consumption_chat_history"].append({"user": prompt_input, "ai": "Đang tính toán..."})
-        ai_output_response = ai_consumption_analyst_engine(client, prompt_input, matched_techpack, bom_records, new_style_measurements_dict, target_new_sketch_bytes, new_style_base_size)
-        st.session_state["consumption_chat_history"][-1]["ai"] = ai_output_response
-        st.rerun()
 # -----------------------------------------------------------------------------
 # CHỨC NĂNG 3: QUẢN LÝ ĐỊNH MỨC MUA SẮM VÀ ĐẶT HÀNG (PURCHASE CONSUMPTION)
 # -----------------------------------------------------------------------------
