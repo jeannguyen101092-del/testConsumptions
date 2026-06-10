@@ -159,7 +159,7 @@ def save_to_supabase_techpack_table(payload_data, raw_file_bytes=None, file_name
         st.error(f"Lỗi đồng bộ Supabase: {str(e)}")
         return ""
 
-# 1. SIDEBAR: Form nạp trước thông số gốc, định mức định biên, vải, khổ, độ co...
+# 1. SIDEBAR: Khung nạp thông số và định mức ban đầu
 with st.sidebar:
     st.markdown('''
         <div class="sidebar-brand-container">
@@ -179,7 +179,7 @@ with st.sidebar:
     st.markdown("**Hiệu suất dự kiến**")
     hieu_suat_marker = st.slider("Hiệu suất sơ đồ dự kiến (%):", 80, 100, 92)
 
-# Thiết lập các phân hệ tab ngang lớn trên giao diện chính
+# Khởi tạo 4 phân hệ bài toán dạng Tab ngang lớn độc lập
 tab1, tab2, tab3, tab4 = st.tabs([
     "📊 Bài toán 1: Tính Định mức Báo giá", 
     "📉 Bài toán 2: Tính Định mức Đặt hàng", 
