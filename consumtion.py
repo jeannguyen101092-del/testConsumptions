@@ -236,6 +236,7 @@ with tabs[0]:
         - <strong>Hao hụt sơ đồ:</strong> Với khổ vải hẹp <strong>{kho_vai_chinh}"</strong>, việc duy trì hiệu suất sơ đồ <strong>{hieu_suat_marker}%</strong> cho cụm chi tiết rập lớn sẽ rất áp lực. Đề xuất nâng biên độ an toàn định mức vải thêm 1.5%.
     </div>
     """, unsafe_allow_html=True)
+
 # --- BÀI TOÁN 2: TÍNH ĐỊNH MỨC ĐẠT HÀNG (BULK PRODUCTION) ---
 with tabs[1]:
     st.markdown('<div class="component-title-box">Bài toán 2: Tính Định mức Đặt hàng (Dựa theo Rập, Tài liệu mới, SBD)</div>', unsafe_allow_html=True)
