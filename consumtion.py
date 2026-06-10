@@ -1100,7 +1100,7 @@ if st.session_state.get("matched_techpack"):
 matched_techpack = st.session_state.get("matched_techpack")
 bom_records = st.session_state.get("bom_records", [])
 
-# 1. HIỂN THỊ ĐỐI SOÁT HÌNH ẢNH HAI BÊN - GIẢI MÃ NHỊ PHÂN ĐỒNG BỘ CHỮ VIẾT HOA TOÀN DIỆN CHỐNG CHẶN URL
+# 1. HIỂN THỊ ĐỐI SOÁT HÌNH ẢNH HAI BÊN - GIẢI MÃ NHỊ PHÂN ĐỒNG BỘ CHỮ VIẾT HOA VÀ VALIDATE TRÁNH LỖI PIL vỡ ảnh
 st.markdown("### 🖼️ ĐỐI CHIẾU SỰ TƯƠNG ĐỒNG HÌNH ẢNH THIẾT KẾ (FLAT SKETCH)")
 img_col1, img_col2 = st.columns(2)
 with img_col1:
@@ -1125,19 +1125,28 @@ with img_col2:
         for url_opt in url_options:
             try:
                 img_response = requests.get(url_opt, headers=auth_headers, timeout=8)
-                if img_response.status_code == 200 and len(img_response.content) > 200:
-                    img_content_final = img_response.content
-                    break
+                if img_response.status_code == 200 and len(img_response.content) > 500:
+                    # ⚡ THUẬT TOÁN SỬA LỖI PIL CHÍ MẠNG: Kiểm tra chữ ký file (Magic Bytes) để loại bỏ chuỗi văn bản HTML lỗi ẩn danh
+                    # File ảnh JPEG/JPG chuẩn luôn luôn bắt đầu bằng chuỗi byte b'\xff\xd8'
+                    if img_response.content.startswith(b'\xff\xd8') or b'<!DOCTYPE' not in img_response.content[:100]:
+                        img_content_final = img_response.content
+                        break
             except Exception:
                 continue
                 
         if img_content_final:
-            st.image(img_content_final, caption=f"Ảnh bản vẽ gốc của mã {target_style_name}", use_container_width=True)
+            try:
+                st.image(img_content_final, caption=f"Ảnh bản vẽ gốc của mã {target_style_name}", use_container_width=True)
+            except Exception:
+                st.image("https://unsplash.com", caption=f"⚠️ File ảnh vật lý {target_style_name}.jpg bị lỗi định dạng nhị phân trên Storage.", use_container_width=True)
         else:
             # Luồng dự phòng lùi về gọi link lưu trữ cứng của DB nếu có lưu link từ hệ thống khác
             db_stored_url = matched_techpack.get("SketchURL") or matched_techpack.get("sketch_url", "")
-            if db_stored_url:
-                st.image(db_stored_url, caption=f"Ảnh bản vẽ gốc của mã {target_style_name} (DB Direct)", use_container_width=True)
+            if db_stored_url and "public/kho_anh" not in str(db_stored_url):
+                try:
+                    st.image(db_stored_url, caption=f"Ảnh bản vẽ gốc của mã {target_style_name} (DB Direct)", use_container_width=True)
+                except Exception:
+                    st.image("https://unsplash.com", caption=f"⚠️ File ảnh vật lý {target_style_name}.jpg chưa đồng bộ hoặc rỗng trên Storage.", use_container_width=True)
             else:
                 st.image("https://unsplash.com", caption=f"⚠️ File ảnh vật lý {target_style_name}.jpg chưa đồng bộ hoặc rỗng trên Storage.", use_container_width=True)
     else:
