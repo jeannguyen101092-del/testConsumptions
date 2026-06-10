@@ -299,8 +299,8 @@ def get_techpack_spec_from_db(style_name_keyword=None):
 def process_single_pdf_batch(file_bytes, file_name):
     """
     Hàm bóc tách dữ liệu kỹ thuật từ một file PDF độc lập phục vụ LUỒNG NẠP KHO & ĐỐI SOÁT & MUA HÀNG.
-    ✨ ĐÃ BẢO MẬT AN TOÀN 100%: Giữ nguyên cấu trúc measurements phẳng cũ cho Chức năng 1 & 2 không bị ảnh hưởng,
-    đồng thời đóng gói thêm khóa bổ sung 'full_size_matrix' phục vụ riêng cho Chức năng 3 quét toàn bộ dải size.
+    ✨ ĐÃ CHỮA LỖI ĐỎ SIDEBAR TẬN GỐC: Ép cấu trúc response_mime_type chính quy thông qua GenerateContentConfig
+    vào đúng luồng xử lý chung để dập tắt hoàn toàn lỗi 400 INVALID_ARGUMENT của Google.
     """
     import time
     try:
@@ -348,7 +348,14 @@ def process_single_pdf_batch(file_bytes, file_name):
         last_error_msg = "Mô hình AI không phản hồi."
         for attempt in range(3):
             try:
-                response = client.models.generate_content(model='gemini-2.5-flash', contents=pdf_parts_payload)
+                # ⚡ SỬA LỖI MẤU CHỐT: Khai báo cấu hình JSON chính quy y hệt luồng Đoạn 2 và Đoạn 3 để chữa lỗi 400
+                response = client.models.generate_content(
+                    model='gemini-2.5-flash', 
+                    contents=pdf_parts_payload,
+                    config=types.GenerateContentConfig(
+                        response_mime_type="application/json"
+                    )
+                )
                 if response and response.text: break
             except Exception as ai_err:
                 last_error_msg = str(ai_err)
@@ -380,8 +387,8 @@ def process_single_pdf_batch(file_bytes, file_name):
             "buyer": parsed_data.get("buyer", "UNKNOWN BUYER"),
             "category": parsed_data.get("category", "GARMENT"),
             "base_size_name": parsed_data.get("base_size_name", "32"),
-            "measurements": parsed_data.get("measurements", {}), # Giữ nguyên cấu trúc phẳng cho Chức năng 1 & 2
-            "full_size_matrix": parsed_data.get("full_size_matrix", {}) # Khóa độc lập cung cấp riêng cho Chức năng 3
+            "measurements": parsed_data.get("measurements", {}),
+            "full_size_matrix": parsed_data.get("full_size_matrix", {})
         }
         
         return {
