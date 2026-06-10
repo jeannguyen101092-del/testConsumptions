@@ -932,51 +932,97 @@ if menu_selection == "🧵 BOM & Consumption Matrix":
         else:
             st.info(f"📋 **CƠ SỞ ĐỐI SOÁT KIỂM TRA:** Đang áp dụng quy chuẩn kích thước hình học rập mẫu cơ sở: **SIZE 32 / M (Mặc định)**")
 
-    # CHẠY THUẬT TOÁN QUÉT TƯƠNG ĐỒNG KHI CÓ FILE TẢI LÊN
-    if has_file and target_new_sketch_bytes and st.session_state["matched_techpack"] is None:
-        with st.spinner("⚡ AI đang phân tích phom dáng vẽ phẳng và đối soát dữ liệu kho..."):
+            # =============================================================================
+        # CỖ MÁY ĐỐI SOÁT MỚI: ƯU TIÊN HÌNH ẢNH TRƯỚC -> THÔNG SỐ SAU & LẤY BOM LỊCH SỬ
+        # =============================================================================
+        matched_style_db = None
+        
+        with st.spinner("🧠 AI đang quét kho lưu trữ, đối soát cấu trúc hình học và bảng thông số..."):
             try:
-                vision_prompt = "Analyze this technical flat sketch in detail. Output a dense string of these visual characteristics for garment similarity matching."
-                vision_res = client.models.generate_content(model='gemini-2.5-flash', contents=[types.Part.from_bytes(data=target_new_sketch_bytes, mime_type='image/jpeg'), vision_prompt])
-                query_description = vision_res.text.strip().lower() if vision_res.text else ""
+                # 1. Tải danh mục rập mẫu hiện có từ bảng thong_so_techpack của Supabase
+                headers_db = {"apikey": SB_KEY, "Authorization": f"Bearer {SB_KEY}"}
+                url_db = f"{SB_URL.rstrip('/')}/rest/v1/thong_so_techpack"
+                query_params = {"select": "StyleName,Buyer,Category,BaseSize,DetailedMeasurements,SketchURL,sketch_vector", "limit": 100}
                 
-                url_techpack = f"{base_sb_url}/rest/v1/thong_so_techpack?select=StyleName,Category,BaseSize,DetailedMeasurements,SketchURL"
-                res_tp = requests.get(url_techpack, headers=headers, timeout=10)
-                techpack_records = res_tp.json() if res_tp.status_code == 200 else []
+                db_res = requests.get(url_db, headers=headers_db, params=query_params, timeout=15)
+                all_historical_styles = db_res.json() if db_res.status_code == 200 else []
                 
-                best_similarity_ratio = -1.0
-                temp_matched = None
-                
-                if query_description and techpack_records:
-                    query_keywords = set(re.findall(r'\b\w{3,15}\b', query_description))
-                    for row in techpack_records:
-                        db_text = str(row.get("DetailedMeasurements", "")).lower()
-                        db_keywords = set(re.findall(r'\b\w{3,15}\b', db_text))
-                        if db_keywords:
-                            intersection = query_keywords.intersection(db_keywords)
-                            union = query_keywords.union(db_keywords)
-                            ratio = float(len(intersection)) / float(len(union)) if union else 0
-                            if ratio > best_similarity_ratio:
-                                best_similarity_ratio = ratio
-                                temp_matched = row
-
-                if not temp_matched or best_similarity_ratio < 0.10:
-                    for row in techpack_records:
-                        if str(row.get("StyleName", "")).strip().upper() == dynamic_keyword:
-                            temp_matched = row
-                            break
-                            
-                if temp_matched:
-                    st.session_state["matched_techpack"] = temp_matched
-                    target_style_name = str(temp_matched.get("StyleName", "")).strip()
-                    core_match = re.search(r'\b[A-Z0-9]{5,12}\b', target_style_name.upper())
-                    search_term = core_match.group(0) if core_match else target_style_name
+                if all_historical_styles:
+                    # 2. Đóng gói dữ liệu kho gửi cho AI lập luận chấm điểm kết cấu hình học
+                    styles_pool_summary = []
+                    for idx, s in enumerate(all_historical_styles):
+                        styles_pool_summary.append({
+                            "pool_index": idx,
+                            "style_name": s.get("StyleName"),
+                            "sketch_features_vector": s.get("sketch_vector", ""),
+                            "specs": s.get("DetailedMeasurements", {})
+                        })
                     
-                    url_san_pham = f"{base_sb_url}/rest/v1/san_pham?style_name=ilike.*{quote(str(search_term).strip())}*&select=style_name,article_name,consumption_type,material_size,uom,consumption_value,notes"
-                    res_sp = requests.get(url_san_pham, headers=headers, timeout=10)
-                    if res_sp.status_code == 200: 
-                        st.session_state["bom_records"] = res_sp.json()
-            except Exception: pass
+                    # Thiết lập Prompt chấm điểm hỗn hợp nâng cao (Trọng số ảnh 70% - Thông số 30%)
+                    match_prompt = f"""
+                    You are an expert Garment Pattern and Structural Ingestion Auditor at PPJ Group.
+                    Your mission is to find the MOST SIMILAR historical garment style from our database pool to match the newly uploaded style.
+                    
+                    CRITICAL SCORING WEIGHTS & PRIORITY RULES:
+                    1. PRIORITY 1 - VISUAL SHAPE & SILHOUETTE (70% Weight): Compare the attached new flat sketch image with the 'sketch_features_vector' description text of each style in the pool. Look for identical pocket cuts, curves, panel layouts, skort/pant architecture, and waistband closure types. Visual alignment is paramount.
+                    2. PRIORITY 2 - MEASUREMENT SPECS RATIO (30% Weight): Compare the new spec numbers provided below with the historical 'specs' dictionary of each style. Look for the closest base measurement matching.
+                    
+                    NEW STYLE DATA FOR MATCHING:
+                    - New Parsed Specs: {json.dumps(new_style_measurements_dict)}
+                    - Target Base Size: {new_style_base_size}
+                    
+                    HISTORICAL STYLES POOL DATA:
+                    {json.dumps(styles_pool_summary)}
+                    
+                    Analyze every style in the pool step by step based on the rules. Select the single best style that yields the highest cumulative score.
+                    Return ONLY a raw valid JSON object with no markdown code blocks, using this exact schema:
+                    {{"selected_pool_index": integer, "reasoning_vietnamese": "string"}}
+                    """
+                    
+                    match_contents = [types.Part.from_text(text=match_prompt)]
+                    if target_new_sketch_bytes:
+                        match_contents.append(types.Part.from_bytes(data=target_new_sketch_bytes, mime_type='image/jpeg'))
+                        
+                    res_match = client.models.generate_content(
+                        model='gemini-2.5-flash',
+                        contents=match_contents,
+                        config=types.GenerateContentConfig(response_mime_type="application/json")
+                    )
+                    
+                    clean_match_json = res_match.text.strip().replace("```json", "").replace("```", "").strip()
+                    match_result = json.loads(clean_match_json)
+                    
+                    best_idx = match_result.get("selected_pool_index", -1)
+                    ai_reason = match_result.get("reasoning_vietnamese", "Đã tìm thấy mã tương đồng dựa trên phân tích cấu trúc hình học.")
+                    
+                    if 0 <= best_idx < len(all_historical_styles):
+                        # Gán dữ liệu mã hàng đối soát tìm thấy vào session_state của bạn
+                        st.session_state["matched_techpack"] = all_historical_styles[best_idx]
+                        st.success(f"🎯 AI MATCHING SUCCESS: {st.session_state['matched_techpack'].get('StyleName')}")
+                        with st.expander("🔍 Xem lập luận phân tích hình dáng và thông số của AI"):
+                            st.write(ai_reason)
+                            
+            except Exception as match_err:
+                st.sidebar.error(f"Lỗi hệ thống đối soát tự động: {str(match_err)}")
+
+        # --- ĐOẠN KHÔI PHỤC VÀ BẢO VỆ LUỒNG TRUY XUẤT BOM LỊCH SỬ CŨ CỦA BẠN ---
+        if st.session_state.get("matched_techpack"):
+            try:
+                target_style_name = st.session_state["matched_techpack"].get("StyleName", "").strip()
+                core_match = re.search(r'(\d+)', target_style_name)
+                search_term = core_match.group(0) if core_match else target_style_name
+                
+                # Gọi API Supabase bốc dữ liệu định mức san_pham gốc lên
+                url_bom = f"{SB_URL.rstrip('/')}/rest/v1/san_pham"
+                query_bom = {"select": "style_name,article_name,consumption_type,material_size,uom,consumption_value,notes"}
+                query_bom["style_name"] = f"ilike.*{search_term}*"
+                
+                res_bom = requests.get(url_bom, headers=headers_db, params=query_bom, timeout=15)
+                if res_bom.status_code == 200:
+                    st.session_state["bom_records"] = res_bom.json()
+            except Exception as bom_err:
+                st.session_state["bom_records"] = []
+
             # LẤY DỮ LIỆU TỪ BỘ NHỚ KHÓA ĐỂ HIỂN THỊ LÊN MÀN HÌNH MƯỢT MÀ CHỐNG RERUN TRẮNG TRƠN
     matched_techpack = st.session_state["matched_techpack"]
     bom_records = st.session_state["bom_records"]
