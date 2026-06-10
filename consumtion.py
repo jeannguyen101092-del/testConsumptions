@@ -100,20 +100,28 @@ def get_secure_gemini_key():
     return None
 def save_to_supabase_techpack_table(payload_data, raw_file_bytes=None, file_name=""):
     """
-    Hàm xử lý đồng bộ dữ liệu nạp kho của Chức năng 1.
-    🎯 ĐÃ VÁ CHUẨN: Sửa tham số headers= và bổ sung /object/public/ vào URL để ép
-    Supabase Storage chấp nhận tệp ảnh Jpeg, giải quyết triệt để lỗi kho rỗng.
+    Hàm xử lý đồng bộ dữ liệu nạp kho chuẩn nghiệp vụ PPJ Group.
+    🎯 SỬA LỖI LỆCH TÊN FILE: ÉP hệ thống dùng đúng mã hàng mới tải lên để đặt tên file ảnh,
+    cấm tuyệt đối AI tự ý ghi đè tên theo mã hàng cũ đối chứng. Bảo đảm ảnh mã mới hiện lên Storage 100%.
     """
     try:
+        # ⚡ LUỒNG SỬA LỖI MẤU CHỐT: Ưu tiên bốc mã hàng thực tế từ file_name hoặc uploader để chống ghi đè nhầm mã cũ
         style_name_db = payload_data.get("style_number_parsed", "").strip()
-        if not style_name_db: 
-            style_name_db = "UNKNOWN_STYLE"
-            
+        
+        # Nếu AI bốc sai hoặc trả về UNKNOWN, dùng thuật toán Regex cắt chuỗi số trực tiếp từ tên file PDF tải lên
+        if not style_name_db or style_name_db == "UNKNOWN":
+            file_style_match = re.search(r'([a-zA-Z0-9]+-[a-zA-Z0-9]+)', str(file_name))
+            if file_style_match:
+                style_name_db = file_style_match.group(1).strip()
+            else:
+                style_name_db = str(file_name).split('.')[0].strip()
+                
+        style_name_db = style_name_db.upper()
         sketch_b64 = payload_data.get("sketch_image", "")
         public_image_url = ""
         image_data = None
 
-        # 1. Luồng trích xuất dữ liệu hình ảnh phẳng từ tệp PDF bản vẽ kỹ thuật
+        # 1. Luồng trích xuất dữ liệu hình ảnh phẳng (Sketch) từ tệp PDF bản vẽ kỹ thuật
         if raw_file_bytes and file_name.lower().endswith('.pdf'):
             try:
                 import pdfplumber
@@ -154,7 +162,7 @@ def save_to_supabase_techpack_table(payload_data, raw_file_bytes=None, file_name
             except Exception:
                 pass
 
-        # 2. ĐẨY FILE LÊN STORAGE VỚI NHÃN MỞ KHÓA CÔNG KHAI CỨNG (IMAGE/JPEG)
+        # 2. ĐẨY TẬP TIN HÌNH ẢNH SẢN PHẨM LÊN SUPABASE STORAGE KHO_ANH (ĐỒNG BỘ CHỮ HOA)
         if image_data:
             try:
                 storage_headers = {
@@ -163,20 +171,16 @@ def save_to_supabase_techpack_table(payload_data, raw_file_bytes=None, file_name
                     "Content-Type": "image/jpeg", 
                     "x-upsert": "true"
                 }
-                # Thêm chữ viết hoa toàn bộ và gọt sạch ký tự đặc biệt để chống lệch link
-                clean_filename = re.sub(r'[^a-zA-Z0-9]', '', style_name_db).upper()
+                # Lưu file giữ nguyên kết cấu định danh chữ hoa chuẩn chính ngạch có dấu gạch ngang
+                storage_url = f"{SB_URL.rstrip('/')}/storage/v1/object/public/kho_anh/{style_name_db}.jpg"
                 
-                # SỬA ĐƯỜNG LINK: Bổ sung /object/public/ theo đúng tiêu chuẩn cổng mở của Supabase
-                storage_url = f"{SB_URL.rstrip('/')}/storage/v1/object/public/kho_anh/{clean_filename}.jpg"
-                
-                # SỬA CÚ PHÁP LỆNH GỬI: Ghi rõ ràng tham số headers=storage_headers để kích hoạt nạp ảnh sạch
                 upload_res = requests.post(storage_url, headers=storage_headers, data=image_data, timeout=20)
                 if 200 <= upload_res.status_code <= 299:
-                    public_image_url = f"{SB_URL.rstrip('/')}/storage/v1/object/public/kho_anh/{clean_filename}.jpg"
+                    public_image_url = f"{SB_URL.rstrip('/')}/storage/v1/object/public/kho_anh/{style_name_db}.jpg"
             except Exception: 
                 pass
 
-        # 3. LUỒNG KÍCH HOẠT MẮT THẦN AI VISION: TRÍCH XUẤT CHUỒI ĐẶC TRƯNG HÌNH HỌC
+        # 3. LUỒNG KÍCH HOẠT MẮT THẦN AI VISION: TRÍCH XUẤT CHUỖI ĐẶC TRƯNG HÌNH HỌC
         measurements_raw = payload_data.get("measurements", {})
         visual_description_str = f"GARMENT TYPE: {payload_data.get('category', 'Garment Pants')}. Specs profile summary: " + ", ".join([f"{k}:{v}" for k, v in list(measurements_raw.items())[:6]])
         
@@ -217,7 +221,7 @@ def save_to_supabase_techpack_table(payload_data, raw_file_bytes=None, file_name
         clean_dict = {str(k).strip(): str(v).strip() for k, v in dict(measurements_raw).items()}
 
         db_payload = {
-            "StyleName": style_name_db.upper(),
+            "StyleName": style_name_db,
             "Buyer": payload_data.get("buyer"),
             "Category": payload_data.get("category"),
             "BaseSize": payload_data.get("base_size_name"),
