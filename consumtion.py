@@ -748,7 +748,7 @@ try:
 except ImportError:
     pass
 
-# HÀM QUY ĐỔI PHÂN SỐ NGÀNH MAY CHUẨN
+# HÀM QUY ĐỔI PHÂN SỐ NGÀNH MAY CHUẨN (Đã sửa lỗi cấu trúc mảng)
 def parse_fraction(val_str):
     if not val_str: 
         return 0.0
@@ -827,7 +827,6 @@ def ai_consumption_analyst_engine(client, user_message, matched_techpack, bom_re
         chat_contents.append(types.Part.from_bytes(data=target_new_sketch_bytes, mime_type='image/jpeg'))
 
     try:
-        # CHUẨN HÓA: Hàm phân tích định mức chat tự do trả về text thường, loại bỏ cấu hình config thừa dễ lỗi 400
         response = client.models.generate_content(
             model='gemini-2.5-flash', 
             contents=chat_contents
@@ -838,7 +837,7 @@ def ai_consumption_analyst_engine(client, user_message, matched_techpack, bom_re
     except Exception as e:
         return f"🚨 Lỗi cổng phân tích định mức: {str(e)}"
 
-# Bộ bốc chìa khóa API đồng bộ chính quy
+# Khởi tạo token API bảo mật
 if "get_secure_gemini_key" in globals():
     gemini_key = get_secure_gemini_key()
 else:
@@ -846,7 +845,6 @@ else:
 
 if gemini_key:
     client = genai.Client(api_key=gemini_key, http_options=types.HttpOptions(api_version='v1'))
-
 new_style_id_detected = "UNKNOWN_STYLE"
 new_style_category_detected = ""
 new_style_fabric_detected = "UNKNOWN_FABRIC"
@@ -894,13 +892,11 @@ if has_file:
             extraction_payload = list(img_payload)
             extraction_payload.append(extraction_prompt)
             
-            # Sửa lỗi 400 bằng cách bọc cấu hình chuẩn hóa vào lớp GenerateContentConfig
+            # Khắc phục triệt để lỗi 400 bằng cấu hình dictionary thô gọn nhẹ
             extraction_res = client.models.generate_content(
                 model='gemini-2.5-flash', 
                 contents=extraction_payload,
-                config=types.GenerateContentConfig(
-                    response_mime_type="application/json"
-                )
+                config={"response_mime_type": "application/json"}
             )
             clean_json_text = extraction_res.text.strip().replace("```json", "").replace("```", "").strip()
             
@@ -920,6 +916,7 @@ if has_file:
             pass
     else:
         target_new_sketch_bytes = file_bytes
+
 dynamic_keyword = str(new_style_id_detected).strip().upper()
 base_sb_url = SB_URL.rstrip('/')
 headers = {"apikey": SB_KEY, "Authorization": f"Bearer {SB_KEY}"}
@@ -1000,12 +997,11 @@ if menu_selection == "🧵 BOM & Consumption Matrix":
                     if target_new_sketch_bytes:
                         match_contents.append(types.Part.from_bytes(data=target_new_sketch_bytes, mime_type='image/jpeg'))
                         
+                    # Loại bỏ hoàn toàn lớp cấu hình Config lỗi thời, thay bằng dictionary thô dứt điểm lỗi 400
                     res_match = client.models.generate_content(
                         model='gemini-2.5-flash',
                         contents=match_contents,
-                        config=types.GenerateContentConfig(
-                            response_mime_type="application/json"
-                        )
+                        config={"response_mime_type": "application/json"}
                     )
                     
                     clean_match_json = res_match.text.strip().replace("```json", "").replace("```", "").strip()
@@ -1074,6 +1070,7 @@ if menu_selection == "🧵 BOM & Consumption Matrix":
             st.dataframe(pd.DataFrame(formatted_bom), use_container_width=True, hide_index=True)
         else:
             st.warning("⚠️ Không tìm thấy bảng chi tiết phụ liệu BOM lịch sử của mã hàng đối chiếu này trong kho dữ liệu.")
+
 
 
 # -----------------------------------------------------------------------------
