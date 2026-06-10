@@ -496,18 +496,18 @@ elif menu_selection == "🔄 Pattern Spec Comparison":
     with sc2: file2 = st.file_uploader("Chọn file mẫu Techpack Sửa đổi (File B)", type=["pdf"], key="f2")
     
     if file1 and file2:
-        # SỬA LỖI ĐỨNG YÊN: Xử lý và lưu biệt lập vào session_state theo vị trí uploader A và B
-        if st.sidebar.get("last_f1") != file1.name or "data_a" not in st.session_state:
+        # SỬA TRIỆT ĐỂ LỖI ĐỨNG YÊN: Dùng st.session_state độc lập để lưu lịch sử file uploader
+        if st.session_state.get("last_f1_name") != file1.name or "data_a" not in st.session_state:
             res1 = process_single_pdf_batch(file1.getvalue(), file1.name)
             if res1["success"]: 
                 st.session_state["data_a"] = res1["data"]
-                st.sidebar["last_f1"] = file1.name
+                st.session_state["last_f1_name"] = file1.name
                 
-        if st.sidebar.get("last_f2") != file2.name or "data_b" not in st.session_state:
+        if st.session_state.get("last_f2_name") != file2.name or "data_b" not in st.session_state:
             res2 = process_single_pdf_batch(file2.getvalue(), file2.name)
             if res2["success"]: 
                 st.session_state["data_b"] = res2["data"]
-                st.sidebar["last_f2"] = file2.name
+                st.session_state["last_f2_name"] = file2.name
             
         d1 = st.session_state.get("data_a")
         d2 = st.session_state.get("data_b")
@@ -531,8 +531,10 @@ elif menu_selection == "🔄 Pattern Spec Comparison":
                     s = str(v).replace("INCH", "").strip()
                     if " " in s:
                         p = s.split()
-                        return float(p[0]) + (float(p[1].split('/')[0])/float(p[1].split('/')[1]))
-                    return float(s.split('/')[0])/float(s.split('/')[1]) if "/" in s else float(s)
+                        whole = float(p[0])
+                        frac = p[1].split('/')
+                        return whole + (float(frac[0]) / float(frac[1]))
+                    return float(s.split('/')[0]) / float(s.split('/')[1]) if "/" in s else float(s)
                 except:
                     import re
                     nums = re.findall(r"[-+]?\d*\.\d+|\d+", str(v))
@@ -551,7 +553,11 @@ elif menu_selection == "🔄 Pattern Spec Comparison":
             df_a['pom_code'] = df_a['raw_pom_a'].apply(extract_pom_code)
             df_b['pom_code'] = df_b['raw_pom_b'].apply(extract_pom_code)
             
-            df_res = pd.merge(df_a, df_b, on='pom_code', how='outer').fillna("N/A").sort_values('pom_code')
+            # ĐỒNG BỘ THỨ TỰ XUẤT HIỆN: Tránh lỗi trùng mã đơn vị túi (Ví dụ: PKT-023 có 2 dòng)
+            df_a['seq'] = df_a.groupby('pom_code').cumcount()
+            df_b['seq'] = df_b.groupby('pom_code').cumcount()
+            
+            df_res = pd.merge(df_a, df_b, on=['pom_code', 'seq'], how='outer').fillna("N/A").sort_values(['pom_code', 'seq'])
             
             table_body_html = ""
             compare_rows_for_df = []
@@ -578,7 +584,7 @@ elif menu_selection == "🔄 Pattern Spec Comparison":
             st.markdown(f"<div style='max-height:460px; overflow-y:auto; border:1px solid #CBD5E1; border-radius:12px;'><table style='width:100%; border-collapse:collapse; text-align:left; font-family:sans-serif;'><thead style='background:linear-gradient(90deg, #1E3A8A, #2563EB); color:white;'><tr><th style='padding:14px 16px; position:sticky; top:0; z-index:10;'>Vị trí đo (POM Description)</th><th style='padding:14px 16px; position:sticky; top:0; z-index:10;'>{lbl_a}</th><th style='padding:14px 16px; position:sticky; top:0; z-index:10;'>{lbl_b}</th><th style='padding:14px 16px; text-align:center; width:150px; position:sticky; top:0; z-index:10;'>Sai lệch (Delta)</th></tr></thead><tbody>{table_body_html}</tbody></table></div>", unsafe_allow_html=True)
             st.markdown("<br>", unsafe_allow_html=True)
 
-            # --- KHỐI ĐỔ MÀU EXCEL ĐỒNG BỘ GIAO DIỆN ---
+            # --- KHỐI ĐỔ MÀU EXCEL ĐỒNG BỘ GIAO DIỆN CHUYÊN NGHIỆP ---
             df_xl = pd.DataFrame(compare_rows_for_df)
             towrite = io.BytesIO()
             with pd.ExcelWriter(towrite, engine='xlsxwriter') as writer:
@@ -610,7 +616,7 @@ elif menu_selection == "🔄 Pattern Spec Comparison":
                     elif d_val > 0:
                         worksheet.write(idx + 1, 3, f"+{d_val}", green_fmt)
                     elif d_val < 0:
-                        worksheet.write(idx + 1, 3, d_val, red_format if 'red_format' in locals() else red_fmt)
+                        worksheet.write(idx + 1, 3, d_val, red_fmt)
                     else:
                         worksheet.write(idx + 1, 3, "0.00", center_fmt)
                         
@@ -619,6 +625,7 @@ elif menu_selection == "🔄 Pattern Spec Comparison":
                 
             towrite.seek(0)
             st.download_button(label="📥 Tải Báo Cáo Đối Chiếu Có Màu (Excel)", data=towrite, file_name=f"Spec_Comparison_{style_a}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
 
 
 
