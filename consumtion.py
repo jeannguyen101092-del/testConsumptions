@@ -799,11 +799,11 @@ def parse_fraction(val_str):
         if ' ' in val_str:
             parts = [p for p in val_str.split(' ') if p.strip()]
             if len(parts) >= 2:
-                whole = float(parts)
-                frac = parts
+                whole = float(parts[0])
+                frac = parts[1]
             else:
                 whole = 0.0
-                frac = parts
+                frac = parts[0]
         else:
             whole = 0.0
             frac = val_str
@@ -830,9 +830,9 @@ def ai_consumption_analyst_engine(client, user_message, matched_techpack, bom_re
     shrinkage_length = re.findall(r'(?:CO RÚT DỌC|DỌC)\s*(\d+(?:\.\d+)?)\s*%', user_message.upper())
     new_fabric_width = re.findall(r'(?:KHỔ VẢI|KHỔ)\s*(\d+)\s*(?:\"|INCH|INCHES)?', user_message.upper())
 
-    w_shrink = float(shrinkage_width) if shrinkage_width else 0.0
-    l_shrink = float(shrinkage_length) if shrinkage_length else 0.0
-    f_width = float(new_fabric_width) if new_fabric_width else 0.0
+    w_shrink = float(shrinkage_width[0]) if shrinkage_width else 0.0
+    l_shrink = float(shrinkage_length[0]) if shrinkage_length else 0.0
+    f_width = float(new_fabric_width[0]) if new_fabric_width else 0.0
 
     system_instruction = f"""
     You are a strict Industrial Garment Costing Engineer at PPJ Group. 
@@ -882,109 +882,6 @@ else:
 
 if gemini_key:
     client = genai.Client(api_key=gemini_key, http_options=types.HttpOptions(api_version='v1'))
-def process_single_pdf_batch(file_bytes, file_name):
-    """
-    Hàm bóc tách dữ liệu kỹ thuật từ một file PDF độc lập.
-    ✨ ĐA NÂNG CẤP ĐỊNH VỊ PHOM DÁNG: Ép AI Vision chỉ bốc trang hiển thị chiếc quần hoàn chỉnh (Front/Back full view).
-    STRICTLY FORBIDDEN: Cấm lấy các trang rã rập thân quần đơn lẻ, cụm chi tiết rải rác hoặc túi lót rời.
-    """
-    import time
-    try:
-        gemini_key = get_secure_gemini_key()
-        if not gemini_key:
-            return {"success": False, "error": "API Key cho Gemini đang bị thiếu trong Secrets."}
-            
-        client_ai = genai.Client(api_key=gemini_key)
-        info = pdfinfo_from_bytes(file_bytes)
-        total_p = int(info.get("Pages", 1))
-        
-        pdf_parts_payload = []
-        chat_images = convert_from_bytes(file_bytes, dpi=90, first_page=1, last_page=total_p)
-        for page_img in chat_images:
-            img_buf = io.BytesIO()
-            page_img.convert("RGB").save(img_buf, format="JPEG", quality=75)
-            pdf_parts_payload.append(types.Part.from_bytes(data=img_buf.getvalue(), mime_type='image/jpeg'))
-            
-        industrial_extraction_prompt = (
-            "You are an expert Garment Specification Auditor at PPJ Group. Analyze all attached sheets page by page. "
-            "1. Identify the core 'Base Size' / 'Sample Size' (e.g., written as 8-, 32, or Size M). "
-            "2. Identify the Buyer name and Category. "
-            "3. Find the exact 'Style ID' / 'Style Number' (e.g. 5765). "
-            "4. FOR FUNCTION 3 (FULL SIZE MATRIX): Scan and extract the entire grading matrix table columns for ALL available sizes. "
-            "5. CRITICAL VISUAL FLAT SKETCH LOCATE RULE: Scan all pages visually. You MUST find the exact PAGE INDEX (0-based) "
-            "that contains the FULL BODY APPAREL FLAT SKETCH showing the entire completed garment (the whole pant/skort with front view and back view side-by-side or on the same page). "
-            "STRICT DISQUALIFICATION RULES: "
-            "- DO NOT select pages showing isolated technical pattern panels (e.g., just a single front panel leg layout or a single back panel leg cut out). "
-            "- DO NOT select pages showing inner construction details, pocket bags, zippers, or sketches of components. "
-            "We only want the complete product design presentation sketch page. "
-            "Return a completely valid raw JSON string matching this schema (no markdown blocks): "
-            "{"
-            "  \"style_number_parsed\": \"string\","
-            "  \"buyer\": \"string\","
-            "  \"category\": \"string\","
-            "  \"base_size_name\": \"string\","
-            "  \"sketch_page_index_detected\": 0,"
-            "  \"measurements\": {\"POM Description\": \"Value\"},"
-            "  \"full_size_matrix\": {\"POM Description\": {\"Size_Name\": \"Value\"}}"
-            "}"
-        )
-        
-        pdf_parts_payload.append(industrial_extraction_prompt)
-        
-        response = None
-        for attempt in range(3):
-            try:
-                response = client_ai.models.generate_content(
-                    model='gemini-2.5-flash', 
-                    contents=pdf_parts_payload,
-                    config={"response_mime_type": "application/json"}
-                )
-                if response and response.text: break
-            except Exception as ai_err:
-                if "503" in str(ai_err) or "UNAVAILABLE" in str(ai_err):
-                    time.sleep((attempt + 1) * 2)
-                    continue
-                else:
-                    return {"success": False, "error": f"Lỗi cổng truyền: {str(ai_err)}"}
-                    
-        if not response or not response.text:
-            return {"success": False, "error": "Mô hình không phản hồi văn bản."}
-            
-        clean_json = response.text.strip().replace("```json", "").replace("```", "").strip()
-        parsed_data = json.loads(clean_json)
-        
-        extracted_sketch_bytes = None
-        detected_idx = int(parsed_data.get("sketch_page_index_detected", 0))
-        if 0 <= detected_idx < len(chat_images):
-            b_buf = io.BytesIO()
-            chat_images[detected_idx].convert("RGB").save(b_buf, format="JPEG", quality=90)
-            extracted_sketch_bytes = b_buf.getvalue()
-            
-        success_db = save_to_supabase_techpack_table(parsed_data, raw_file_bytes=file_bytes, file_name=file_name)
-        
-        output_payload = {
-            "style_number_parsed": parsed_data.get("style_number_parsed", "UNKNOWN"),
-            "buyer": parsed_data.get("buyer", "UNKNOWN BUYER"),
-            "category": parsed_data.get("category", "GARMENT"),
-            "base_size_name": parsed_data.get("base_size_name", "32"),
-            "measurements": parsed_data.get("measurements", {}),
-            "full_size_matrix": parsed_data.get("full_size_matrix", {})
-        }
-        
-        return {
-            "success": True,
-            "data": output_payload, 
-            "style_id": output_payload["style_number_parsed"],
-            "buyer": output_payload["buyer"],
-            "category": output_payload["category"],
-            "size": output_payload["base_size_name"],
-            "measurements": output_payload["measurements"], 
-            "sketch_bytes": extracted_sketch_bytes, 
-            "error": None if success_db else "Lỗi ghi đồng bộ dữ liệu lên cơ sở dữ liệu"
-        }
-    except Exception as e:
-        return {"success": False, "error": f"Lỗi bóc tách PDF: {str(e)}"}
-
 new_style_id_detected = "UNKNOWN_STYLE"
 new_style_category_detected = ""
 new_style_fabric_detected = "UNKNOWN_FABRIC"
@@ -1006,6 +903,7 @@ if has_file:
     file_name = target_file_object.name
     if file_name.lower().endswith('.pdf'):
         try:
+            # Gọi trực tiếp hàm xử lý nền đã được nâng cấp thị giác loại trừ rập rã chi tiết
             res_pdf = process_single_pdf_batch(file_bytes, file_name)
             if res_pdf.get("success"):
                 meta_p = res_pdf["data"]
@@ -1076,7 +974,7 @@ with st.spinner("🧠 Hệ thống thị giác máy tính đang quét kết cấ
                     "sketch_features_vector": s.get("sketch_vector", "")
                 })
             
-            # PROMPT THỊ GIÁC CAO CẤP: ÉP AI BẮT BUỘC LOẠI TRỪ MẢNH RẬP RỜI VÀ SO KHỚP CHUẨN PHOM QUẦN DÀI/NGẮN
+            # PROMPT THỊ GIÁC CAO CẤP: LOẠI TRỪ MẢNH RẬP RỜI VÀ SO KHỚP CHUẨN PHOM QUẦN DÀI/NGẮN CHÍNH XÁC THEO HÌNH ẢNH
             match_prompt = f"""
             You are an expert Computer Vision Ingestion System specialized in Apparel Manufacturing at PPJ Group.
             Analyze the ATTACHED NEW SKETCH IMAGE and find the single closest matching historical garment style from the pool.
@@ -1084,7 +982,7 @@ with st.spinner("🧠 Hệ thống thị giác máy tính đang quét kết cấ
             CRITICAL APPRAISAL IMAGE RULES (MUST FOLLOW):
             1. REJECT ISOLATED PATTERN PANELS: Look closely at the attached image. If the image shows an isolated, single sleeve, a single leg panel pattern outline, or a grading chart instead of a finished garment view, you MUST recognize that this is NOT a completed design sketch.
             2. GARMENT CATEGORY MATCH: Distinguish clearly between Long Denim Pants (Quần Jeans dài), Shorts (Quần ngắn/Shorts), and Skorts. Do NOT match a long pant silhouette or a leg rập profile with a Short pant style in the database.
-            3. SILHOUETTE ALIGNMENT: Match the exact completed drape structure, leg openings width, pocket structures, and yoke line styling of the overall garment garment look.
+            3. SILHOUETTE ALIGNMENT: Match the exact completed drape structure, leg openings width, pocket structures, and yoke line styling of the overall garment look.
             
             HISTORICAL POOL DATA (Describing the actual finished shapes in store):
             {json.dumps(styles_pool_summary)}
@@ -1123,7 +1021,7 @@ with st.spinner("🧠 Hệ thống thị giác máy tính đang quét kết cấ
     except Exception as match_err:
         st.sidebar.error(f"Lỗi hệ thống đối soát hình ảnh: {str(match_err)}")
 
-# --- LUỒNG TRUY XUẤT BOM LỊCH SỬ THÔNG MINH ĐA LỚP CHỐNG LỆCH TÊN MÃ ---
+# --- LUỒNG TRUY XUẤT BOM LỊCH SỬ THÔNG MINH ĐA LỚP CHỐNG LỆCH TÊN MÃ ĐƠN HÀNG ---
 if st.session_state.get("matched_techpack"):
     try:
         target_style_name = str(st.session_state["matched_techpack"].get("StyleName", "")).strip()
@@ -1152,9 +1050,11 @@ if st.session_state.get("matched_techpack"):
                 st.session_state["bom_records"] = []
     except Exception:
         st.session_state["bom_records"] = []
+# Trích xuất dữ liệu hiển thị đồ họa trực diện từ bộ nhớ đệm session_state lên đầu khối an toàn
+matched_techpack = st.session_state.get("matched_techpack")
+bom_records = st.session_state.get("bom_records", [])
 
-
-# 1. HIỂN THỊ ĐỐI SOÁT HÌNH ẢNH HAI BÊN - GIẢI MÃ NHỊ PHÂN ĐỒNG BỘ CHỮ VIẾT HOA VÀ VALIDATE TRÁNH LỖI PIL vỡ ảnh
+# 1. HIỂN THỊ ĐỐI SOÁT HÌNH ẢNH HAI BÊN - GIẢI MÃ NHỊ PHÂN ĐỒNG BỘ CHỮ VIẾT HOA CHỐNG CHẶN URL VÀ CHỐNG VỠ ẢNH PIL
 st.markdown("### 🖼️ ĐỐI CHIẾU SỰ TƯƠNG ĐỒNG HÌNH ẢNH THIẾT KẾ (FLAT SKETCH)")
 img_col1, img_col2 = st.columns(2)
 with img_col1:
@@ -1162,11 +1062,9 @@ with img_col1:
         st.image(target_new_sketch_bytes, caption=f"Mẫu mới tải lên ({new_style_id_detected})", use_container_width=True)
 with img_col2:
     if matched_techpack:
-        # CHUẨN HÓA CHỮ HOA: Ép tên mã hàng chuyển thành chữ viết hoa để khớp khít hoàn toàn với file trên Storage Supabase
         target_style_name = str(matched_techpack.get("StyleName", "Mẫu tương đồng")).strip().upper()
         st.markdown(f"<p style='color: #1E3A8A; font-size: 13px; font-weight: 700; margin-bottom: 8px; text-align: center;'>🎯 Mã tương đồng trong kho: {target_style_name}</p>", unsafe_allow_html=True)
         
-        # Quét đa luồng 4 loại cấu trúc định dạng đuôi file mở rộng để bảo đảm ép bung ảnh thật 100%
         auth_headers = {"apikey": SB_KEY, "Authorization": f"Bearer {SB_KEY}"}
         url_options = [
             f"{SB_URL.rstrip('/')}/storage/v1/object/public/kho_anh/{target_style_name}.jpg",
@@ -1180,8 +1078,6 @@ with img_col2:
             try:
                 img_response = requests.get(url_opt, headers=auth_headers, timeout=8)
                 if img_response.status_code == 200 and len(img_response.content) > 500:
-                    # ⚡ THUẬT TOÁN SỬA LỖI PIL CHÍ MẠNG: Kiểm tra chữ ký file (Magic Bytes) để loại bỏ chuỗi văn bản HTML lỗi ẩn danh
-                    # File ảnh JPEG/JPG chuẩn luôn luôn bắt đầu bằng chuỗi byte b'\xff\xd8'
                     if img_response.content.startswith(b'\xff\xd8') or b'<!DOCTYPE' not in img_response.content[:100]:
                         img_content_final = img_response.content
                         break
@@ -1194,7 +1090,6 @@ with img_col2:
             except Exception:
                 st.image("https://unsplash.com", caption=f"⚠️ File ảnh vật lý {target_style_name}.jpg bị lỗi định dạng nhị phân trên Storage.", use_container_width=True)
         else:
-            # Luồng dự phòng lùi về gọi link lưu trữ cứng của DB nếu có lưu link từ hệ thống khác
             db_stored_url = matched_techpack.get("SketchURL") or matched_techpack.get("sketch_url", "")
             if db_stored_url and "public/kho_anh" not in str(db_stored_url):
                 try:
