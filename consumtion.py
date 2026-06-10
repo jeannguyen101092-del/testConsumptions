@@ -1252,10 +1252,10 @@ elif menu_selection == "🛒 Purchase Consumption":
                             st.dataframe(df_tp_show, use_container_width=True, hide_index=True)
                     else:
                         st.warning("⏳ Đang đợi AI xử lý hoặc tệp Techpack rỗng.")
-                # --- 🛠️ KHỐI CHAT AI VÀ CỖ MÁY TOÁN HỌC TÍNH TOÁN ĐẶT HÀNG NÂNG CAO ---
+                                # --- 🛠️ KHỐI CHAT AI VÀ CỖ MÁY TOÁN HỌC TÍNH TOÁN ĐẶT HÀNG NÂNG CAO ---
                 st.markdown("<br><hr style='border:0.5px solid #E2E8F0;'>", unsafe_allow_html=True)
                 st.markdown("### 💬 TRỢ LÝ AI TÍNH TOÁN ĐỊNH MỨC ĐẶT HÀNG VẬT TƯ")
-                st.caption("Nhập chỉ thị định mức vải/phụ liệu của size cơ bản (hoặc yêu cầu AI tự động tính toán tổng mua phân bổ dựa trên dải thông số rập Techpack).")
+                st.caption("Nhập chỉ thị định mức vải/phụ liệu của size cơ bản để tính toán tổng số lượng vật tư cần mua dựa trên ma trận đơn hàng SBD.")
                 
                 if "purchase_chat_history" not in st.session_state:
                     st.session_state["purchase_chat_history"] = []
@@ -1268,52 +1268,54 @@ elif menu_selection == "🛒 Purchase Consumption":
                         if "excel_bytes" in msg:
                             st.download_button(label="📥 Tải Đơn Đặt Hàng Vật Tư (Excel)", data=msg["excel_bytes"], file_name="Purchase_Order_Report.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
                 
-                if user_instruction := st.chat_input("Nhập định mức (Ex: Định mức vải chính size M là 1.25 yds, tính tổng mua kèm hao hụt 3%)..."):
+                if user_instruction := st.chat_input("Nhập định mức (Ex: Định mức vải chính là 1.04 yds, tính tổng lượng vải đặt mua)..."):
                     with st.chat_message("user"):
                         st.write(user_instruction)
                     st.session_state["purchase_chat_history"].append({"role": "user", "content": user_instruction})
                     
                     with st.chat_message("assistant"):
-                        with st.spinner("🤖 Trí tuệ nhân tạo AI đang phân tích dữ liệu đa nguồn và tính toán ma trận vật tư..."):
+                        with st.spinner("🤖 Trí tuệ nhân tạo AI đang phân tích dữ liệu và lập bảng tính toán vật tư..."):
                             gemini_key = get_secure_gemini_key()
                             client_ai = genai.Client(api_key=gemini_key)
                             
                             ai_context_prompt = f"""
-                            You are a professional Textile Production Planner. 
-                            We have parsed the following data from the Techpack and Order Sheet (SBD):
-                            
-                            1. ORDER QUANTITIES MATRIX (SBD):
+                            You are a professional Textile Purchasing Assistant.
+                            We have parsed the following order quantity data from the SBD sheet:
                             {json.dumps(sbd_data.get('size_breakdown', {})) if sbd_data else "{}"}
-                            
-                            2. FULL SIZE GRADING MATRIX (Techpack):
-                            {json.dumps(tp_data.get('full_size_matrix', {})) if tp_data else "{}"}
-                            Base Size of Techpack: {tp_data.get('base_size_name', 'N/A') if tp_data else "N/A"}
                             
                             The user provided this instruction: "{user_instruction}"
                             
-                            Your mission:
-                            1. Look at the FULL SIZE matrix. Analyze how the garment dimensions scale or jump between small sizes and large sizes.
-                            2. Take the user's base consumption (e.g. 1.25 yds for size M or size 8) and dynamically distribute/calculate the exact consumption for EVERY size based on the proportional geometric differences found in the full size grading chart.
-                            3. Multiply each calculated size-specific consumption by its PO quantity from the SBD data to find the Net Requirement.
-                            4. Add the wastage/loss allowance to output the final Gross Purchase Quantity.
+                            YOUR EXACT MATHEMATICAL MISSION:
+                            1. Extract the base consumption value (định mức) from the user's input text (e.g., 1.04).
+                            2. Apply this EXACT SAME consumption value uniformly to EVERY single size listed in the SBD dataset. Do not scale, jump, or change the consumption value across sizes.
+                            3. Multiply this uniform consumption value by each size's corresponding order quantity to calculate the "Tổng lượng mua đặt hàng" for that size.
+                            4. DO NOT add any default wastage or loss allowance percentages. Keep it as pure net calculations.
                             
-                            Provide a clear professional markdown text explanation of your logic first.
-                            Then, output a final raw JSON block inside a ```json ... ``` container.
+                            Provide a brief professional summary response in Vietnamese confirming the base consumption used and the total quantity.
+                            Then, you MUST output a final raw JSON block at the very end of your response inside a ```json ... ``` container.
+                            The JSON schema must be exactly a list of objects like this:
                             ```json
                             [
-                              {{"Kích thước (Size/Inseam)": "string", "Số lượng PO (Pcs)": 100, "Định mức phân bổ (Yds/Pcs)": 1.25, "Nhu cầu tinh (Net)": 125.0, "Tổng lượng mua (+Hao hụt)": 128.75}}
+                              {{"Kích thước (Size/Inseam)": "string", "Số lượng PO (Pcs)": 100, "Định mức (Yds/Pcs)": 1.04, "Tổng lượng mua đặt hàng": 104.0}}
                             ]
                             ```
                             """
                             
                             try:
-                                response_ai = client_ai.models.generate_content(model='gemini-2.5-flash', contents=ai_context_prompt)
+                                response_ai = client_ai.models.generate_content(
+                                    model='gemini-2.5-flash',
+                                    contents=ai_context_prompt
+                                )
+                                
                                 ai_text = response_ai.text
                                 json_block = ""
+                                
+                                # Phân tách chuỗi an toàn, sửa lỗi sập mạng 'list object has no attribute split'
                                 if "```json" in ai_text:
                                     parts = ai_text.split("```json")
-                                    text_desc = parts
-                                    json_block = parts.split("```").strip()
+                                    text_desc = parts[0] # Lấy chuỗi mô tả chữ bằng tiếng Việt
+                                    raw_json_part = parts[1].split("```")
+                                    json_block = raw_json_part[0].strip() # Lấy khối JSON sạch
                                 else:
                                     text_desc = ai_text
                                     
