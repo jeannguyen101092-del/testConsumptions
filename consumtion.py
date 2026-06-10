@@ -102,7 +102,8 @@ def save_to_supabase_techpack_table(payload_data, raw_file_bytes=None, file_name
     """
     Hàm xử lý đồng bộ dữ liệu, tự động tìm đúng trang có hình thiết kế phẳng (Sketch) sạch,
     đẩy ảnh rập lên Storage kho_anh và số hóa chuỗi đặc trưng hình học đồng bộ với luồng đối soát.
-    ✨ ĐÃ SỬA: Tích hợp bộ lọc thị giác thông minh loại bỏ hoàn toàn các trang bảng biểu dữ liệu (Spec Grid)
+    ✨ ĐÃ SỬA TRIỆT ĐỂ LỖI CHUỖI MẶC ĐỊNH: Ép hệ thống dùng đúng cú pháp thư viện GenAI mới 
+    để trích xuất chuỗi đặc trưng hình học chi tiết, tuyệt đối không ghi đè chữ "technical garment layout specs".
     """
     try:
         style_name_db = payload_data.get("style_number_parsed", "").strip()
@@ -113,50 +114,40 @@ def save_to_supabase_techpack_table(payload_data, raw_file_bytes=None, file_name
         public_image_url = ""
         image_data = None
 
-        # LUỒNG CAO CẤP: Nếu có file gốc dạng PDF, tự động dò tìm trang Sketch sạch 100%
+        # 1. Luồng trích xuất hình ảnh từ tệp PDF bản vẽ kỹ thuật
         if raw_file_bytes and file_name.lower().endswith('.pdf'):
             try:
-                import pdfplumber  # Dùng để kiểm tra mật độ chữ trên trang nhanh chóng
+                import pdfplumber
                 info_pdf = pdfinfo_from_bytes(raw_file_bytes)
                 total_p = int(info_pdf.get("Pages", 1))
                 pdf_images = convert_from_bytes(raw_file_bytes, dpi=90, first_page=1, last_page=total_p)
                 
-                # Đồng bộ chỉ số trang bóc tách được từ metadata của luồng AI
                 detected_idx = int(payload_data.get("sketch_page_index_detected", 0))
-                
-                # --- THUẬT TOÁN BỘ LỌC THỊ GIÁC: KIỂM TRA CHỐNG BẮT NHẦM BẢNG THÔNG SỐ (SPEC GRID) ---
                 best_idx = detected_idx
                 
                 with pdfplumber.open(io.BytesIO(raw_file_bytes)) as pdf:
-                    # Kiểm tra trang hiện tại được AI chỉ định
                     if 0 <= detected_idx < len(pdf.pages):
                         page_text = pdf.pages[detected_idx].extract_text() or ""
-                        # Nếu trang chứa quá nhiều từ khóa thông số dệt may, khả năng cao là bảng dữ liệu (Spec Grid)
                         tech_words = ["WAIST", "HIP", "INSEAM", "THIGH", "RISE", "SPEC", "TARGET", "TOLERANCE", "SIZE"]
                         word_count = sum(1 for w in tech_words if w in page_text.upper())
                         
-                        # Nếu mật độ chữ kỹ thuật > 4 hoặc tổng ký tự quá dài -> Chạy thuật toán quét tìm trang Flat Sketch thực sự
                         if word_count >= 4 or len(page_text) > 400:
                             min_text_len = 99999
-                            # Quét nhanh 4 trang đầu tiên (nơi thường đặt bản vẽ thiết kế)
                             for i in range(min(4, len(pdf.pages))):
                                 txt = pdf.pages[i].extract_text() or ""
                                 c_count = sum(1 for w in tech_words if w in txt.upper())
-                                # Tìm trang có ít chữ kỹ thuật nhất và ngắn gọn nhất (thường chỉ chứa ảnh Sketch và tên mã hàng)
                                 if c_count < 3 and len(txt) < min_text_len:
                                     min_text_len = len(txt)
                                     best_idx = i
                 
-                # Trích xuất hình ảnh từ trang đã được lọc sạch
                 if 0 <= best_idx < len(pdf_images):
                     img_buf = io.BytesIO()
                     pdf_images[best_idx].convert("RGB").save(img_buf, format="JPEG", quality=85)
                     image_data = img_buf.getvalue()
-            except Exception as e:
-                print(f"[IMAGE EXTRACT WARNING]: {str(e)}")
+            except Exception as img_err:
+                print(f"[IMAGE EXTRACT ERROR]: {str(img_err)}")
                 image_data = None
 
-        # Hướng xử lý dự phòng nếu không phải file PDF hoặc bóc tách lỗi thì dùng ảnh Base64
         if not image_data and sketch_b64:
             try:
                 import base64
@@ -164,7 +155,7 @@ def save_to_supabase_techpack_table(payload_data, raw_file_bytes=None, file_name
             except Exception:
                 pass
 
-        # Đẩy dữ liệu ảnh đã được lọc sạch lên hệ thống Supabase Storage
+        # 2. Đẩy tập tin hình ảnh sản phẩm lên Supabase Storage kho_anh
         if image_data:
             try:
                 storage_headers = {
@@ -181,27 +172,40 @@ def save_to_supabase_techpack_table(payload_data, raw_file_bytes=None, file_name
             except Exception: 
                 pass
 
-        # ⚡ LUỒNG ĐỒNG BỘ THỊ GIÁC: Quét chuỗi đặc trưng hình học giống hệt Đoạn tìm kiếm tương đồng
-        visual_description_str = "technical garment layout specs"
+        # 3. ⚡ LUỒNG FIX LỖI VECTƠ THỊ GIÁC CHÍ MẠNG: SỬ DỤNG ĐÚNG CÚ PHÁP GOOGLE GENAI ĐỂ TRÍCH XUẤT CHUỖI CHI TIẾT
+        # Thay vì đặt chữ mặc định rác, khởi tạo chuỗi mô tả thô từ text để làm lớp bảo vệ dự phòng nền
+        measurements_raw = payload_data.get("measurements", {})
+        visual_description_str = f"GARMENT TYPE: {payload_data.get('category', 'Garment Pants')}. Specs profile summary: " + ", ".join([f"{k}:{v}" for k, v in list(measurements_raw.items())[:6]])
+        
         if image_data:
             gemini_key = get_secure_gemini_key()
             if gemini_key:
                 try:
+                    # Gọi import thư viện chính quy chính xác tuyệt đối
+                    from google import genai
+                    from google.genai import types
+                    
                     client_db = genai.Client(api_key=gemini_key)
                     vision_prompt = """
-                    Analyze this technical flat sketch in detail. 
-                    List all unique geometric attributes, silhouette, waistband type, front/back pockets layout, and panel shapes.
-                    Output a dense string of these visual characteristics for garment similarity matching.
+                    Analyze this technical garment flat sketch in detail.
+                    List all unique geometric attributes, structural silhouette, waistband closure type, front/back pockets layout, panel shapes, and stitch lines.
+                    Output a single dense string of these visual characteristics for apparel similarity vector matching.
+                    Do not include greetings, just return the raw dense characteristic description string.
                     """
                     vision_res = client_db.models.generate_content(
                         model='gemini-2.5-flash',
-                        contents=[types.Part.from_bytes(data=image_data, mime_type='image/jpeg'), vision_prompt]
+                        contents=[
+                            types.Part.from_bytes(data=image_data, mime_type='image/jpeg'),
+                            vision_prompt
+                        ]
                     )
-                    if vision_res.text:
+                    if vision_res and vision_res.text:
+                        # Khóa giữ chuỗi mô tả siêu chi tiết trích xuất được từ hình họa rập vẽ nhị phân
                         visual_description_str = vision_res.text.strip()
-                except Exception as ai_err:
-                    print(f"[AI VISION ERROR - LUỒNG NẠP KHO]: {str(ai_err)}")
+                except Exception as ai_vision_err:
+                    print(f"[AI VISION RE-EXTRACT ERROR]: {str(ai_vision_err)}")
 
+        # 4. Đẩy gói payload hoàn chỉnh lên bảng thong_so_techpack của Supabase
         headers = {
             "apikey": SB_KEY, 
             "Authorization": f"Bearer {SB_KEY}",
@@ -209,9 +213,7 @@ def save_to_supabase_techpack_table(payload_data, raw_file_bytes=None, file_name
             "Prefer": "resolution=merge-duplicates"
         }
         insert_url = f"{SB_URL.rstrip('/')}/rest/v1/thong_so_techpack"
-        
-        raw_measurements = payload_data.get("measurements", {})
-        clean_dict = {str(k).strip(): str(v).strip() for k, v in dict(raw_measurements).items()}
+        clean_dict = {str(k).strip(): str(v).strip() for k, v in dict(measurements_raw).items()}
 
         db_payload = {
             "StyleName": style_name_db,
@@ -220,11 +222,11 @@ def save_to_supabase_techpack_table(payload_data, raw_file_bytes=None, file_name
             "BaseSize": payload_data.get("base_size_name"),
             "DetailedMeasurements": clean_dict,
             "SketchURL": public_image_url,
-            "sketch_vector": visual_description_str 
+            "sketch_vector": visual_description_str # Chuỗi ký tự vectơ thị giác đặc trưng dày đặc chống trùng lặp mã hàng
         }
         
         response = requests.post(insert_url, headers=headers, json=[db_payload], timeout=15)
-        return response.status_code >= 200 and response.status_code <= 299
+        return 200 <= response.status_code <= 299
     except Exception as e:
         st.sidebar.error(f"Lỗi xử lý hệ thống nạp kho: {str(e)}")
         return False
