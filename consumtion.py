@@ -1056,12 +1056,26 @@ if menu_selection == "🧵 BOM & Consumption Matrix":
                         "sketch_features_vector": s.get("sketch_vector", "")
                     })
                 
-                match_prompt = f"""
-                You are an expert Computer Vision Ingestion System specialized in Apparel Manufacturing at PPJ Group.
-                Analyze the ATTACHED NEW SKETCH IMAGE and find the single closest matching historical garment style from the pool.
-                HISTORICAL POOL DATA: {json.dumps(styles_pool_summary)}
-                Return raw JSON object: {{"selected_pool_index": 0}}
-                """
+                            # PROMPT THỊ GIÁC SIẾT CHẶT: ÉP AI SOI CHI TIẾT CẤU TRÚC MAY BÊN TRONG, CẤM NHÌN KHUNG HÌNH CHUNG CHUNG
+            match_prompt = f"""
+            You are an expert Computer Vision Ingestion System specialized in Apparel Manufacturing at PPJ Group.
+            Analyze the ATTACHED NEW SKETCH IMAGE and find the single closest matching historical garment style from the pool.
+            
+            STRICT APPAREL AUDIT RULES (IGNORE THE SILHOUETTE OUTLINE, FOCUS ON INTERNAL DETAILS):
+            1. WAISTBAND CONSTRUCTION (CẬP QUẦN): Look closely at the waistband lines. 
+               - If the new image shows a full elastic waistband (cạp chun toàn bộ, nhiều đường nhăn song song không có đai dây lưng, không có khóa kéo), you MUST REJECT any historical styles that have belt loops (đai quần), front zipper fly (khóa kéo), or standard button closures.
+            2. POCKET TYPES & PLACEMENT (KẾT CẤU TÚI): Look at the internal pocket stitches.
+               - Distinguish clearly between Patch Pockets (túi đắp nổi bên ngoài, túi ốp kiểu Cargo) and Slit/In-seam Pockets (túi mổ, túi sườn phẳng). Do NOT match a clean, pocket-less front leg with a Cargo style pocket layout.
+            3. STITCHING AND SEAM LINES: Check for panel cuts, darts, and decorative stitching lines inside the body structure.
+            
+            HISTORICAL POOL DATA (Describing the actual finished internal details):
+            {json.dumps(styles_pool_summary)}
+            
+            Select the single index that represents the exact match in technical construction details, NOT just the shorts outline.
+            Return a raw valid JSON object inside your response, using this exact schema:
+            {{"selected_pool_index": 0}}
+            """
+
                 
                 match_contents = [types.Part.from_text(text=match_prompt)]
                 if target_new_sketch_bytes:
