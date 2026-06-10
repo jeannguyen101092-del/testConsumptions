@@ -485,8 +485,6 @@ if menu_selection == "📊 Upload Techpack":
 
 
 # -----------------------------------------------------------------------------
-# -----------------------------------------------------------------------------
-# -----------------------------------------------------------------------------
 # CHỨC NĂNG 2: ĐỐI CHIẾU SO SÁNH HAI MÃ RẬP KHÁC NHAU (PATTERN SPEC COMPARISON)
 # -----------------------------------------------------------------------------
 elif menu_selection == "🔄 Pattern Spec Comparison":
@@ -523,29 +521,24 @@ elif menu_selection == "🔄 Pattern Spec Comparison":
                     nums = re.findall(r"[-+]?\d*\.\d+|\d+", str(v))
                     return float(nums[0]) if nums else 0.0
 
-            # --- THUẬT TOÁN TRÍCH XUẤT MÃ CODE POM CHÍNH XÁC ---
             def extract_pom_code(pom_str):
                 import re
                 if not pom_str: return ""
-                # Tìm các mã định danh chuẩn dệt may dạng AAA-000 hoặc AA-000 (Ví dụ: LEG-002, HIP-016)
                 match = re.search(r'([A-Za-z]{2,4}-\d{3})', str(pom_str))
                 return match.group(1).upper() if match else str(pom_str).lower().strip()
 
-            # Chuyển đổi dữ liệu sang DataFrame để xử lý map nâng cao
             df_a = pd.DataFrame(list(d1["measurements"].items()), columns=['raw_pom_a', lbl_a])
             df_b = pd.DataFrame(list(d2["measurements"].items()), columns=['raw_pom_b', lbl_b])
             
             df_a['pom_code'] = df_a['raw_pom_a'].apply(extract_pom_code)
             df_b['pom_code'] = df_b['raw_pom_b'].apply(extract_pom_code)
             
-            # Khớp nối bảng dữ liệu theo Mã Code độc lập (LEG-002 sẽ tự đi cùng nhau)
             df_res = pd.merge(df_a, df_b, on='pom_code', how='outer').fillna("N/A").sort_values('pom_code')
             
             table_body_html = ""
             compare_rows_for_df = []
             
             for _, r in df_res.iterrows():
-                # Ưu tiên lấy tên đầy đủ của Mẫu A, nếu không có thì lấy tên Mẫu B
                 display_pom = r['raw_pom_a'] if r['raw_pom_a'] != "N/A" else r['raw_pom_b']
                 val1, val2 = r[lbl_a], r[lbl_b]
                 
@@ -555,27 +548,62 @@ elif menu_selection == "🔄 Pattern Spec Comparison":
                 if delta == "N/A":
                     style, txt = "color:#94A3B8; font-style:italic;", "N/A"
                 elif delta > 0:
-                    style, txt = "background:rgba(16,185,129,0.15); color:#166534; font-weight:700; padding:2px 8px; border-radius:4px; font-size:12px;", f"+{delta}"
+                    style, txt = "background:rgba(16,185,129,0.15); color:#166534; font-weight:700; padding:2px 8px; border-radius:4px; font-size:12px; border:1px solid #BBF7D0;", f"+{delta}"
                 elif delta < 0:
-                    style, txt = "background:rgba(239,68,68,0.15); color:#991B1B; font-weight:700; padding:2px 8px; border-radius:4px; font-size:12px;", f"{delta}"
+                    style, txt = "background:rgba(239,68,68,0.15); color:#991B1B; font-weight:700; padding:2px 8px; border-radius:4px; font-size:12px; border:1px solid #FECACA;", f"{delta}"
                 else:
                     style, txt = "color:#64748B; font-size:12px;", "0.00"
                 
                 table_body_html += f"<tr style='background:#FFF;'><td style='padding:10px 14px; border-bottom:1px solid #E2E8F0; font-weight:600; color:#1E293B;'>{display_pom}</td><td style='padding:10px 14px; border-bottom:1px solid #E2E8F0; color:#334155;'>{val1}</td><td style='padding:10px 14px; border-bottom:1px solid #E2E8F0; color:#334155;'>{val2}</td><td style='padding:10px 14px; border-bottom:1px solid #E2E8F0; text-align:center;'><span style='{style}'>{txt}</span></td></tr>"
             
             st.markdown(f"<div style='max-height:460px; overflow-y:auto; border:1px solid #CBD5E1; border-radius:12px;'><table style='width:100%; border-collapse:collapse; text-align:left; font-family:sans-serif;'><thead style='background:linear-gradient(90deg, #1E3A8A, #2563EB); color:white;'><tr><th style='padding:14px 16px; position:sticky; top:0; z-index:10;'>Vị trí đo (POM Description)</th><th style='padding:14px 16px; position:sticky; top:0; z-index:10;'>{lbl_a}</th><th style='padding:14px 16px; position:sticky; top:0; z-index:10;'>{lbl_b}</th><th style='padding:14px 16px; text-align:center; width:150px; position:sticky; top:0; z-index:10;'>Sai lệch (Delta)</th></tr></thead><tbody>{table_body_html}</tbody></table></div>", unsafe_allow_html=True)
-            
-            # --- XUẤT FILE EXCEL ĐÃ KHỚP MÃ HOÀN HẢO ---
+            st.markdown("<br>", unsafe_allow_html=True)
+
+            # --- KHỐI ĐỔ MÀU EXCEL CAO CẤP GIỐNG GIAO DIỆN WEB ---
             df_xl = pd.DataFrame(compare_rows_for_df)
             towrite = io.BytesIO()
             with pd.ExcelWriter(towrite, engine='xlsxwriter') as writer:
                 df_xl.to_excel(writer, index=False, sheet_name='Spec_Report')
-                ws = writer.sheets['Spec_Report']
-                for i, col in enumerate(df_xl.columns):
-                    ws.set_column(i, i, max(df_xl[col].astype(str).map(len).max(), len(col)) + 4)
+                workbook  = writer.book
+                worksheet = writer.sheets['Spec_Report']
+                
+                # Khởi tạo bảng màu chuẩn mã màu thương hiệu của bạn
+                header_fmt = workbook.add_format({'bold':True, 'text_wrap':True, 'fg_color':'#1E3A8A', 'font_color':'white', 'border':1, 'align':'center', 'valign':'vcenter'})
+                left_fmt   = workbook.add_format({'align':'left', 'valign':'vcenter', 'border':1, 'font_name':'Arial', 'font_size':10})
+                center_fmt = workbook.add_format({'align':'center', 'valign':'vcenter', 'border':1, 'font_name':'Arial', 'font_size':10})
+                
+                # Định dạng riêng cho 3 trạng thái Delta
+                green_fmt  = workbook.add_format({'bold':True, 'align':'center', 'valign':'vcenter', 'fg_color':'#E8F5E9', 'font_color':'#166534', 'border':1})
+                red_fmt    = workbook.add_format({'bold':True, 'align':'center', 'valign':'vcenter', 'fg_color':'#FFEBEE', 'font_color':'#991B1B', 'border':1})
+                na_fmt     = workbook.add_format({'italic':True, 'align':'center', 'valign':'vcenter', 'fg_color':'#F8FAFC', 'font_color':'#94A3B8', 'border':1})
+                
+                # Áp dụng Header bảng Excel
+                for col_num, title in enumerate(df_xl.columns):
+                    worksheet.write(0, col_num, title, header_fmt)
+                    max_len = max(df_xl[title].astype(str).map(len).max(), len(title)) + 4
+                    worksheet.set_column(col_num, col_num, max_len)
+                
+                # Ghi từng dòng dữ liệu và ép màu sắc có điều kiện
+                for idx, row in df_xl.iterrows():
+                    worksheet.write(idx + 1, 0, row["Vị trí đo (POM)"], left_fmt)
+                    worksheet.write(idx + 1, 1, row[lbl_a], center_fmt)
+                    worksheet.write(idx + 1, 2, row[lbl_b], center_fmt)
+                    
+                    d_val = row["Sai lệch (Delta)"]
+                    if d_val == "N/A":
+                        worksheet.write(idx + 1, 3, "N/A", na_fmt)
+                    elif d_val > 0:
+                        worksheet.write(idx + 1, 3, f"+{d_val}", green_fmt)
+                    elif d_val < 0:
+                        worksheet.write(idx + 1, 3, d_val, red_fmt)
+                    else:
+                        worksheet.write(idx + 1, 3, "0.00", center_fmt)
+                        
+                worksheet.set_row(0, 26) # Chiều cao header thoải mái chữ
+                worksheet.freeze_panes(1, 0) # Khóa cố định dòng tiêu đề khi cuộn chuột trong Excel
+                
             towrite.seek(0)
-            
-            st.download_button(label="📥 Tải Báo Cáo Đối Chiếu (Excel)", data=towrite, file_name=f"Spec_Comparison_{d1['style_number_parsed']}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            st.download_button(label="📥 Tải Báo Cáo Đối Chiếu Có Màu (Excel)", data=towrite, file_name=f"Spec_Comparison_{d1['style_number_parsed']}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 
    # =============================================================================
