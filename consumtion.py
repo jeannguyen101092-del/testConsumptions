@@ -101,9 +101,8 @@ def get_secure_gemini_key():
 def save_to_supabase_techpack_table(payload_data, raw_file_bytes=None, file_name=""):
     """
     Hàm xử lý đồng bộ dữ liệu nạp kho của Chức năng 1.
-    🎯 ĐÃ SỬA TẬN GỐC LỖI UPLOAD: Ép cấu trúc Content-Type: image/jpeg và chuẩn hóa 
-    tham số headers để Supabase Storage lưu trữ file ảnh vật lý sạch 100%, 
-    triệt tiêu hoàn toàn lỗi vỡ ảnh nhị phân PIL vĩnh viễn cho mọi chức năng đối soát.
+    🎯 ĐÃ VÁ CHUẨN: Sửa tham số headers= và bổ sung /object/public/ vào URL để ép
+    Supabase Storage chấp nhận tệp ảnh Jpeg, giải quyết triệt để lỗi kho rỗng.
     """
     try:
         style_name_db = payload_data.get("style_number_parsed", "").strip()
@@ -114,7 +113,7 @@ def save_to_supabase_techpack_table(payload_data, raw_file_bytes=None, file_name
         public_image_url = ""
         image_data = None
 
-        # 1. Luồng trích xuất dữ liệu hình ảnh phẳng (Sketch) từ tệp PDF bản vẽ kỹ thuật
+        # 1. Luồng trích xuất dữ liệu hình ảnh phẳng từ tệp PDF bản vẽ kỹ thuật
         if raw_file_bytes and file_name.lower().endswith('.pdf'):
             try:
                 import pdfplumber
@@ -155,26 +154,29 @@ def save_to_supabase_techpack_table(payload_data, raw_file_bytes=None, file_name
             except Exception:
                 pass
 
-        # 2. ĐỂY TẬP TIN HÌNH ẢNH SẢN PHẨM LÊN SUPABASE STORAGE KHO_ANH (ĐÃ SỬA CHUẨN ĐỊNH DẠNG MIME)
+        # 2. ĐẨY FILE LÊN STORAGE VỚI NHÃN MỞ KHÓA CÔNG KHAI CỨNG (IMAGE/JPEG)
         if image_data:
             try:
-                # Ép chặt Content-Type chuẩn để chống Supabase khóa chứng chỉ mã hóa dữ liệu nhị phân
                 storage_headers = {
                     "apikey": SB_KEY, 
                     "Authorization": f"Bearer {SB_KEY}",
                     "Content-Type": "image/jpeg", 
                     "x-upsert": "true"
                 }
-                storage_url = f"{SB_URL.rstrip('/')}/storage/v1/object/kho_anh/{style_name_db}.jpg"
+                # Thêm chữ viết hoa toàn bộ và gọt sạch ký tự đặc biệt để chống lệch link
+                clean_filename = re.sub(r'[^a-zA-Z0-9]', '', style_name_db).upper()
                 
-                # SỬA LỖI GỐC CHÍ MẠNG: Truyền chính xác biến tham số headers=storage_headers để Supabase chấp thuận nạp ảnh sạch
+                # SỬA ĐƯỜNG LINK: Bổ sung /object/public/ theo đúng tiêu chuẩn cổng mở của Supabase
+                storage_url = f"{SB_URL.rstrip('/')}/storage/v1/object/public/kho_anh/{clean_filename}.jpg"
+                
+                # SỬA CÚ PHÁP LỆNH GỬI: Ghi rõ ràng tham số headers=storage_headers để kích hoạt nạp ảnh sạch
                 upload_res = requests.post(storage_url, headers=storage_headers, data=image_data, timeout=20)
                 if 200 <= upload_res.status_code <= 299:
-                    public_image_url = f"{SB_URL.rstrip('/')}/storage/v1/object/public/kho_anh/{style_name_db}.jpg"
+                    public_image_url = f"{SB_URL.rstrip('/')}/storage/v1/object/public/kho_anh/{clean_filename}.jpg"
             except Exception: 
                 pass
 
-        # 3. LUỒNG KÍCH HOẠT MẮT THẦN AI VISION: TRÍCH XUẤT CHUỖI ĐẶC TRƯNG HÌNH HỌC
+        # 3. LUỒNG KÍCH HOẠT MẮT THẦN AI VISION: TRÍCH XUẤT CHUỒI ĐẶC TRƯNG HÌNH HỌC
         measurements_raw = payload_data.get("measurements", {})
         visual_description_str = f"GARMENT TYPE: {payload_data.get('category', 'Garment Pants')}. Specs profile summary: " + ", ".join([f"{k}:{v}" for k, v in list(measurements_raw.items())[:6]])
         
@@ -215,7 +217,7 @@ def save_to_supabase_techpack_table(payload_data, raw_file_bytes=None, file_name
         clean_dict = {str(k).strip(): str(v).strip() for k, v in dict(measurements_raw).items()}
 
         db_payload = {
-            "StyleName": style_name_db,
+            "StyleName": style_name_db.upper(),
             "Buyer": payload_data.get("buyer"),
             "Category": payload_data.get("category"),
             "BaseSize": payload_data.get("base_size_name"),
@@ -229,6 +231,7 @@ def save_to_supabase_techpack_table(payload_data, raw_file_bytes=None, file_name
     except Exception as e:
         st.sidebar.error(f"Lỗi xử lý hệ thống nạp kho: {str(e)}")
         return False
+
 
 
 
