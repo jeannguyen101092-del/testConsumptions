@@ -1252,18 +1252,17 @@ elif menu_selection == "🛒 Purchase Consumption":
                             st.dataframe(df_tp_show, use_container_width=True, hide_index=True)
                     else:
                         st.warning("⏳ Đang đợi AI xử lý hoặc tệp Techpack rỗng.")
-                             # --- 🛠️ KHỐI CHAT AI VÀ CỖ MÁY TOÁN HỌC TÍNH TOÁN ĐẶT HÀNG NÂNG CAO ---
+                 # --- 🛠️ KHỐI CHAT AI VÀ CỖ MÁY TOÁN HỌC TÍNH TOÁN ĐẶT HÀNG NÂNG CAO ---
                 st.markdown("<br><hr style='border:0.5px solid #E2E8F0;'>", unsafe_allow_html=True)
                 
                 # Giao diện tiêu đề kết hợp nút Xóa lịch sử Chat bên phải
-                chat_title_col, chat_btn_col = st.columns([4, 1])
+                chat_title_col, chat_btn_col = st.columns([3, 1])
                 with chat_title_col:
                     st.markdown("### 💬 TRỢ LÝ AI TÍNH TOÁN ĐỊNH MỨC TRUNG BÌNH ĐƠN HÀNG")
                     st.caption("Nhập định mức của size cơ bản. AI sẽ phân tích độ lệch thông số (Grading) của toàn bộ dải size để suy ra định mức từng size, từ đó tính ra Định mức trung bình chính xác cho cả đơn hàng.")
                 
                 with chat_btn_col:
                     st.markdown("<div style='margin-top: 10px;'></div>", unsafe_allow_html=True)
-                    # NÚT BẤM XÓA LỊCH SỬ CHAT ĐỂ KHÔI PHỤC TRẠNG THÁI
                     if st.button("🗑️ Xóa lịch sử Chat", type="secondary", use_container_width=True):
                         st.session_state["purchase_chat_history"] = []
                         st.rerun()
@@ -1275,7 +1274,7 @@ elif menu_selection == "🛒 Purchase Consumption":
                     with st.chat_message(msg["role"]):
                         st.write(msg["content"])
                         if "df_result" in msg:
-                            st.dataframe(msg["df_result"], use_container_width=True)
+                            st.dataframe(msg["df_result"], use_container_width=True, hide_index=True)
                         if "excel_bytes" in msg:
                             st.download_button(label="📥 Tải Báo Cáo Định Mức Chi Tiết (Excel)", data=msg["excel_bytes"], file_name="AI_Consumption_Report.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
                 
@@ -1303,11 +1302,11 @@ elif menu_selection == "🛒 Purchase Consumption":
                             The user prompt is: "{user_instruction}"
                             
                             YOUR EXPERT MATHEMATICAL & TEXTILE MISSION:
-                            1. Extract the base consumption value (định mức size gốc) and its target size from the user input (e.g., 1.04 yds for Size 8).
-                            2. Look closely at the FULL SIZE GRADING MATRIX from Techpack. Analyze how key fabric-consuming specs (like Contour Waist, Low Hip, Skirt Length, Front/Back Rise, Leg Opening) change (increase/decrease) as the size scales up to size 20 or down to size 000.
+                            1. Extract the base consumption value and its target size from the user input (e.g., 1.04 yds for Size 8).
+                            2. Look closely at the FULL SIZE GRADING MATRIX from Techpack. Analyze how key fabric-consuming specs change as the size scales up to size 20 or down to size 000.
                             3. Calculate the proportional geometric fabric surface area difference for EACH size relative to the Base Size. 
-                            4. Extrapolate and assign a specific calculated consumption (Định mức phân bổ) for EACH size based on these grading scaling factors. For example, if Size 14 has larger waist/length specs than Size 8, its consumption must be proportionally higher than 1.04. Smaller sizes must be lower.
-                            5. Multiply each size's calculated consumption by its respective PO quantity from the SBD data to find the Net Requirement (Lượng vải cần mua tinh) for each size.
+                            4. Extrapolate and assign a specific calculated consumption (Định mức phân bổ) for EACH size based on these grading scaling factors.
+                            5. Multiply each size's calculated consumption by its respective PO quantity from the SBD data to find the Net Requirement for each size.
                             6. CRITICAL CORE REQUIREMENT: Calculate the OVERALL WEIGHTED AVERAGE CONSUMPTION (Định mức trung bình bình quyền gia quyền của cả đơn hàng) using this formula:
                                Weighted Average Consumption = (Sum of Net Requirements for all sizes) / (Total PO Quantity of all sizes)
                             7. DO NOT add any default 3% wastage allowance. Focus on the raw mathematical consumption.
@@ -1329,35 +1328,52 @@ elif menu_selection == "🛒 Purchase Consumption":
                                 )
                                 
                                 ai_text = response_ai.text
+                                text_desc = ai_text
                                 json_block = ""
                                 
+                                # --- 🛠️ THUẬT TOÁN SỬA LỖI TÁCH CHUỖI VÀ TRÍCH XUẤT JSON AN TOÀN TUYỆT ĐỐI ---
                                 if "```json" in ai_text:
-                                    parts = ai_text.split("```json")
-                                    text_desc = parts
-                                    raw_json_part = parts.split("```")
-                                    json_block = raw_json_part.strip()
-                                else:
-                                    text_desc = ai_text
+                                    try:
+                                        parts = ai_text.split("```json")
+                                        text_desc = parts[0] # Đoạn text chữ lập luận tiếng Việt
+                                        
+                                        # Trích xuất đoạn chứa chuỗi cấu trúc JSON nằm sau từ khóa
+                                        json_part_raw = parts[1].split("```")
+                                        json_block = json_part_raw[0].strip()
+                                    except Exception:
+                                        json_block = ""
+                                
+                                # Giải pháp dự phòng tự động bốc tách bằng Regex nếu AI trả sai cấu trúc Markdown
+                                if not json_block:
+                                    import re
+                                    match_json = re.search(r'\[\s*\{.*\}\s*\]', ai_text, re.DOTALL)
+                                    if match_json:
+                                        json_block = match_json.group(0).strip()
+                                        text_desc = ai_text.replace(json_block, "")
                                     
                                 st.write(text_desc)
                                 new_msg_data = {"role": "assistant", "content": text_desc}
                                 
+                                # Nếu trích xuất thành công ma trận mảng, tiến hành vẽ bảng lưới và xuất Excel
                                 if json_block:
-                                    df_res = pd.read_json(io.StringIO(json_block))
-                                    st.dataframe(df_res, use_container_width=True, hide_index=True)
-                                    new_msg_data["df_result"] = df_res
-                                    
-                                    xl_buf = io.BytesIO()
-                                    with pd.ExcelWriter(xl_buf, engine='xlsxwriter') as writer:
-                                        df_res.to_excel(writer, index=False, sheet_name='Consumption_Plan')
-                                        ws = writer.sheets['Consumption_Plan']
-                                        for i, col in enumerate(df_res.columns):
-                                            ws.set_column(i, i, max(df_res[col].astype(str).map(len).max(), len(col)) + 4)
-                                    xl_buf.seek(0)
-                                    xl_bytes = xl_buf.getvalue()
-                                    
-                                    st.download_button(label="📥 Tải Báo Cáo Định Mức Chi Tiết (Excel)", data=xl_bytes, file_name=f"AI_Consumption_Report.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-                                    new_msg_data["excel_bytes"] = xl_bytes
+                                    try:
+                                        df_res = pd.read_json(io.StringIO(json_block))
+                                        st.dataframe(df_res, use_container_width=True, hide_index=True)
+                                        new_msg_data["df_result"] = df_res
+                                        
+                                        xl_buf = io.BytesIO()
+                                        with pd.ExcelWriter(xl_buf, engine='xlsxwriter') as writer:
+                                            df_res.to_excel(writer, index=False, sheet_name='Consumption_Plan')
+                                            ws = writer.sheets['Consumption_Plan']
+                                            for i, col in enumerate(df_res.columns):
+                                                ws.set_column(i, i, max(df_res[col].astype(str).map(len).max(), len(col)) + 4)
+                                        xl_buf.seek(0)
+                                        xl_bytes = xl_buf.getvalue()
+                                        
+                                        st.download_button(label="📥 Tải Báo Cáo Định Mức Chi Tiết (Excel)", data=xl_bytes, file_name=f"AI_Consumption_Report.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                                        new_msg_data["excel_bytes"] = xl_bytes
+                                    except Exception as json_parse_err:
+                                        st.warning(f"AI phản hồi văn bản thành công nhưng cấu trúc ma trận bảng tính bị lệch: {str(json_parse_err)}")
                                     
                                 st.session_state["purchase_chat_history"].append(new_msg_data)
                                 st.rerun()
