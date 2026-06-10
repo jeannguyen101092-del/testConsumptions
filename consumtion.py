@@ -819,8 +819,7 @@ def parse_fraction(val_str):
         return 0.0
 def ai_consumption_analyst_engine(client, user_message, matched_techpack, bom_records, new_style_measurements, target_new_sketch_bytes, detected_size):
     """
-    Bộ não xử lý tính toán định mức nâng cao đáp ứng kịch bản có mã tương đồng
-    và tự động ước tính diện tích hình học rập mẫu khi không có mã tương đồng.
+    Bộ não xử lý tính toán định mức nâng cao bằng đơn vị YARD (Yds).
     Tích hợp quy chuẩn đường may cố định 0.44" và dò tìm lai quần/áo trong TP.
     """
     style_old_name = matched_techpack.get("StyleName", "N/A") if matched_techpack else "N/A"
@@ -841,8 +840,8 @@ def ai_consumption_analyst_engine(client, user_message, matched_techpack, bom_re
     system_instruction = f"""
     You are a strict Industrial Garment Costing Engineer at PPJ Group. 
     Your answers must mimic ChatGPT's advanced code interpreter mode:
-    1. STRICTLY FORBIDDEN: Do not include introductory text, greetings, compliments, or generic conclusions.
-    2. DIRECT ANSWER FIRST: Output the exact final average consumption value or calculation result in the very first sentence.
+    1. STRICT UNIT REQUIRED: All consumption values and fabric calculation results MUST be presented in YARDS (Yds) or Inches. NEVER use meters or cm.
+    2. DIRECT ANSWER FIRST: Output the exact final average consumption value in YARDS (Yds) in the very first sentence.
     3. STEP-BY-STEP MATHEMATICS: Present your logic using short, punchy bullet points showing raw numbers, shrinkage multipliers, and layout area deltas.
     4. LANGUAGE: Answer directly in Vietnamese, using precise apparel terminology (co rút, định mức, hao hụt, khổ vải).
     
@@ -854,7 +853,7 @@ def ai_consumption_analyst_engine(client, user_message, matched_techpack, bom_re
     CRITICAL DATA FOR CALCULATION:
     1. MATCHED OLD STYLE DATA: Name: {style_old_name}
        - Old Spec (POM): {json.dumps(specs_old)}
-       - Old BOM database: {bom_summary}
+       - Old BOM database (convert any meters to YARDS if necessary): {bom_summary}
     2. NEW STYLE TECHPACK DATA:
        - Target Base Size detected: Size {detected_size}
        - New Spec (POM) parsed by vision: {json.dumps(new_style_measurements)}
@@ -920,11 +919,11 @@ def process_single_pdf_batch(file_bytes, file_name):
             
         industrial_extraction_prompt = (
             "You are an expert Garment Specification Auditor at PPJ Group. Analyze all attached sheets page by page. "
-            "1. Identify the core 'Base Size' / 'Sample Size' (e.g., written as 8-, 32, or Size M). "
+            "1. Identify the core 'Base Size' / 'Sample Size'. "
             "2. Identify the Buyer name and Category. "
-            "3. Find the exact 'Style ID' / 'Style Number' (e.g. 5765). "
-            "4. FOR FUNCTION 3 (FULL SIZE MATRIX): Scan and extract the entire grading matrix table columns for ALL available sizes. "
-            "5. CRITICAL VISUAL FLAT SKETCH LOCATE RULE: Find the exact PAGE INDEX (0-based) that contains the FULL BODY APPAREL FLAT SKETCH showing the entire completed garment. "
+            "3. Find the exact 'Style ID' / 'Style Number'. "
+            "4. Extract the entire grading matrix table columns for ALL available sizes. "
+            "5. Find the exact PAGE INDEX (0-based) that contains the FULL BODY APPAREL FLAT SKETCH. "
             "6. CRITICAL APPRAISAL FOR HEM DETAILS: Pay extreme attention to look for bottom hem turn-up allowances, sleeve hem folds, and edge finishing definitions inside the techpack text or table columns. Ensure these 'Hem' measurements are clearly captured in the measurements dictionary. "
             "Return a completely valid raw JSON string matching this schema (no markdown blocks): "
             "{"
@@ -962,6 +961,7 @@ def process_single_pdf_batch(file_bytes, file_name):
         return {"success": False, "error": "AI không thể cấu trúc dữ liệu JSON sau 3 lần thử."}
     except Exception as e:
         return {"success": False, "error": str(e)}
+# Khởi tạo cấu trúc lưu trữ và hứng tệp
 new_style_id_detected = "UNKNOWN_STYLE"
 new_style_category_detected = ""
 new_style_fabric_detected = "UNKNOWN_FABRIC"
@@ -969,7 +969,6 @@ new_style_measurements_dict = {}
 new_style_base_size = "32"
 target_new_sketch_bytes = None 
 
-# 1. ĐỒNG BỘ LUỒNG NHẬN FILE CHUẨN ĐA MENU
 target_file_object = None
 if 'uploaded_file' in st.session_state and st.session_state['uploaded_file'] is not None:
     target_file_object = st.session_state['uploaded_file']
@@ -1002,7 +1001,6 @@ dynamic_keyword = str(new_style_id_detected).strip().upper()
 base_sb_url = SB_URL.rstrip('/')
 headers = {"apikey": SB_KEY, "Authorization": f"Bearer {SB_KEY}"}
 
-# 2. XỬ LÝ RIÊNG Ô TẢI FILE CHO MENU ĐỊNH MỨC BOM
 if menu_selection == "🧵 BOM & Consumption Matrix":
     st.markdown('<div class="component-title-box">🧵 INTELLIGENT BOM & CONSUMPTION MATRIX ENGINE</div>', unsafe_allow_html=True)
     
@@ -1013,7 +1011,6 @@ if menu_selection == "🧵 BOM & Consumption Matrix":
     control_col1, control_col2 = st.columns([3.3, 0.7])
     with control_col1:
         st.markdown("<p style='font-weight:700; font-size:12px; color:#1E293B;'>📁 INGEST NEW STYLE REPRINTS (PDF/IMAGE)</p>", unsafe_allow_html=True)
-        # Đổi key riêng biệt hoàn toàn để không cướp dữ liệu của các menu khác
         st.file_uploader("Upload Techpack file", type=["pdf", "jpg", "jpeg", "png"], key="bom_matrix_uploader", label_visibility="collapsed")
             
     with control_col2:
@@ -1027,7 +1024,6 @@ if menu_selection == "🧵 BOM & Consumption Matrix":
 
     st.markdown("---")
 
-    # Đưa điều kiện phòng vệ chặn file vào ĐÚNG khối xử lý của menu này, không chặn chéo menu khác
     if not has_file:
         st.info("👋 Vui lòng tải lên tệp Techpack hồ sơ thiết kế (PDF) ở phía trên để hệ thống bắt đầu quét và lập lịch trình đối soát.")
         st.stop()
@@ -1037,7 +1033,7 @@ if menu_selection == "🧵 BOM & Consumption Matrix":
     else:
         st.info(f"📋 **CƠ SỞ ĐỐI SOÁT KIỂM TRA:** Đang áp dụng quy chuẩn kích thước hình học rập mẫu cơ sở: **SIZE 32 / M (Mặc định)**")
 
-    # LUỒNG SO KHỚP THỊ GIÁC MÁY TÍNH KHI ĐÃ CÓ FILE TRONG MENU BOM
+    # LUỒNG "MẮT THẦN NGHIÊM NGẶT" QUET SUPABASE
     with st.spinner("🧠 Hệ thống thị giác máy tính đang quét kết cấu phom dáng Flat Sketch..."):
         try:
             headers_db = {"apikey": SB_KEY, "Authorization": f"Bearer {SB_KEY}"}
@@ -1056,26 +1052,24 @@ if menu_selection == "🧵 BOM & Consumption Matrix":
                         "sketch_features_vector": s.get("sketch_vector", "")
                     })
                 
-                            # PROMPT THỊ GIÁC SIẾT CHẶT: ÉP AI SOI CHI TIẾT CẤU TRÚC MAY BÊN TRONG, CẤM NHÌN KHUNG HÌNH CHUNG CHUNG
-            match_prompt = f"""
-            You are an expert Computer Vision Ingestion System specialized in Apparel Manufacturing at PPJ Group.
-            Analyze the ATTACHED NEW SKETCH IMAGE and find the single closest matching historical garment style from the pool.
-            
-            STRICT APPAREL AUDIT RULES (IGNORE THE SILHOUETTE OUTLINE, FOCUS ON INTERNAL DETAILS):
-            1. WAISTBAND CONSTRUCTION (CẬP QUẦN): Look closely at the waistband lines. 
-               - If the new image shows a full elastic waistband (cạp chun toàn bộ, nhiều đường nhăn song song không có đai dây lưng, không có khóa kéo), you MUST REJECT any historical styles that have belt loops (đai quần), front zipper fly (khóa kéo), or standard button closures.
-            2. POCKET TYPES & PLACEMENT (KẾT CẤU TÚI): Look at the internal pocket stitches.
-               - Distinguish clearly between Patch Pockets (túi đắp nổi bên ngoài, túi ốp kiểu Cargo) and Slit/In-seam Pockets (túi mổ, túi sườn phẳng). Do NOT match a clean, pocket-less front leg with a Cargo style pocket layout.
-            3. STITCHING AND SEAM LINES: Check for panel cuts, darts, and decorative stitching lines inside the body structure.
-            
-            HISTORICAL POOL DATA (Describing the actual finished internal details):
-            {json.dumps(styles_pool_summary)}
-            
-            Select the single index that represents the exact match in technical construction details, NOT just the shorts outline.
-            Return a raw valid JSON object inside your response, using this exact schema:
-            {{"selected_pool_index": 0}}
-            """
-
+                # SIẾT CHẶT QUY TẮC PHÒNG VỆ THỊ GIÁC: PHÂN TÍCH ĐƯỜNG MAY BÊN TRONG CẤM NHÌN KHUNG HÌNH CHUNG CHUNG
+                match_prompt = f"""
+                You are an expert Computer Vision Ingestion System specialized in Apparel Manufacturing at PPJ Group.
+                Analyze the ATTACHED NEW SKETCH IMAGE and find the single closest matching historical garment style from the pool.
+                
+                STRICT APPAREL AUDIT RULES (IGNORE THE OUTLINE, FOCUS SOLELY ON INTERNAL CONSTRUCTION DETAILS):
+                1. WAISTBAND CONSTRUCTION (CẠP QUẦN): Look closely at the waistband stitches. 
+                   - If the new image shows a full elastic waistband (cạp chun co giãn toàn bộ, nhiều đường nhăn song song, NO belt loops, NO zipper fly), you MUST REJECT any historical styles that have belt loops (đai quần), front zipper fly (khóa kéo), or standard button closures.
+                2. POCKET TYPES & PLACEMENT (KẾT CẤU TÚI): Look at the internal pocket placement.
+                   - Distinguish clearly between Patch Pockets (túi ốp nổi lớn bên ngoài, túi hộp kiểu Cargo) and Slit/In-seam Pockets (túi mổ sườn phẳng). Do NOT match a clean plain front leg with a Cargo/Utility pocket design.
+                3. SEAM LINES & PANEL CUTS: Look inside the body lines.
+                
+                HISTORICAL POOL DATA:
+                {json.dumps(styles_pool_summary)}
+                
+                Select the single index that represents the exact match in internal technical stitching construction, NOT just the shorts frame.
+                Return a raw valid JSON object inside your response: {{"selected_pool_index": 0}}
+                """
                 
                 match_contents = [types.Part.from_text(text=match_prompt)]
                 if target_new_sketch_bytes:
@@ -1096,9 +1090,7 @@ if menu_selection == "🧵 BOM & Consumption Matrix":
                         st.session_state["matched_techpack"] = all_historical_styles[best_idx]
         except Exception as match_err:
             st.sidebar.error(f"Lỗi hệ thống đối soát hình ảnh: {str(match_err)}")
-# CHỈ CHẠY TOÀN BỘ KHỐI ĐỒ TRỰC QUAN VÀ CHAT KHI ĐANG Ở ĐÚNG MENU BOM & CONSUMPTION MATRIX
 if menu_selection == "🧵 BOM & Consumption Matrix":
-    # --- LUỒNG TRUY XUẤT BOM LỊCH SỬ THÔNG MINH ĐA LỚP CHỐNG LỆCH TÊN MÃ ---
     if st.session_state.get("matched_techpack"):
         try:
             target_style_name_bom = str(st.session_state["matched_techpack"].get("StyleName", "")).strip()
@@ -1131,7 +1123,6 @@ if menu_selection == "🧵 BOM & Consumption Matrix":
     matched_techpack = st.session_state.get("matched_techpack")
     bom_records = st.session_state.get("bom_records", [])
 
-    # 1. HIỂN THỊ ĐỐI SOÁT HÌNH ẢNH HAI BÊN - GIẢI MÃ NHỊ PHÂN TRÁNH LỖI PIL 
     st.markdown("### 🖼️ ĐỐI CHIẾU SỰ TƯƠNG ĐỒNG HÌNH ẢNH THIẾT KẾ (FLAT SKETCH)")
     img_col1, img_col2 = st.columns(2)
     with img_col1:
@@ -1177,9 +1168,8 @@ if menu_selection == "🧵 BOM & Consumption Matrix":
                 else:
                     st.info("⚠️ Không có ảnh vật lý nào khớp trên Cloud Storage.")
         else:
-            st.info("💡 Không tìm thấy mã tương đồng hình ảnh phù hợp trong kho lưu trữ.")
+            st.info("💡 Không tìm thấy mã tương đồng cấu trúc phù hợp trong kho lưu trữ.")
 
-    # 2. ĐƯA RA 2 BẢNG SO SÁNH THÔNG SỐ RẬP ĐỘC LẬP THEO QUY CHUẨN
     st.markdown("<br>### 📐 SO SÁNH HAI BẢNG THÔNG SỐ KỸ THUẬT RẬP MẪU", unsafe_allow_html=True)
     spec_col1, spec_col2 = st.columns(2)
 
@@ -1206,7 +1196,6 @@ if menu_selection == "🧵 BOM & Consumption Matrix":
             st.markdown("📋 **Bảng 2: Thông số Mã tương đồng trong kho**")
             st.info("Trống - Hệ thống tự động chuyển qua chế độ tính toán vector hình học rập mẫu mới.")
 
-    # Hiển thị bảng định mức BOM lịch sử sạch
     if matched_techpack and bom_records:
         st.markdown("<br>📦 **Chi Tiết Định Mức Định Hình (BOM Lịch Sử của Mã hàng cũ):**", unsafe_allow_html=True)
         formatted_bom = []
@@ -1222,7 +1211,6 @@ if menu_selection == "🧵 BOM & Consumption Matrix":
             })
         st.dataframe(pd.DataFrame(formatted_bom), use_container_width=True, hide_index=True)
 
-    # 3. LUỒNG HỘI THOẠI CHAT AI HỎI ĐÂU TRẢ LỜI ĐÓ GIỐNG CHATGPT TỰ NHIÊN
     st.markdown("<br><hr style='border:0.5px solid #CBD5E1;'>", unsafe_allow_html=True)
     st.markdown("### 💬 TRỢ LÝ AI PHÂN TÍCH ĐỊNH MỨC SẢN XUẤT (HỎI ĐÂU ĐÁP ĐÓ)")
 
@@ -1246,11 +1234,6 @@ if menu_selection == "🧵 BOM & Consumption Matrix":
                     detected_size=new_style_base_size
                 )
                 st.write(ai_reply)
-
-
-
-
-
 
 
 
