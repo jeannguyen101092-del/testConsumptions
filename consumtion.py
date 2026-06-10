@@ -943,131 +943,169 @@ if menu_selection == "🧵 BOM & Consumption Matrix":
 
     st.markdown("---")
     if has_file:
-        if new_style_base_size and new_style_base_size != "32":
-            st.info(f"📋 **CƠ SỞ ĐỐI SOÁT KIỂM TRA:** Mẫu mới số hóa mã hàng `{new_style_id_detected}` | Quy chuẩn kích thước hình học rập mẫu: **SIZE {new_style_base_size}**")
-        else:
-            st.info(f"📋 **CƠ SỞ ĐỐI SOÁT KIỂM TRA:** Đang áp dụng quy chuẩn kích thước hình học rập mẫu cơ sở: **SIZE 32 / M (Mặc định)**")
+    if new_style_base_size and new_style_base_size != "32":
+        st.info(f"📋 **CƠ SỞ ĐỐI SOÁT KIỂM TRA:** Mẫu mới số hóa mã hàng `{new_style_id_detected}` | Quy chuẩn kích thước hình học rập mẫu: **SIZE {new_style_base_size}**")
+    else:
+        st.info(f"📋 **CƠ SỞ ĐỐI SOÁT KIỂM TRA:** Đang áp dụng quy chuẩn kích thước hình học rập mẫu cơ sở: **SIZE 32 / M (Mặc định)**")
 
-        # =============================================================================
-        # CỖ MÁY ĐỐI SOÁT MỚI: TRÍCH XUẤT HÌNH ẢNH TRƯỚC -> THÔNG SỐ SAU & LẤY BOM LỊCH SỬ
-        # =============================================================================
-        matched_style_db = None
-        
-        with st.spinner("🧠 AI đang quét kho lưu trữ, đối soát cấu trúc hình học và bảng thông số..."):
-            try:
-                headers_db = {"apikey": SB_KEY, "Authorization": f"Bearer {SB_KEY}"}
-                url_db = f"{SB_URL.rstrip('/')}/rest/v1/thong_so_techpack"
-                query_params = {"select": "StyleName,Buyer,Category,BaseSize,DetailedMeasurements,SketchURL,sketch_vector", "limit": 100}
-                
-                db_res = requests.get(url_db, headers=headers_db, params=query_params, timeout=15)
-                all_historical_styles = db_res.json() if db_res.status_code == 200 else []
-                
-                if all_historical_styles:
-                    styles_pool_summary = []
-                    for idx, s in enumerate(all_historical_styles):
-                        styles_pool_summary.append({
-                            "pool_index": idx,
-                            "style_name": s.get("StyleName"),
-                            "sketch_features_vector": s.get("sketch_vector", ""),
-                            "specs": s.get("DetailedMeasurements", {})
-                        })
-                    
-                    match_prompt = f"""
-                    You are an expert Garment Pattern and Structural Ingestion Auditor at PPJ Group.
-                    Your mission is to find the MOST SIMILAR historical garment style from our database pool to match the newly uploaded style.
-                    
-                    CRITICAL SCORING WEIGHTS & PRIORITY RULES:
-                    1. PRIORITY 1 - VISUAL SHAPE & SILHOUETTE (70% Weight): Compare the attached new flat sketch image with the 'sketch_features_vector' description text of each style in the pool. Look for identical pocket cuts, curves, panel layouts, skort/pant architecture, and waistband closure types. Visual alignment is paramount.
-                    2. PRIORITY 2 - MEASUREMENT SPECS RATIO (30% Weight): Compare the new spec numbers provided below with the historical 'specs' dictionary of each style. Look for the closest base measurement matching.
-                    
-                    NEW STYLE DATA FOR MATCHING:
-                    - New Parsed Specs: {json.dumps(new_style_measurements_dict)}
-                    - Target Base Size: {new_style_base_size}
-                    
-                    HISTORICAL STYLES POOL DATA:
-                    {json.dumps(styles_pool_summary)}
-                    
-                    Analyze every style in the pool step by step based on the rules. Select the single best style that yields the highest cumulative score.
-                    OUTPUT REQUIREMENT: Return ONLY a raw valid JSON object with no markdown code blocks or wrapper, using this exact schema:
-                    {{"selected_pool_index": integer, "reasoning_vietnamese": "string"}}
-                    """
-                    
-                    match_contents = [types.Part.from_text(text=match_prompt)]
-                    if target_new_sketch_bytes:
-                        match_contents.append(types.Part.from_bytes(data=target_new_sketch_bytes, mime_type='image/jpeg'))
-                        
-                    # TRIỆT TIÊU LỖI 400: Bỏ config=, đưa về luồng gọi trơn, ép cấu trúc JSON cứng thông qua Prompt chỉ thị phía trên
-                    res_match = client.models.generate_content(
-                        model='gemini-2.5-flash',
-                        contents=match_contents
-                    )
-                    
-                    clean_match_json = res_match.text.strip().replace("```json", "").replace("```", "").strip()
-                    match_result = json.loads(clean_match_json)
-                    
-                    best_idx = match_result.get("selected_pool_index", -1)
-                    ai_reason = match_result.get("reasoning_vietnamese", "Đã tìm thấy mã tương đồng dựa trên phân tích cấu trúc hình học.")
-                    
-                    if 0 <= best_idx < len(all_historical_styles):
-                        st.session_state["matched_techpack"] = all_historical_styles[best_idx]
-                        st.success(f"🎯 AI MATCHING SUCCESS: {st.session_state['matched_techpack'].get('StyleName')}")
-                        with st.expander("🔍 Xem lập luận phân tích hình dáng và thông số của AI"):
-                            st.write(ai_reason)
-                            
-            except Exception as match_err:
-                st.sidebar.error(f"Lỗi hệ thống đối soát tự động: {str(match_err)}")
-
-        if st.session_state.get("matched_techpack"):
-            try:
-                target_style_name = st.session_state["matched_techpack"].get("StyleName", "").strip()
-                core_match = re.search(r'(\d+)', target_style_name)
-                search_term = core_match.group(0) if core_match else target_style_name
-                
-                url_bom = f"{SB_URL.rstrip('/')}/rest/v1/san_pham"
-                query_bom = {"select": "style_name,article_name,consumption_type,material_size,uom,consumption_value,notes"}
-                query_bom["style_name"] = f"ilike.*{search_term}*"
-                
-                res_bom = requests.get(url_bom, headers=headers_db, params=query_bom, timeout=15)
-                if res_bom.status_code == 200:
-                    st.session_state["bom_records"] = res_bom.json()
-            except Exception as bom_err:
-                st.session_state["bom_records"] = []
-
-    matched_techpack = st.session_state.get("matched_techpack")
-    bom_records = st.session_state.get("bom_records", [])
-
-    if matched_techpack:
-        target_style_name = matched_techpack.get("StyleName", "N/A")
-        
-        col1, col2 = st.columns(2)
-        with col1: 
-            if target_new_sketch_bytes is not None:
-                st.image(target_new_sketch_bytes, caption="Bản vẽ phẳng mẫu mới (AI quét sạch)", use_container_width=True)
-            else:
-                st.info("💡 Hệ thống đang liên kết cổng nhị phân ảnh vẽ phẳng sạch...")
-        with col2: 
-            if matched_techpack.get("SketchURL"): 
-                st.image(matched_techpack["SketchURL"], caption=f"Ảnh Sketch gốc lưu trong kho: {target_style_name}", use_container_width=True)
-
-        st.subheader("📦 Chi Tiết Định Mức Nguyên Phụ Liệu Gốc trong kho (BOM)")
-        if bom_records:
-            formatted_bom = []
-            for r in bom_records:
-                def clean_nan_field(v):
-                    return "" if (not v or str(v).lower() in ["nan", "none", "null"]) else str(v).strip()
-                
-                formatted_bom.append({
-                    "Loại nguyên vật liệu": clean_nan_field(r.get("consumption_type")),
-                    "Chi tiết vật tư (Article)": clean_nan_field(r.get("article_name")),
-                    "Khổ / Cỡ vật tư": clean_nan_field(r.get("material_size")),
-                    "Định mức tinh (Net)": clean_nan_field(r.get("consumption_value")),
-                    "Đơn vị tính (UOM)": clean_nan_field(r.get("uom")),
-                    "Ghi chú phân bổ": clean_nan_field(r.get("notes"))
-                })
+    # =============================================================================
+    # CỖ MÁY ĐỐI SOÁT MỚI: QUÉT THỊ GIÁC ĐA ĐIỂM (COMPASS APPAREL VISION TRỌNG SỐ 100%)
+    # =============================================================================
+    matched_techpack = None
+    
+    with st.spinner("🧠 Hệ thống thị giác máy tính đang quét kết cấu phom dáng Flat Sketch..."):
+        try:
+            headers_db = {"apikey": SB_KEY, "Authorization": f"Bearer {SB_KEY}"}
+            url_db = f"{SB_URL.rstrip('/')}/rest/v1/thong_so_techpack"
+            query_params = {"select": "StyleName,Buyer,Category,BaseSize,DetailedMeasurements,SketchURL,sketch_vector", "limit": 100}
             
-            st.dataframe(pd.DataFrame(formatted_bom), use_container_width=True, hide_index=True)
+            db_res = requests.get(url_db, headers=headers_db, params=query_params, timeout=15)
+            all_historical_styles = db_res.json() if db_res.status_code == 200 else []
+            
+            if all_historical_styles:
+                styles_pool_summary = []
+                for idx, s in enumerate(all_historical_styles):
+                    styles_pool_summary.append({
+                        "pool_index": idx,
+                        "style_name": s.get("StyleName"),
+                        "sketch_features_vector": s.get("sketch_vector", "")
+                    })
+                
+                # SIÊU PROMPT THỊ GIÁC MÁY TÍNH: Ép AI nhìn phom dáng vẽ phẳng giống 100% mắt người
+                match_prompt = f"""
+                You are a Computer Vision Ingestion System specialized in Apparel Manufacturing.
+                Your sole task is to analyze the ATTACHED NEW FLAT SKETCH IMAGE and select the single closest matching style from the historical pool.
+                
+                STRICT EXTRACTION RULES (LOOK AT THE IMAGE LIKE A HUMAN GARMENT MERCHANDISER):
+                1. SILHOUETTE & SHAPE: Match the exact leg opening flow, width of thighs, and overall drape structure (e.g., Slim vs Baggy Curve vs Regular Straight).
+                2. WAISTBAND & CLOSURE: Match the waistband shape (straight vs contoured), button fly, zip fly, and placement of belt loops.
+                3. POCKETING SYSTEM: Strictly check the front pocket style (scoop jeans pocket vs slant chinos pocket) and back pocket types (patch pockets with specific stitching vs welt pockets).
+                4. PANELING & SEAMS: Scan for panels, back yoke lines, side seams, and stitching features.
+                
+                HISTORICAL POOL DATA (Describing the shapes already in store):
+                {json.dumps(styles_pool_summary)}
+                
+                Compare the attached image visual cues against each 'sketch_features_vector' text description. 
+                Select the index that represents the identical or most visually similar garment.
+                Return ONLY a raw valid JSON object with no markdown code blocks or wrapper text:
+                {{"selected_pool_index": integer}}
+                """
+                
+                match_contents = [types.Part.from_text(text=match_prompt)]
+                if target_new_sketch_bytes:
+                    match_contents.append(types.Part.from_bytes(data=target_new_sketch_bytes, mime_type='image/jpeg'))
+                    
+                res_match = client.models.generate_content(model='gemini-2.5-flash', contents=match_contents)
+                clean_match_json = res_match.text.strip().replace("```json", "").replace("```", "").strip()
+                match_result = json.loads(clean_match_json)
+                
+                best_idx = match_result.get("selected_pool_index", -1)
+                if 0 <= best_idx < len(all_historical_styles):
+                    st.session_state["matched_techpack"] = all_historical_styles[best_idx]
+                        
+        except Exception as match_err:
+            st.sidebar.error(f"Lỗi hệ thống đối soát hình ảnh: {str(match_err)}")
+
+    # --- LUỒNG TRUY XUẤT BOM LỊCH SỬ TỰ ĐỘNG ---
+    if st.session_state.get("matched_techpack"):
+        try:
+            target_style_name = st.session_state["matched_techpack"].get("StyleName", "").strip()
+            core_match = re.search(r'(\d+)', target_style_name)
+            search_term = core_match.group(0) if core_match else target_style_name
+            
+            url_bom = f"{SB_URL.rstrip('/')}/rest/v1/san_pham"
+            query_bom = {"select": "style_name,article_name,consumption_type,material_size,uom,consumption_value,notes"}
+            query_bom["style_name"] = f"ilike.*{search_term}*"
+            
+            res_bom = requests.get(url_bom, headers=headers_db, params=query_bom, timeout=15)
+            if res_bom.status_code == 200:
+                st.session_state["bom_records"] = res_bom.json()
+        except Exception:
+            st.session_state["bom_records"] = []
+# Trích xuất dữ liệu từ session_state hiển thị đồ họa trực diện
+matched_techpack = st.session_state.get("matched_techpack")
+bom_records = st.session_state.get("bom_records", [])
+
+if has_file:
+    # 1. HIỂN THỊ ĐỐI SOÁT HÌNH ẢNH HAI BÊN (MỚI ↔️ CŨ)
+    st.markdown("### 🖼️ ĐỐI CHIẾU SỰ TƯƠNG ĐỒNG HÌNH ẢNH THIẾT KẾ (FLAT SKETCH)")
+    img_col1, img_col2 = st.columns(2)
+    with img_col1:
+        if target_new_sketch_bytes is not None:
+            st.image(target_new_sketch_bytes, caption=f"Mẫu mới tải lên ({new_style_id_detected})", use_container_width=True)
+    with img_col2:
+        if matched_techpack and matched_techpack.get("SketchURL"):
+            st.image(matched_techpack["SketchURL"], caption=f"Mã tương đồng tìm thấy trong kho ({matched_techpack.get('StyleName')})", use_container_width=True)
         else:
-            st.warning("⚠️ Không tìm thấy bảng chi tiết phụ liệu BOM lịch sử của mã hàng đối chiếu này trong kho dữ liệu.")
+            st.info("💡 Không tìm thấy mã tương đồng hình ảnh phù hợp trong kho lưu trữ.")
+
+    # 2. ĐƯA RA 2 BẢNG SO SÁNH THÔNG SỐ RẬP ĐỘC LẬP
+    st.markdown("<br>### 📐 SO SÁNH HAI BẢNG THÔNG SỐ KỸ THUẬT RẬP MẪU", unsafe_allow_html=True)
+    spec_col1, spec_col2 = st.columns(2)
+    
+    with spec_col1:
+        st.markdown(f"📊 **Bảng 1: Thông số Mẫu mới nạp ({new_style_base_size})**")
+        if new_style_measurements_dict:
+            df_new_spec = pd.DataFrame(list(new_style_measurements_dict.items()), columns=["Vị trí đo (POM Description)", "Thông số mới"])
+            st.dataframe(df_new_spec, use_container_width=True, hide_index=True)
+        else:
+            st.caption("Không có dữ liệu thông số rập mẫu mới.")
+            
+    with spec_col2:
+        if matched_techpack:
+            old_style_title = matched_techpack.get("StyleName", "N/A")
+            old_size_title = matched_techpack.get("BaseSize", "N/A")
+            st.markdown(f"📋 **Bảng 2: Thông số Mã trong kho ({old_style_title}) [SIZE {old_size_title}]**")
+            old_specs = matched_techpack.get("DetailedMeasurements", {})
+            if old_specs:
+                df_old_spec = pd.DataFrame(list(old_specs.items()), columns=["Vị trí đo (POM Description)", "Thông số cũ"])
+                st.dataframe(df_old_spec, use_container_width=True, hide_index=True)
+            else:
+                st.caption("Mã hàng tương đồng này không có dữ liệu thông số rập chi tiết.")
+        else:
+            st.markdown("📋 **Bảng 2: Thông số Mã tương đồng trong kho**")
+            st.info("Trống - Hệ thống tự động chuyển qua chế độ tính toán vector hình học rập mẫu mới.")
+
+    # Hiển thị bảng định mức BOM lịch sử của mã hàng cũ
+    if matched_techpack and bom_records:
+        st.markdown("<br>📦 **Chi Tiết Định Mức Định Hình (BOM Lịch Sử của Mã hàng cũ):**", unsafe_allow_html=True)
+        formatted_bom = []
+        for r in bom_records:
+            def clean_nan(v): return "" if (not v or str(v).lower() in ["nan", "none", "null"]) else str(v).strip()
+            formatted_bom.append({
+                "Loại nguyên vật liệu": clean_nan(r.get("consumption_type")),
+                "Chi tiết vật tư (Article)": clean_nan(r.get("article_name")),
+                "Khổ / Cỡ vật tư": clean_nan(r.get("material_size")),
+                "Định mức gốc": clean_nan(r.get("consumption_value")),
+                "UOM": clean_nan(r.get("uom"))
+            })
+        st.dataframe(pd.DataFrame(formatted_bom), use_container_width=True, hide_index=True)
+
+    # 3. LUỒNG HỘI THOẠI CHAT AI HỎI ĐÂU TRẢ LỜI ĐÓ GIỐNG CHATGPT
+    st.markdown("<br><hr style='border:0.5px solid #CBD5E1;'>", unsafe_allow_html=True)
+    st.markdown("### 💬 TRỢ LÝ AI PHÂN TÍCH ĐỊNH MỨC SẢN XUẤT (HỎI ĐÂU ĐÁP ĐÓ)")
+    
+    for chat in st.session_state["consumption_chat_history"]:
+        with st.chat_message("user"): st.write(chat["user"])
+        with st.chat_message("assistant"): st.write(chat["ai"])
+        
+    if user_query := st.chat_input("Nhập yêu cầu phân tích (Ví dụ: Tính định mức vải chính khi co rút ngang 2%, dọc 3%)..."):
+        with st.chat_message("user"):
+            st.write(user_query)
+            
+        with st.chat_message("assistant"):
+            with st.spinner("🤖 AI đang phân tích dữ liệu và lập luận tính toán..."):
+                ai_response_text = ai_consumption_analyst_engine(
+                    client=client,
+                    user_message=user_query,
+                    matched_techpack=matched_techpack,
+                    bom_records=bom_records,
+                    new_style_measurements=new_style_measurements_dict,
+                    target_new_sketch_bytes=target_new_sketch_bytes,
+                    detected_size=new_style_base_size
+                )
+                st.write(ai_response_text)
+        st.rerun()
 
 
 
