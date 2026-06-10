@@ -741,7 +741,7 @@ try:
 except ImportError:
     pass
 
-# HÀM QUY ĐỔI PHÂN SỐ NGÀNH MAY CHUẨN (Đã sửa lỗi cú pháp dải mảng parts)
+# HÀM QUY ĐỔI PHÂN SỐ NGÀNH MAY CHUẨN
 def parse_fraction(val_str):
     if not val_str: 
         return 0.0
@@ -820,21 +820,26 @@ def ai_consumption_analyst_engine(client, user_message, matched_techpack, bom_re
         chat_contents.append(types.Part.from_bytes(data=target_new_sketch_bytes, mime_type='image/jpeg'))
 
     try:
-        response = client.models.generate_content(model='gemini-2.5-flash', contents=chat_contents)
+        # CHUẨN HÓA: Hàm phân tích định mức chat tự do trả về text thường, loại bỏ cấu hình config thừa dễ lỗi 400
+        response = client.models.generate_content(
+            model='gemini-2.5-flash', 
+            contents=chat_contents
+        )
         ai_reply = response.text if response.text else "Hệ thống AI không thể đưa ra phân tích."
         st.session_state["consumption_chat_history"].append({"user": user_message, "ai": ai_reply})
         return ai_reply
     except Exception as e:
         return f"🚨 Lỗi cổng phân tích định mức: {str(e)}"
 
-# Đồng bộ hệ thống bốc chìa khóa API bảo mật chính quy từ Secrets
+# Bộ bốc chìa khóa API đồng bộ chính quy
 if "get_secure_gemini_key" in globals():
     gemini_key = get_secure_gemini_key()
 else:
-    gemini_key = st.secrets.get("GEMINI_API_KEY", "")
+    gemini_key = st.secrets.get("GEMINI_API_KEY", "").strip()
 
 if gemini_key:
     client = genai.Client(api_key=gemini_key, http_options=types.HttpOptions(api_version='v1'))
+
 new_style_id_detected = "UNKNOWN_STYLE"
 new_style_category_detected = ""
 new_style_fabric_detected = "UNKNOWN_FABRIC"
