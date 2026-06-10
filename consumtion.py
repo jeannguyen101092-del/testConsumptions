@@ -100,15 +100,12 @@ def get_secure_gemini_key():
     return None
 def save_to_supabase_techpack_table(payload_data, raw_file_bytes=None, file_name=""):
     """
-    Hàm xử lý đồng bộ dữ liệu nạp kho chuẩn nghiệp vụ PPJ Group.
-    🎯 SỬA LỖI LỆCH TÊN FILE: ÉP hệ thống dùng đúng mã hàng mới tải lên để đặt tên file ảnh,
-    cấm tuyệt đối AI tự ý ghi đè tên theo mã hàng cũ đối chứng. Bảo đảm ảnh mã mới hiện lên Storage 100%.
+    Hàm xử lý đồng bộ dữ liệu nạp kho của Chức năng 1.
+    🎯 ĐÃ VÁ LỖI CHÍ MẠNG URL: Tách biệt URL đẩy ảnh (không chứa /public/) và URL hiển thị 
+    (chứa /public/) đúng quy chuẩn API Supabase để triệt tiêu lỗi nuốt ảnh, giúp kho hết trống.
     """
     try:
-        # ⚡ LUỒNG SỬA LỖI MẤU CHỐT: Ưu tiên bốc mã hàng thực tế từ file_name hoặc uploader để chống ghi đè nhầm mã cũ
         style_name_db = payload_data.get("style_number_parsed", "").strip()
-        
-        # Nếu AI bốc sai hoặc trả về UNKNOWN, dùng thuật toán Regex cắt chuỗi số trực tiếp từ tên file PDF tải lên
         if not style_name_db or style_name_db == "UNKNOWN":
             file_style_match = re.search(r'([a-zA-Z0-9]+-[a-zA-Z0-9]+)', str(file_name))
             if file_style_match:
@@ -121,7 +118,7 @@ def save_to_supabase_techpack_table(payload_data, raw_file_bytes=None, file_name
         public_image_url = ""
         image_data = None
 
-        # 1. Luồng trích xuất dữ liệu hình ảnh phẳng (Sketch) từ tệp PDF bản vẽ kỹ thuật
+        # 1. Luồng trích xuất dữ liệu hình ảnh phẳng từ tệp PDF bản vẽ kỹ thuật
         if raw_file_bytes and file_name.lower().endswith('.pdf'):
             try:
                 import pdfplumber
@@ -142,7 +139,7 @@ def save_to_supabase_techpack_table(payload_data, raw_file_bytes=None, file_name
                             min_text_len = 99999
                             for i in range(min(4, len(pdf.pages))):
                                 txt = pdf.pages[i].extract_text() or ""
-                                c_count = sum(1 for w in tech_words if w in txt.upper())
+                                c_count = sum(1 for w in txt.upper() if w in tech_words)
                                 if c_count < 3 and len(txt) < min_text_len:
                                     min_text_len = len(txt)
                                     best_idx = i
@@ -162,7 +159,7 @@ def save_to_supabase_techpack_table(payload_data, raw_file_bytes=None, file_name
             except Exception:
                 pass
 
-        # 2. ĐẨY TẬP TIN HÌNH ẢNH SẢN PHẨM LÊN SUPABASE STORAGE KHO_ANH (ĐỒNG BỘ CHỮ HOA)
+        # 2. ĐỂY TẬP TIN HÌNH ẢNH SẢN PHẨM LÊN SUPABASE STORAGE KHO_ANH (ĐÃ VÁ CHUẨN URL GỐC)
         if image_data:
             try:
                 storage_headers = {
@@ -171,16 +168,20 @@ def save_to_supabase_techpack_table(payload_data, raw_file_bytes=None, file_name
                     "Content-Type": "image/jpeg", 
                     "x-upsert": "true"
                 }
-                # Lưu file giữ nguyên kết cấu định danh chữ hoa chuẩn chính ngạch có dấu gạch ngang
-                storage_url = f"{SB_URL.rstrip('/')}/storage/v1/object/public/kho_anh/{style_name_db}.jpg"
+                # Khóa trục tên file viết hoa sạch có dấu gạch ngang chuẩn chỉnh
+                style_clean_filename = re.sub(r'[^a-zA-Z0-9_-]', '', style_name_db).upper()
+                
+                # ⚡ CHỮA LỖI GỐC CHÍ MẠNG: URL upload bắt buộc ghi /object/kho_anh/ (Cấm chứa chữ /public/)
+                storage_url = f"{SB_URL.rstrip('/')}/storage/v1/object/kho_anh/{style_clean_filename}.jpg"
                 
                 upload_res = requests.post(storage_url, headers=storage_headers, data=image_data, timeout=20)
                 if 200 <= upload_res.status_code <= 299:
-                    public_image_url = f"{SB_URL.rstrip('/')}/storage/v1/object/public/kho_anh/{style_name_db}.jpg"
+                    # Link Public URL này phục vụ riêng cho mục hiển thị Chức năng 3 gọi ra màn hình
+                    public_image_url = f"{SB_URL.rstrip('/')}/storage/v1/object/public/kho_anh/{style_clean_filename}.jpg"
             except Exception: 
                 pass
 
-        # 3. LUỒNG KÍCH HOẠT MẮT THẦN AI VISION: TRÍCH XUẤT CHUỖI ĐẶC TRƯNG HÌNH HỌC
+        # 3. LUỒNG KÍCH HOẠT MẮT THẦN AI VISION: TRÍCH XUẤT CHUỒI ĐẶC TRƯNG HÌNH HỌC
         measurements_raw = payload_data.get("measurements", {})
         visual_description_str = f"GARMENT TYPE: {payload_data.get('category', 'Garment Pants')}. Specs profile summary: " + ", ".join([f"{k}:{v}" for k, v in list(measurements_raw.items())[:6]])
         
