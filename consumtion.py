@@ -1254,8 +1254,8 @@ elif menu_selection == "🛒 Purchase Consumption":
                         st.warning("⏳ Đang đợi AI xử lý hoặc tệp Techpack rỗng.")
                                 # --- 🛠️ KHỐI CHAT AI VÀ CỖ MÁY TOÁN HỌC TÍNH TOÁN ĐẶT HÀNG NÂNG CAO ---
                 st.markdown("<br><hr style='border:0.5px solid #E2E8F0;'>", unsafe_allow_html=True)
-                st.markdown("### 💬 TRỢ LÝ AI TÍNH TOÁN ĐỊNH MỨC ĐẶT HÀNG VẬT TƯ")
-                st.caption("Nhập chỉ thị định mức vải/phụ liệu của size cơ bản để tính toán tổng số lượng vật tư cần mua dựa trên ma trận đơn hàng SBD.")
+                st.markdown("### 💬 TRỢ LÝ AI TÍNH TOÁN ĐỊNH MỨC TRUNG BÌNH ĐƠN HÀNG")
+                st.caption("Nhập định mức của size cơ bản. AI sẽ phân tích độ lệch thông số (Grading) của toàn bộ dải size để suy ra định mức từng size, từ đó tính ra Định mức trung bình chính xác cho cả đơn hàng.")
                 
                 if "purchase_chat_history" not in st.session_state:
                     st.session_state["purchase_chat_history"] = []
@@ -1266,37 +1266,46 @@ elif menu_selection == "🛒 Purchase Consumption":
                         if "df_result" in msg:
                             st.dataframe(msg["df_result"], use_container_width=True)
                         if "excel_bytes" in msg:
-                            st.download_button(label="📥 Tải Đơn Đặt Hàng Vật Tư (Excel)", data=msg["excel_bytes"], file_name="Purchase_Order_Report.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                            st.download_button(label="📥 Tải Báo Cáo Định Mức Chi Tiết (Excel)", data=msg["excel_bytes"], file_name="AI_Consumption_Report.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
                 
-                if user_instruction := st.chat_input("Nhập định mức (Ex: Định mức vải chính là 1.04 yds, tính tổng lượng vải đặt mua)..."):
+                if user_instruction := st.chat_input("Nhập định mức size gốc (Ví dụ: Định mức size 8 là 1.04 yds, tính định mức trung bình toàn đơn hàng)..."):
                     with st.chat_message("user"):
                         st.write(user_instruction)
                     st.session_state["purchase_chat_history"].append({"role": "user", "content": user_instruction})
                     
                     with st.chat_message("assistant"):
-                        with st.spinner("🤖 Trí tuệ nhân tạo AI đang phân tích dữ liệu và lập bảng tính toán vật tư..."):
+                        with st.spinner("🤖 AI đang phân tích tỷ lệ nhảy size hình học và tính toán định mức trung bình..."):
                             gemini_key = get_secure_gemini_key()
                             client_ai = genai.Client(api_key=gemini_key)
                             
                             ai_context_prompt = f"""
-                            You are a professional Textile Purchasing Assistant.
-                            We have parsed the following order quantity data from the SBD sheet:
+                            You are an expert Apparel Production Planner and Costing Engineer. 
+                            We have parsed two critical source documents for this style:
+                            
+                            1. FULL SIZE GRADING MATRIX FROM TECHPACK (Thông số hình học các size):
+                            {json.dumps(tp_data.get('full_size_matrix', {})) if tp_data else "{}"}
+                            Base Size of this Techpack: {tp_data.get('base_size_name', 'N/A')}
+                            
+                            2. ORDER QUANTITIES MATRIX FROM SBD (Số lượng đặt của từng size):
                             {json.dumps(sbd_data.get('size_breakdown', {})) if sbd_data else "{}"}
                             
-                            The user provided this instruction: "{user_instruction}"
+                            The user prompt is: "{user_instruction}"
                             
-                            YOUR EXACT MATHEMATICAL MISSION:
-                            1. Extract the base consumption value (định mức) from the user's input text (e.g., 1.04).
-                            2. Apply this EXACT SAME consumption value uniformly to EVERY single size listed in the SBD dataset. Do not scale, jump, or change the consumption value across sizes.
-                            3. Multiply this uniform consumption value by each size's corresponding order quantity to calculate the "Tổng lượng mua đặt hàng" for that size.
-                            4. DO NOT add any default wastage or loss allowance percentages. Keep it as pure net calculations.
+                            YOUR EXPERT MATHEMATICAL & TEXTILE MISSION:
+                            1. Extract the base consumption value (định mức size gốc) and its target size from the user input (e.g., 1.04 yds for Size 8).
+                            2. Look closely at the FULL SIZE GRADING MATRIX from Techpack. Analyze how key fabric-consuming specs (like Contour Waist, Low Hip, Skirt Length, Front/Back Rise, Leg Opening) change (increase/decrease) as the size scales up to size 20 or down to size 000.
+                            3. Calculate the proportional geometric fabric surface area difference for EACH size relative to the Base Size. 
+                            4. Extrapolate and assign a specific calculated consumption (Định mức phân bổ) for EACH size based on these grading scaling factors. For example, if Size 14 has larger waist/length specs than Size 8, its consumption must be proportionally higher than 1.04. Smaller sizes must be lower.
+                            5. Multiply each size's calculated consumption by its respective PO quantity from the SBD data to find the Net Requirement (Lượng vải cần mua tinh) for each size.
+                            6. CRITICAL CORE REQUIREMENT: Calculate the OVERALL WEIGHTED AVERAGE CONSUMPTION (Định mức trung bình bình quyền gia quyền của cả đơn hàng) using this formula:
+                               Weighted Average Consumption = (Sum of Net Requirements for all sizes) / (Total PO Quantity of all sizes)
+                            7. DO NOT add any default 3% wastage allowance. Focus on the raw mathematical consumption.
                             
-                            Provide a brief professional summary response in Vietnamese confirming the base consumption used and the total quantity.
-                            Then, you MUST output a final raw JSON block at the very end of your response inside a ```json ... ``` container.
-                            The JSON schema must be exactly a list of objects like this:
+                            Provide a professional summary response in Vietnamese. You MUST prominently state the final calculated "Định mức trung bình toàn đơn hàng" (Weighted Average Consumption). Explain how the grading spec ratios affected the final average compared to the base size.
+                            Then, output a final raw JSON block inside a ```json ... ``` container matching this schema:
                             ```json
                             [
-                              {{"Kích thước (Size/Inseam)": "string", "Số lượng PO (Pcs)": 100, "Định mức (Yds/Pcs)": 1.04, "Tổng lượng mua đặt hàng": 104.0}}
+                              {{"Kích thước (Size/Inseam)": "string", "Số lượng PO (Pcs)": 100, "Định mức phân bổ (Yds/Pcs)": 1.08, "Tổng lượng vải cần (Yds)": 108.0}}
                             ]
                             ```
                             """
@@ -1310,12 +1319,11 @@ elif menu_selection == "🛒 Purchase Consumption":
                                 ai_text = response_ai.text
                                 json_block = ""
                                 
-                                # Phân tách chuỗi an toàn, sửa lỗi sập mạng 'list object has no attribute split'
                                 if "```json" in ai_text:
                                     parts = ai_text.split("```json")
-                                    text_desc = parts[0] # Lấy chuỗi mô tả chữ bằng tiếng Việt
+                                    text_desc = parts[0]
                                     raw_json_part = parts[1].split("```")
-                                    json_block = raw_json_part[0].strip() # Lấy khối JSON sạch
+                                    json_block = raw_json_part[0].strip()
                                 else:
                                     text_desc = ai_text
                                     
@@ -1329,14 +1337,14 @@ elif menu_selection == "🛒 Purchase Consumption":
                                     
                                     xl_buf = io.BytesIO()
                                     with pd.ExcelWriter(xl_buf, engine='xlsxwriter') as writer:
-                                        df_res.to_excel(writer, index=False, sheet_name='Purchase_Order')
-                                        ws = writer.sheets['Purchase_Order']
+                                        df_res.to_excel(writer, index=False, sheet_name='Consumption_Plan')
+                                        ws = writer.sheets['Consumption_Plan']
                                         for i, col in enumerate(df_res.columns):
                                             ws.set_column(i, i, max(df_res[col].astype(str).map(len).max(), len(col)) + 4)
                                     xl_buf.seek(0)
                                     xl_bytes = xl_buf.getvalue()
                                     
-                                    st.download_button(label="📥 Tải Đơn Đặt Hàng Vật Tư (Excel)", data=xl_bytes, file_name=f"AI_Purchase_Order_Report.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                                    st.download_button(label="📥 Tải Báo Cáo Định Mức Chi Tiết (Excel)", data=xl_bytes, file_name=f"AI_Consumption_Report.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
                                     new_msg_data["excel_bytes"] = xl_bytes
                                     
                                 st.session_state["purchase_chat_history"].append(new_msg_data)
