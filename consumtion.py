@@ -238,7 +238,6 @@ with tab1:
 with tab2:
     st.markdown('<div class="component-title-box">Bài toán 2: Tính Định mức Đặt hàng (Dựa theo Rập, Tài liệu mới, SBD)</div>', unsafe_allow_html=True)
     
-    # Khu vực Upload dữ liệu đầu vào của phân hệ Đặt hàng sản xuất
     col1, col3, col4 = st.columns(3)
     with col1:
         st.file_uploader("📁 Upload File Rập hình học (.DXF / .PLT / .AAMA)", key="rap_b2")
@@ -247,7 +246,7 @@ with tab2:
     with col4:
         st.file_uploader("📁 Upload Bảng tỷ lệ cỡ vóc (Size Breakdown - SBD)", key="sbd_b2")
 
-    # + So sánh T/S với báo giá hoặc mã cũ (Hiển thị gọn, đẹp, làm nổi bật điểm thay đổi)
+    # + So sánh T/S với báo giá hoặc mã cũ (Gọn, đẹp, nổi bật điểm thay đổi)
     st.markdown('<div class="card-container"><h5>🔄 ĐỐI CHIẾU THÔNG SỐ VỊ TRÍ ĐO: BÁO GIÁ vs SẢN XUẤT THỰC TẾ</h5>', unsafe_allow_html=True)
     ts_b2_df = pd.DataFrame({
         "Vị trí đo (POM)": ["Dài quần", "Vòng eo", "Vòng mông", "Vòng đùi", "Rộng ống"],
@@ -272,7 +271,7 @@ with tab2:
     st.dataframe(bom_b2_df, use_container_width=True, hide_index=True)
     st.markdown("</div>", unsafe_allow_html=True)
 
-    # + Cho bảng tính tác nghiệp tổng (Phân bổ ma trận số lượng cắt theo cỡ vóc SBD & tổng nhu cầu mua)
+    # + Cho bảng tính tác nghiệp tổng (Phân bổ số lượng cắt theo cỡ vóc SBD)
     st.markdown('<div class="card-container"><h5>🧮 BẢNG TÍNH TÁC NGHIỆP TỔNG VÀ SẢN LƯỢNG MUA (SIZE MATRIC BUYING)</h5>', unsafe_allow_html=True)
     tag_nghiep_df = pd.DataFrame({
         "Màu sắc (Colorway)": ["Dark Wash (Xanh đậm)", "Light Wash (Xanh nhạt)"],
@@ -295,12 +294,13 @@ with tab2:
         - <strong>Rủi ro Shading (Lệch màu vải):</strong> Đơn hàng Dark Wash có sản lượng tập trung lớn ở các size trung bình (Size 30, 31). Tổ trải vải cần thực hiện gom nhóm cây vải cùng ánh màu trước khi lên bàn cắt để tránh lỗi khác màu trên cùng một sản phẩm.
     </div>
     """, unsafe_allow_html=True)
+
+
 # --- BÀI TOÁN 3: LẬP TÁC NGHIỆP CẮT ---
 with tab3:
     st.markdown('<div class="component-title-box">Bài toán 3: Lập Tác nghiệp Cắt (Cutting Room Planning)</div>', unsafe_allow_html=True)
     st.info("💡 Hệ thống đang đồng bộ số liệu tự động từ bảng tỷ lệ cỡ vóc (SBD) của Bài toán 2 để tối ưu hóa bàn cắt.")
 
-    # Khung cấu hình kỹ thuật cho phòng cắt
     st.markdown('<div class="card-container"><h5>⚙️ CẤU HÌNH THÔNG SỐ BÀN CẮT</h5>', unsafe_allow_html=True)
     col_c1, col_c2, col_c3 = st.columns(3)
     with col_c1:
@@ -311,7 +311,6 @@ with tab3:
         phuong_thuc_trai = st.selectbox("Phương thức trải vải:", ["Trải êm thẳng hàng (Face up)", "Trải úp mặt (Face to Face)"], key="method_b3")
     st.markdown("</div>", unsafe_allow_html=True)
 
-    # Bảng phân bổ phối ghép sơ đồ bàn cắt (Ratio Mixing)
     st.markdown('<div class="card-container"><h5>✂️ PHƯƠNG ÁN PHỐI GHÉP SƠ ĐỒ VÀ PHÂN BỔ BÀN CẮT TỐI ƯU</h5>', unsafe_allow_html=True)
     marker_plan_df = pd.DataFrame({
         "Mã sơ đồ": ["SD_PPJ_01", "SD_PPJ_02", "SD_PPJ_03"],
@@ -325,7 +324,6 @@ with tab3:
     st.dataframe(marker_plan_df, use_container_width=True, hide_index=True)
     st.markdown("</div>", unsafe_allow_html=True)
 
-    # Khối ghi chú rủi ro phòng cắt
     st.markdown(f"""
     <div class="idle-alert-box" style="background-color: #FFFBEB; border-left: 5px solid #D97706; color: #92400E;">
         <strong>⚠️ AI COMMENT & LƯU Ý TÁC NGHIỆP TRẢI CẮT:</strong><br>
@@ -338,7 +336,6 @@ with tab3:
 # --- BÀI TOÁN 4: PHÂN TÍCH RỦI RO ĐỊNH MỨC THEO TỪNG KHÁCH HÀNG ---
 with tab4:
     st.markdown('<div class="component-title-box">Bài toán 4: Phân tích Rủi ro Định mức theo từng Khách hàng sau khi có định mức SX</div>', unsafe_allow_html=True)
-    
     st.warning("⚠️ Phân hệ nghiên cứu chuyên sâu (R&D): Module này yêu cầu liên kết API trực tiếp để truy vấn lịch sử dữ liệu đơn hàng.")
     
     st.markdown("""
@@ -348,4 +345,3 @@ with tab4:
         <p>2. <strong>Học máy và Dự báo (Machine Learning):</strong> Hệ thống tự động phân tích hành vi chỉnh sửa thông số của khách hàng qua từng vòng ký duyệt mẫu (Sample Rounds), từ đó đưa ra tỷ lệ biên độ an toàn (Buffer %) tối ưu nhất khi lập định mức sản xuất thực tế nhằm triệt tiêu rủi ro thiếu hụt vải trên chuyền.</p>
     </div>
     """, unsafe_allow_html=True)
-
