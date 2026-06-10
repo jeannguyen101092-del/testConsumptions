@@ -997,7 +997,6 @@ with st.spinner("🧠 Hệ thống thị giác máy tính đang quét kết cấ
             res_match = client.models.generate_content(model='gemini-2.5-flash', contents=match_contents)
             ai_raw_text = res_match.text.strip()
             
-            # Bộ lọc bóc tách JSON bằng Regex dự phòng an toàn tuyệt đối, triệt tiêu lỗi Line 1 Column 1
             json_block_clean = ""
             match_json_obj = re.search(r'\{\s*"selected_pool_index"\s*:\s*\d+\s*\}', ai_raw_text)
             
@@ -1020,34 +1019,29 @@ with st.spinner("🧠 Hệ thống thị giác máy tính đang quét kết cấ
     except Exception as match_err:
         st.sidebar.error(f"Lỗi hệ thống đối soát hình ảnh: {str(match_err)}")
 
-# --- LUỒNG TRUY XUẤT BOM LỊCH SỬ CHÍNH XÁC TUYỆT ĐỐI THEO TÊN MÃ (STRICT EXACT eq) ---
+# --- LUỒNG TRUY XUẤT BOM LỊCH SỬ CHÍNH XÁC TUYỆT ĐỐI 100% (KHÓA CỨNG AN TOÀN ĐỐI SOÁT) ---
 if st.session_state.get("matched_techpack"):
     try:
-        target_style_name = st.session_state["matched_techpack"].get("StyleName", "").strip()
+        # Lấy chính xác tên mã tương đồng (Ví dụ: R09-490416)
+        target_style_name = str(st.session_state["matched_techpack"].get("StyleName", "")).strip()
+        
         url_bom = f"{SB_URL.rstrip('/')}/rest/v1/san_pham"
-        query_bom = {"select": "style_name,article_name,consumption_type,material_size,uom,consumption_value,notes"}
         
-        # SỬA LỖI MẤU CHỐT: Sử dụng toán tử eq bằng chính xác để cấm trộn lẫn mã hàng khác vào bảng BOM
-        query_bom["style_name"] = f"eq.{target_style_name}"
+        # CHỮA LỖI CHÍ MẠNG: Sử dụng toán tử eq chính xác tuyệt đối 100% cho Database
+        # Loại bỏ hoàn toàn luồng quét ilike mờ để ngăn cấm triệt để việc bốc nhầm mã vải BBB03940 của đơn hàng khác
+        query_bom = {
+            "select": "style_name,article_name,consumption_type,material_size,uom,consumption_value,notes",
+            "style_name": f"eq.{target_style_name}"
+        }
         
-        res_bom = requests.get(url_bom, headers=headers, params=query_bom, timeout=15)
+        res_bom = requests.get(url_bom, headers=headers_db, params=query_bom, timeout=15)
         if res_bom.status_code == 200:
             st.session_state["bom_records"] = res_bom.json()
-            
-            # Dự phòng lớp 2: Nếu phòng kinh doanh lưu lệch ký tự đầu, tự động lọc bằng Python sạch
-            if not st.session_state["bom_records"]:
-                core_match = re.search(r'(\d+)', target_style_name)
-                if core_match:
-                    search_term = core_match.group(0)
-                    query_bom["style_name"] = f"ilike.*{search_term}"
-                    res_bom_fb = requests.get(url_bom, headers=headers, params=query_bom, timeout=15)
-                    if res_bom_fb.status_code == 200:
-                        raw_list = res_bom_fb.json()
-                        st.session_state["bom_records"] = [r for r in raw_list if search_term in str(r.get("style_name", ""))]
         else:
             st.session_state["bom_records"] = []
     except Exception:
         st.session_state["bom_records"] = []
+
 # Trích xuất dữ liệu hiển thị đồ họa trực diện
 matched_techpack = st.session_state.get("matched_techpack")
 bom_records = st.session_state.get("bom_records", [])
