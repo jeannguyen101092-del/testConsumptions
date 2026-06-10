@@ -888,6 +888,65 @@ if has_file:
             clean_json_text = extraction_res.text.strip().replace("```json", "").replace("```", "").strip()
             
             parsed_meta = json.loads(clean_json_text)
+           new_style_id_detected = "UNKNOWN_STYLE"
+new_style_category_detected = ""
+new_style_fabric_detected = "UNKNOWN_FABRIC"
+new_style_measurements_dict = {}
+new_style_base_size = "32"
+img_payload = [] 
+target_new_sketch_bytes = None 
+
+# Đồng bộ hóa cấu trúc lấy tệp đính kèm từ Uploader lưu trong bộ nhớ hệ thống
+target_file_object = None
+if 'uploaded_file' in st.session_state and st.session_state['uploaded_file'] is not None:
+    target_file_object = st.session_state['uploaded_file']
+elif 'chat_uploader' in st.session_state and st.session_state['chat_uploader'] is not None:
+    target_file_object = st.session_state['chat_uploader']
+
+has_file = target_file_object is not None
+
+if has_file:
+    file_bytes = target_file_object.getvalue()
+    file_name = target_file_object.name
+    if file_name.lower().endswith('.pdf'):
+        try:
+            info_chat = pdfinfo_from_bytes(file_bytes)
+            total_chat_pages = int(info_chat.get("Pages", 1))
+            chat_images = convert_from_bytes(file_bytes, dpi=90, first_page=1, last_page=total_chat_pages)
+            for idx, page_img in enumerate(chat_images):
+                img_buf = io.BytesIO()
+                page_img.convert("RGB").save(img_buf, format="JPEG", quality=75)
+                img_payload.append(types.Part.from_bytes(data=img_buf.getvalue(), mime_type='image/jpeg'))
+            
+            # --- 🚀 PROMPT CÔNG NGHIỆP ÉP AI TRÍCH XUẤT ĐA CHỨC NĂNG VÀ KHÓA TRỤC INSEAM ---
+            extraction_prompt = (
+                "You are an expert Garment Specification Auditor at PPJ Group. Analyze all attached sheets page by page. "
+                "1. Locate the core 'Base Size' / 'Sample Size' specified by the buyer (e.g., Size 32 with Inseam 32, written as 32/32 or 32x32). "
+                "2. CRITICAL MEASUREMENT SELECTION RULE: Look closely at the grading table sheet. "
+                "If the table contains multiple inseam length columns (e.g., columns for Inseam 30, 32, 34), you MUST extract the target point of measurement (POM) values that belong ONLY to the specified Sample length column (which is 32\"). "
+                "STRICTLY FORBIDDEN: Do not blindly extract the value from the first column if it represents an Inseam of 30\". "
+                "You must output the true Inseam target value which is 32\" for a 32/32 profile garment. "
+                "3. Extract at least 15-20 distinct Points of Measurement (POM) for this specific sample size only. "
+                "4. Find the exact 'Style ID' / 'Style Number' (e.g., 1P001369), 'Category' / 'Product Line', and 'Buyer' name. "
+                "5. Detect the exact PAGE INDEX (0-based) containing the pure black and white line art TECHNICAL FLAT SKETCH. "
+                "Return a completely valid raw JSON string with this exact schema (no markdown blocks): "
+                "{\"detected_style_id\": \"string\", \"category\": \"string\", \"fabric_code\": \"string\", \"base_size_detected\": \"string\", \"measurements\": {}, \"sketch_page_index_detected\": 0}"
+            )
+
+            extraction_payload = list(img_payload)
+            extraction_payload.append(extraction_prompt)
+            
+            # ⚡ SỬA LỖI MẤU CHỐT: Bọc response_mime_type vào cấu trúc config chính quy của thư viện google-genAI mới
+            extraction_res = client.models.generate_content(
+                model='gemini-2.5-flash', 
+                contents=extraction_payload,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json"
+                )
+            )
+            clean_json_text = extraction_res.text.strip().replace("```json", "").replace("```", "").strip()
+            
+            parsed_meta = json.loads(clean_json_text)
             new_style_id_detected = parsed_meta.get("detected_style_id", "UNKNOWN_STYLE").strip()
             new_style_category_detected = parsed_meta.get("category", "").strip()
             new_style_fabric_detected = parsed_meta.get("fabric_code", "UNKNOWN_FABRIC").strip()
@@ -907,10 +966,10 @@ if has_file:
 dynamic_keyword = str(new_style_id_detected).strip().upper()
 base_sb_url = SB_URL.rstrip('/')
 headers = {"apikey": SB_KEY, "Authorization": f"Bearer {SB_KEY}"}
+
 if menu_selection == "🧵 BOM & Consumption Matrix":
     st.markdown('<div class="component-title-box">🧵 INTELLIGENT BOM & CONSUMPTION MATRIX ENGINE</div>', unsafe_allow_html=True)
     
-    # Khóa cứng trạng thái bộ nhớ đệm màn hình (Chống xóa trắng dữ liệu khi Rerun ô Chat)
     if "matched_techpack" not in st.session_state: st.session_state["matched_techpack"] = None
     if "bom_records" not in st.session_state: st.session_state["bom_records"] = []
     if "consumption_chat_history" not in st.session_state: st.session_state["consumption_chat_history"] = []
@@ -930,6 +989,7 @@ if menu_selection == "🧵 BOM & Consumption Matrix":
             st.rerun()
 
     st.markdown("---")
+
     # Hiển thị tiêu đề Size mẫu cơ sở đang bóc tách đối soát
     if has_file:
         if new_style_base_size and new_style_base_size != "32":
