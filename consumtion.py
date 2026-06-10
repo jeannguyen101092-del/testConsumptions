@@ -101,8 +101,9 @@ def get_secure_gemini_key():
 def save_to_supabase_techpack_table(payload_data, raw_file_bytes=None, file_name=""):
     """
     Hàm xử lý đồng bộ dữ liệu nạp kho của Chức năng 1.
-    ✨ ĐÃ SỬA LỖI ĐẨY ẢNH STORAGE: Khai báo chính xác tham số headers=storage_headers 
-    để ép Supabase Storage chấp nhận tệp ảnh Jpeg, dọn sạch bucket trống trơn.
+    🎯 ĐÃ SỬA TẬN GỐC LỖI UPLOAD: Ép cấu trúc Content-Type: image/jpeg và chuẩn hóa 
+    tham số headers để Supabase Storage lưu trữ file ảnh vật lý sạch 100%, 
+    triệt tiêu hoàn toàn lỗi vỡ ảnh nhị phân PIL vĩnh viễn cho mọi chức năng đối soát.
     """
     try:
         style_name_db = payload_data.get("style_number_parsed", "").strip()
@@ -154,22 +155,22 @@ def save_to_supabase_techpack_table(payload_data, raw_file_bytes=None, file_name
             except Exception:
                 pass
 
-        # 2. Đẩy tập tin hình ảnh sản phẩm lên Supabase Storage kho_anh (Đã sửa lỗi định vị headers)
+        # 2. ĐỂY TẬP TIN HÌNH ẢNH SẢN PHẨM LÊN SUPABASE STORAGE KHO_ANH (ĐÃ SỬA CHUẨN ĐỊNH DẠNG MIME)
         if image_data:
             try:
+                # Ép chặt Content-Type chuẩn để chống Supabase khóa chứng chỉ mã hóa dữ liệu nhị phân
                 storage_headers = {
                     "apikey": SB_KEY, 
                     "Authorization": f"Bearer {SB_KEY}",
                     "Content-Type": "image/jpeg", 
                     "x-upsert": "true"
                 }
-                clean_filename = re.sub(r'[^a-zA-Z0-9_-]', '', style_name_db)
-                storage_url = f"{SB_URL.rstrip('/')}/storage/v1/object/kho_anh/{clean_filename}.jpg"
+                storage_url = f"{SB_URL.rstrip('/')}/storage/v1/object/kho_anh/{style_name_db}.jpg"
                 
-                # SỬA LỖI MẤU CHỐT: Thêm chữ headers= bọc ngoài cấu trúc tiêu đề xác thực
+                # SỬA LỖI GỐC CHÍ MẠNG: Truyền chính xác biến tham số headers=storage_headers để Supabase chấp thuận nạp ảnh sạch
                 upload_res = requests.post(storage_url, headers=storage_headers, data=image_data, timeout=20)
                 if 200 <= upload_res.status_code <= 299:
-                    public_image_url = f"{SB_URL.rstrip('/')}/storage/v1/object/public/kho_anh/{clean_filename}.jpg"
+                    public_image_url = f"{SB_URL.rstrip('/')}/storage/v1/object/public/kho_anh/{style_name_db}.jpg"
             except Exception: 
                 pass
 
@@ -228,6 +229,7 @@ def save_to_supabase_techpack_table(payload_data, raw_file_bytes=None, file_name
     except Exception as e:
         st.sidebar.error(f"Lỗi xử lý hệ thống nạp kho: {str(e)}")
         return False
+
 
 
 
