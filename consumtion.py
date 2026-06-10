@@ -101,8 +101,8 @@ def get_secure_gemini_key():
 def save_to_supabase_techpack_table(payload_data, raw_file_bytes=None, file_name=""):
     """
     Hàm xử lý đồng bộ dữ liệu nạp kho của Chức năng 1.
-    🎯 ĐÃ VÁ LỖI CHÍ MẠNG URL: Tách biệt URL đẩy ảnh (không chứa /public/) và URL hiển thị 
-    (chứa /public/) đúng quy chuẩn API Supabase để triệt tiêu lỗi nuốt ảnh, giúp kho hết trống.
+    🎯 ĐÃ VÁ LỖI CHÍ MẠNG: Đổi sang requests.put kết hợp tham số files chuẩn MIME,
+    giúp Supabase nhận diện đúng dữ liệu hình ảnh và hỗ trợ ghi đè (x-upsert) thành công.
     """
     try:
         style_name_db = payload_data.get("style_number_parsed", "").strip()
@@ -122,6 +122,8 @@ def save_to_supabase_techpack_table(payload_data, raw_file_bytes=None, file_name
         if raw_file_bytes and file_name.lower().endswith('.pdf'):
             try:
                 import pdfplumber
+                from pdf2image import convert_from_bytes, pdfinfo_from_bytes
+                
                 info_pdf = pdfinfo_from_bytes(raw_file_bytes)
                 total_p = int(info_pdf.get("Pages", 1))
                 pdf_images = convert_from_bytes(raw_file_bytes, dpi=90, first_page=1, last_page=total_p)
@@ -156,30 +158,40 @@ def save_to_supabase_techpack_table(payload_data, raw_file_bytes=None, file_name
             try:
                 import base64
                 image_data = base64.b64decode(sketch_b64)
-            except Exception:
-                pass
+            except Exception as b64_err:
+                print(f"[BASE64 DECODE ERROR]: {str(b64_err)}")
+                image_data = None
 
-        # 2. ĐỂY TẬP TIN HÌNH ẢNH SẢN PHẨM LÊN SUPABASE STORAGE KHO_ANH (ĐÃ VÁ CHUẨN URL GỐC)
+        # 2. ĐẨY TẬP TIN HÌNH ẢNH SẢN PHẨM LÊN SUPABASE STORAGE KHO_ANH (ĐÃ VÁ CHUẨN METHOD PUT VÀ FILES)
         if image_data:
             try:
                 storage_headers = {
                     "apikey": SB_KEY, 
                     "Authorization": f"Bearer {SB_KEY}",
-                    "Content-Type": "image/jpeg", 
-                    "x-upsert": "true"
+                    "x-upsert": "true"  # Bắt buộc phải sử dụng với phương thức PUT để ghi đè thành công
                 }
                 # Khóa trục tên file viết hoa sạch có dấu gạch ngang chuẩn chỉnh
                 style_clean_filename = re.sub(r'[^a-zA-Z0-9_-]', '', style_name_db).upper()
                 
-                # ⚡ CHỮA LỖI GỐC CHÍ MẠNG: URL upload bắt buộc ghi /object/kho_anh/ (Cấm chứa chữ /public/)
+                # URL upload bắt buộc ghi /object/kho_anh/ (Không chứa chữ /public/)
                 storage_url = f"{SB_URL.rstrip('/')}/storage/v1/object/kho_anh/{style_clean_filename}.jpg"
                 
-                upload_res = requests.post(storage_url, headers=storage_headers, data=image_data, timeout=20)
+                # Chuyển đổi sang requests.put và đóng gói image_data thông qua tham số files
+                upload_res = requests.put(
+                    storage_url, 
+                    headers=storage_headers, 
+                    files={'file': (f"{style_clean_filename}.jpg", image_data, 'image/jpeg')}, 
+                    timeout=20
+                )
+                
                 if 200 <= upload_res.status_code <= 299:
+                    print(f"[STORAGE SUCCESS] Upload ảnh thành công cho mã: {style_clean_filename}")
                     # Link Public URL này phục vụ riêng cho mục hiển thị Chức năng 3 gọi ra màn hình
                     public_image_url = f"{SB_URL.rstrip('/')}/storage/v1/object/public/kho_anh/{style_clean_filename}.jpg"
-            except Exception: 
-                pass
+                else:
+                    print(f"[STORAGE ERROR] Không thể upload ảnh. Supabase phản hồi lỗi {upload_res.status_code}: {upload_res.text}")
+            except Exception as storage_err: 
+                print(f"[STORAGE EXCEPTION] Lỗi kết nối hệ thống Storage: {str(storage_err)}")
 
         # 3. LUỒNG KÍCH HOẠT MẮT THẦN AI VISION: TRÍCH XUẤT CHUỒI ĐẶC TRƯNG HÌNH HỌC
         measurements_raw = payload_data.get("measurements", {})
@@ -232,9 +244,18 @@ def save_to_supabase_techpack_table(payload_data, raw_file_bytes=None, file_name
         }
         
         response = requests.post(insert_url, headers=headers, json=[db_payload], timeout=15)
-        return 200 <= response.status_code <= 299
+        
+        if 200 <= response.status_code <= 299:
+            print("[DB SUCCESS] Đồng bộ dữ liệu bảng thong_so_techpack thành công!")
+            return True
+        else:
+            print(f"[DB ERROR] Lỗi đồng bộ database {response.status_code}: {response.text}")
+            return False
+            
     except Exception as e:
+        import streamlit as st
         st.sidebar.error(f"Lỗi xử lý hệ thống nạp kho: {str(e)}")
+        print(f"[CRITICAL ERROR] Toàn hệ thống nạp kho thất bại: {str(e)}")
         return False
 
 
