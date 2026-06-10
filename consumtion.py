@@ -98,11 +98,18 @@ def get_secure_gemini_key():
     if "GEMINI_API_KEY" in st.secrets:
         return st.secrets["GEMINI_API_KEY"].strip()
     return None
+def is_valid_jpeg(data):
+    """Hàm kiểm tra dữ liệu binary có phải là file ảnh JPEG chuẩn hay không"""
+    if not data or len(data) < 4:
+        return False
+    # File JPEG chuẩn bắt đầu bằng FF D8 và kết thúc bằng FF D9
+    return data.startswith(b'\xff\xd8')
+
 def save_to_supabase_techpack_table(payload_data, raw_file_bytes=None, file_name=""):
     """
     Hàm xử lý đồng bộ dữ liệu nạp kho của Chức năng 1.
-    🎯 ĐÃ SỬA LỖI ĐÓNG GÓI BINARY: Chuyển sang truyền data=image_data dạng dữ liệu thô (raw bytes)
-    kết hợp phương thức PUT, giúp xử lý triệt để lỗi ảnh vỡ (broken image) trên trình duyệt.
+    🎯 SỬA LỖI GỐC MÀN HÌNH ĐEN: Thêm bộ kiểm định cấu trúc ảnh (is_valid_jpeg) trước khi nạp.
+    Chỉ cho phép đẩy dữ liệu RAW bytes chuẩn lên Supabase Storage bằng phương thức PUT.
     """
     try:
         style_name_db = payload_data.get("style_number_parsed", "").strip()
@@ -151,55 +158,61 @@ def save_to_supabase_techpack_table(payload_data, raw_file_bytes=None, file_name
                     pdf_images[best_idx].convert("RGB").save(img_buf, format="JPEG", quality=85)
                     image_data = img_buf.getvalue()
             except Exception as img_err:
-                print(f"[IMAGE EXTRACT ERROR]: {str(img_err)}")
+                print(f"[IMAGE EXTRACT ERROR]: Thất bại khi cắt ảnh từ PDF -> {str(img_err)}")
                 image_data = None
 
+        # Nếu trích xuất PDF không ra dữ liệu, thử giải mã chuỗi Base64 gửi kèm từ FE
         if not image_data and sketch_b64:
             try:
                 import base64
+                # Loại bỏ phần tiền tố data:image/...;base64, nếu có
+                if "," in sketch_b64:
+                    sketch_b64 = sketch_b64.split(",")[1]
                 image_data = base64.b64decode(sketch_b64)
             except Exception as b64_err:
-                print(f"[BASE64 DECODE ERROR]: {str(b64_err)}")
+                print(f"[BASE64 DECODE ERROR]: Chuỗi Base64 ảnh bị lỗi -> {str(b64_err)}")
                 image_data = None
 
-        # 2. ĐẨY TẬP TIN HÌNH ẢNH SẢN PHẨM LÊN SUPABASE STORAGE KHO_ANH (ĐÃ SỬA SANG TRUYỀN RAW DATA)
+        # 2. ĐỂY TẬP TIN HÌNH ẢNH SẢN PHẨM LÊN SUPABASE STORAGE KHO_ANH (ĐÃ KIỂM ĐỊNH FILE CHUẨN)
         if image_data:
-            try:
-                # Đặt Content-Type là image/jpeg cụ thể cho dữ liệu raw bytes truyền ở body
-                storage_headers = {
-                    "apikey": SB_KEY, 
-                    "Authorization": f"Bearer {SB_KEY}",
-                    "Content-Type": "image/jpeg",
-                    "x-upsert": "true"  # Đi kèm phương thức PUT để ghi đè file cũ thành công
-                }
-                # Khóa trục tên file viết hoa sạch có dấu gạch ngang chuẩn chỉnh
-                style_clean_filename = re.sub(r'[^a-zA-Z0-9_-]', '', style_name_db).upper()
-                
-                # URL upload bắt buộc ghi /object/kho_anh/ (Không chứa chữ /public/)
-                storage_url = f"{SB_URL.rstrip('/')}/storage/v1/object/kho_anh/{style_clean_filename}.jpg"
-                
-                # Truyển trực tiếp chuỗi bytes qua tham số data= (Không đóng gói qua files=)
-                upload_res = requests.put(
-                    storage_url, 
-                    headers=storage_headers, 
-                    data=image_data, 
-                    timeout=20
-                )
-                
-                if 200 <= upload_res.status_code <= 299:
-                    print(f"[STORAGE SUCCESS] Upload ảnh thành công cho mã: {style_clean_filename}")
-                    # Link Public URL này phục vụ riêng cho mục hiển thị Chức năng 3 gọi ra màn hình
-                    public_image_url = f"{SB_URL.rstrip('/')}/storage/v1/object/public/kho_anh/{style_clean_filename}.jpg"
-                else:
-                    print(f"[STORAGE ERROR] Không thể upload ảnh. Supabase phản hồi lỗi {upload_res.status_code}: {upload_res.text}")
-            except Exception as storage_err: 
-                print(f"[STORAGE EXCEPTION] Lỗi kết nối hệ thống Storage: {str(storage_err)}")
+            # 🛑 CHẶN ĐỨNG HÀNH VI ĐẨY FILE LỖI: Kiểm tra dữ liệu byte ảnh có đúng định dạng JPEG không
+            if not is_valid_jpeg(image_data):
+                print(f"[CRITICAL WARNING] Huỷ upload! Biến image_data cho mã {style_name_db} KHÔNG phải dữ liệu ảnh JPEG hợp lệ (kích thước: {len(image_data)} bytes). Vui lòng kiểm tra lại file PDF đầu vào.")
+            else:
+                try:
+                    storage_headers = {
+                        "apikey": SB_KEY, 
+                        "Authorization": f"Bearer {SB_KEY}",
+                        "Content-Type": "image/jpeg",
+                        "x-upsert": "true"  # Cho phép ghi đè khi sửa lỗi
+                    }
+                    style_clean_filename = re.sub(r'[^a-zA-Z0-9_-]', '', style_name_db).upper()
+                    storage_url = f"{SB_URL.rstrip('/')}/storage/v1/object/kho_anh/{style_clean_filename}.jpg"
+                    
+                    # Đẩy dữ liệu thô (raw bytes) lên API Supabase bằng phương thức PUT
+                    upload_res = requests.put(
+                        storage_url, 
+                        headers=storage_headers, 
+                        data=image_data, 
+                        timeout=20
+                    )
+                    
+                    if 200 <= upload_res.status_code <= 299:
+                        print(f"[STORAGE SUCCESS] Upload ảnh gốc thành công cho mã: {style_clean_filename}")
+                        public_image_url = f"{SB_URL.rstrip('/')}/storage/v1/object/public/kho_anh/{style_clean_filename}.jpg"
+                    else:
+                        print(f"[STORAGE ERROR] Supabase từ chối file. Mã lỗi {upload_res.status_code}: {upload_res.text}")
+                except Exception as storage_err: 
+                    print(f"[STORAGE EXCEPTION] Mất kết nối tới máy chủ Storage: {str(storage_err)}")
+        else:
+            print(f"[WARN] Không tìm thấy bất kỳ dữ liệu hình ảnh nào (image_data rỗng) cho mã {style_name_db}")
 
         # 3. LUỒNG KÍCH HOẠT MẮT THẦN AI VISION: TRÍCH XUẤT CHUỒI ĐẶC TRƯNG HÌNH HỌC
         measurements_raw = payload_data.get("measurements", {})
         visual_description_str = f"GARMENT TYPE: {payload_data.get('category', 'Garment Pants')}. Specs profile summary: " + ", ".join([f"{k}:{v}" for k, v in list(measurements_raw.items())[:6]])
         
-        if image_data:
+        # Chỉ chạy AI Vision khi file ảnh được xác định là ảnh chuẩn
+        if image_data and is_valid_jpeg(image_data):
             gemini_key = get_secure_gemini_key()
             if gemini_key:
                 try:
