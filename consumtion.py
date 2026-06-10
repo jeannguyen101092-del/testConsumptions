@@ -485,149 +485,77 @@ if menu_selection == "📊 Upload Techpack":
 
 
 # -----------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # CHỨC NĂNG 2: ĐỐI CHIẾU SO SÁNH HAI MÃ RẬP KHÁC NHAU (PATTERN SPEC COMPARISON)
 # -----------------------------------------------------------------------------
 elif menu_selection == "🔄 Pattern Spec Comparison":
     st.markdown('<div class="component-title-box">🔄 DIFFERENTIAL GEOMETRY & DELTA SPEC EVALUATOR</div>', unsafe_allow_html=True)
-    
-    st.markdown("""<div class="card-container"><div class="card-section-header">🔍 CONFIGURATION SELECTION</div>
-    <p style="color: #64748B; font-size:13px; margin:0 0 15px 0;">Tải lên hai tệp bản vẽ kỹ thuật dệt may độc lập để tiến hành lập luận so sánh và tính toán toán học các khoảng chênh lệch rập mẫu.</p></div>""", unsafe_allow_html=True)
+    st.markdown('<div class="card-container"><div class="card-section-header">🔍 CONFIGURATION SELECTION</div><p style="color: #64748B; font-size:13px; margin:0 0 15px 0;">Tải lên hai tệp bản vẽ kỹ thuật độc lập để tính toán khoảng chênh lệch rập mẫu.</p></div>', unsafe_allow_html=True)
     
     sc1, sc2 = st.columns(2)
     with sc1: file1 = st.file_uploader("Chọn file mẫu Techpack Gốc (File A)", type=["pdf"], key="f1")
     with sc2: file2 = st.file_uploader("Chọn file mẫu Techpack Sửa đổi (File B)", type=["pdf"], key="f2")
     
     if file1 and file2:
-        # Tối ưu hóa việc xử lý file bằng vòng lặp ngắn gọn
         for f in [file1, file2]:
             if f.name not in st.session_state["processed_styles"]:
                 res = process_single_pdf_batch(f.getvalue(), f.name)
-                if res["success"]: 
-                    st.session_state["processed_styles"][f.name] = res["data"]
+                if res["success"]: st.session_state["processed_styles"][f.name] = res["data"]
             
-        d1 = st.session_state["processed_styles"].get(file1.name)
-        d2 = st.session_state["processed_styles"].get(file2.name)
+        d1, d2 = st.session_state["processed_styles"].get(file1.name), st.session_state["processed_styles"].get(file2.name)
         
         if d1 and d2:
-            st.markdown(f"""
-                <div style="background-color: #FFFFFF; border-left: 5px solid #3B82F6; padding: 12px 20px; border-radius: 4px 12px 12px 4px; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.02);">
-                    <h5 style="margin:0; color:#1E3A8A; font-weight:700; font-size:16px;">⚙️ ĐANG ĐỐI CHIẾU MA TRẬN PHÁT TRIỂN MẪU</h5>
-                    <p style="margin:4px 0 0 0; font-size:13px; color:#64748B;">
-                        <b>Mẫu Gốc A:</b> {d1['style_number_parsed']} [Size: {d1.get('base_size_name','N/A')}] 
-                        &nbsp;|&nbsp; 
-                        <b>Mẫu Sửa B:</b> {d2['style_number_parsed']} [Size: {d2.get('base_size_name','N/A')}]
-                    </p>
-                </div>
-            """, unsafe_allow_html=True)
+            lbl_a = f"Mẫu A ({d1['style_number_parsed']}) [{d1.get('base_size_name','30').strip()}]"
+            lbl_b = f"Mẫu B ({d2['style_number_parsed']}) [{d2.get('base_size_name','30').strip()}]"
+            st.info(f"⚙️ **ĐANG ĐỐI CHIẾU MA TRẬN:** {lbl_a} ↔️ {lbl_b}")
             
-            def clean_garment_fraction(v_str):
-                if not v_str or str(v_str).strip().upper() in ["N/A", "N/A INCH", ""]: return 0.0
+            # Hàm chuyển đổi phân số dệt may ngắn gọn
+            def clean_num(v):
+                if not v or str(v).strip().upper() in ["N/A", ""]: return 0.0
                 try:
-                    s = str(v_str).replace("INCH", "").strip()
-                    if " " in s:
-                        parts = s.split()
-                        whole = float(parts[0])
-                        frac = parts[1].split('/')
-                        return whole + (float(frac[0]) / float(frac[1]))
-                    elif "/" in s:
-                        frac = s.split('/')
-                        return float(frac[0]) / float(frac[1])
-                    return float(s)
-                except:
-                    nums = re.findall(r"[-+]?\d*\.\d+|\d+", str(v_str))
-                    return float(nums[0]) if nums else 0.0
+                    s = str(v).replace("INCH", "").strip()
+                    return float(s.split()[0]) + (float(s.split()[1].split('/')[0])/float(s.split()[1].split('/')[1])) if " " in s else (float(s.split('/')[0])/float(s.split('/')[1]) if "/" in s else float(s))
+                except: return float(re.findall(r"[-+]?\d*\.\d+|\d+", str(v))[0]) if re.findall(r"[-+]?\d*\.\d+|\d+", str(v)) else 0.0
 
-            size_a = d1.get("base_size_name", "BASE").strip()
-            size_b = d2.get("base_size_name", "BASE").strip()
-            col_title_a = f"Mẫu A ({d1['style_number_parsed']}) [{size_a}]"
-            col_title_b = f"Mẫu B ({d2['style_number_parsed']}) [{size_b}]"
-            all_poms = set(list(d1["measurements"].keys()) + list(d2["measurements"].keys()))
+            # Thuật toán thu gọn & đồng bộ hóa POM rác bằng Pandas (Khắc phục lỗi lặp dòng)
+            df_a = pd.DataFrame(list(d1["measurements"].items()), columns=['raw_pom', lbl_a])
+            df_b = pd.DataFrame(list(d2["measurements"].items()), columns=['raw_pom', lbl_b])
             
-            table_body_html = ""
-            compare_rows_for_df = []
+            # Tạo key chuẩn hóa bằng cách xóa khoảng trắng thừa và dấu hai chấm ':'
+            df_a['norm_key'] = df_a['raw_pom'].str.lower().str.replace(':', '').str.strip().str.replace(r'\s+', ' ', regex=True)
+            df_b['norm_key'] = df_b['raw_pom'].str.lower().str.replace(':', '').str.strip().str.replace(r'\s+', ' ', regex=True)
             
-            for pom in sorted(all_poms):
-                val1 = d1["measurements"].get(pom, "N/A")
-                val2 = d2["measurements"].get(pom, "N/A")
-                num1 = clean_garment_fraction(val1)
-                num2 = clean_garment_fraction(val2)
-                
-                delta = round(num2 - num1, 3) if val1 != "N/A" and val2 != "N/A" else 0.0
-                compare_rows_for_df.append({"Vị trí đo (POM)": pom, col_title_a: val1, col_title_b: val2, "Sai lệch (Delta)": delta})
-                
-                # Tối ưu hóa style hiển thị Delta trực quan hơn
-                if delta > 0:
-                    delta_style = "background-color:rgba(16,185,129,0.15); color:#166534; font-weight:700; padding:2px 8px; border-radius:4px; font-size:12px; border:1px solid #BBF7D0;"
-                    delta_text = f"+{delta}"
-                elif delta < 0:
-                    delta_style = "background-color:rgba(239,68,68,0.15); color:#991B1B; font-weight:700; padding:2px 8px; border-radius:4px; font-size:12px; border:1px solid #FECACA;"
-                    delta_text = f"{delta}"
-                else:
-                    delta_style = "color:#64748B; font-size:12px;"
-                    delta_text = "0.00"
-                
-                table_body_html += f"""<tr style="background-color: #FFFFFF;">
-                    <td style="padding: 10px 14px; border-bottom: 1px solid #E2E8F0; font-weight: 600; color: #1E293B; font-size: 13px;">{pom}</td>
-                    <td style="padding: 10px 14px; border-bottom: 1px solid #E2E8F0; color: #334155; font-size: 13px;">{val1}</td>
-                    <td style="padding: 10px 14px; border-bottom: 1px solid #E2E8F0; color: #334155; font-size: 13px;">{val2}</td>
-                    <td style="padding: 10px 14px; border-bottom: 1px solid #E2E8F0; text-align: center;"><span style="{delta_style}">{delta_text}</span></td>
-                </tr>"""
+            # Gộp (Merge) dữ liệu thông minh theo key đã chuẩn hóa
+            df_res = pd.merge(df_a[['norm_key', 'raw_pom', lbl_a]], df_b[['norm_key', 'raw_pom', lbl_b]], on='norm_key', how='outer')
+            df_res['Vị trí đo (POM)'] = df_res['raw_pom_x'].fillna(df_res['raw_pom_y'])
+            df_res = df_res.fillna("N/A").sort_values('norm_key')
+
+            # Tính toán Delta chính xác
+            def calc_delta(r):
+                return round(clean_num(r[lbl_b]) - clean_num(r[lbl_a]), 3) if r[lbl_a] != "N/A" and r[lbl_b] != "N/A" else "N/A"
+            df_res['Sai lệch (Delta)'] = df_res.apply(calc_delta, axis=1)
+
+            # Khởi tạo chuỗi HTML Render bảng tinh giản hơn
+            t_rows = ""
+            for _, r in df_res.iterrows():
+                d = r['Sai lệch (Delta)']
+                style = "color:#166534; font-weight:700; background:rgba(16,185,129,0.15); padding:2px 8px; border-radius:4px;" if d != "N/A" and d > 0 else ("color:#991B1B; font-weight:700; background:rgba(239,68,68,0.15); padding:2px 8px; border-radius:4px;" if d != "N/A" and d < 0 else "color:#64748B;")
+                t_rows += f"<tr style='background:#FFF;'><td style='padding:10px; border-bottom:1px solid #E2E8F0; font-weight:600;'>{r['Vị trí đo (POM)']}</td><td style='padding:10px; border-bottom:1px solid #E2E8F0;'>{r[lbl_a]}</td><td style='padding:10px; border-bottom:1px solid #E2E8F0;'>{r[lbl_b]}</td><td style='padding:10px; border-bottom:1px solid #E2E8F0; text-align:center;'><span style='{style}'>{f'+{d}' if (d != 'N/A' and d > 0) else d}</span></td></tr>"
             
-            full_table_render = f"""
-            <div style="max-height: 460px; overflow-y: auto; border: 1px solid #CBD5E1; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.02); margin-top: 15px;">
-                <table style="width: 100%; border-collapse: collapse; text-align: left; font-family: sans-serif;">
-                    <thead>
-                        <tr style="background: linear-gradient(90deg, #1E3A8A 0%, #2563EB 100%);">
-                            <th style="color: #FFFFFF; font-weight: 600; padding: 14px 16px; font-size: 13px; position: sticky; top: 0; z-index: 10;">Vị trí đo (POM Description)</th>
-                            <th style="color: #FFFFFF; font-weight: 600; padding: 14px 16px; font-size: 13px; position: sticky; top: 0; z-index: 10;">{col_title_a}</th>
-                            <th style="color: #FFFFFF; font-weight: 600; padding: 14px 16px; font-size: 13px; position: sticky; top: 0; z-index: 10;">{col_title_b}</th>
-                            <th style="color: #FFFFFF; font-weight: 600; padding: 14px 16px; font-size: 13px; text-align: center; width: 150px; position: sticky; top: 0; z-index: 10;">Sai lệch (Delta)</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {table_body_html}
-                    </tbody>
-                </table>
-            </div>
-            """
-            st.markdown(full_table_render, unsafe_allow_html=True)
-            st.markdown("<br>", unsafe_allow_html=True)
+            st.markdown(f"<div style='max-height:420px; overflow-y:auto; border:1px solid #CBD5E1; border-radius:8px;'><table style='width:100%; border-collapse:collapse; text-align:left; font-family:sans-serif;'><thead style='background:linear-gradient(90deg, #1E3A8A, #2563EB); color:white;'><tr><th style='padding:12px; position:sticky; top:0; z-index:9;'>Vị trí đo (POM)</th><th style='padding:12px; position:sticky; top:0; z-index:9;'>{lbl_a}</th><th style='padding:12px; position:sticky; top:0; z-index:9;'>{lbl_b}</th><th style='padding:12px; text-align:center; position:sticky; top:0; z-index:9;'>Delta</th></tr></thead><tbody>{t_rows}</tbody></table></div>", unsafe_allow_html=True)
             
-            # --- KHỐI XỬ LÝ VÀ ĐỊNH DẠNG EXCEL ĐÃ SỬA LỖI & LÀM ĐẸP ---
-            df_compare = pd.DataFrame(compare_rows_for_df)
+            # --- XUẤT FILE EXCEL RÚT GỌN ---
+            df_xl = df_res[['Vị trí đo (POM)', lbl_a, lbl_b, 'Sai lệch (Delta)']]
             towrite = io.BytesIO()
-            
-            with pd.ExcelWriter(towrite, engine='xlsxwriter') as writer: 
-                df_compare.to_excel(writer, index=False, sheet_name='Spec_Report')
-                workbook  = writer.book
-                worksheet = writer.sheets['Spec_Report']
-                
-                # Định dạng bảng chuẩn Techpack chuyên nghiệp
-                header_format = workbook.add_format({'bold':True,'text_wrap':True,'fg_color':'#1E3A8A','font_color':'white','border':1,'align':'center','valign':'vcenter'})
-                center_format = workbook.add_format({'align':'center','valign':'vcenter','border':1})
-                left_format = workbook.add_format({'align':'left','valign':'vcenter','border':1})
-                
-                # Ghi header và căn chỉnh độ rộng cột tự động
-                for col_num, column_title in enumerate(df_compare.columns):
-                    worksheet.write(0, col_num, column_title, header_format)
-                    max_len = max(df_compare[column_title].astype(str).map(len).max(), len(column_title)) + 4
-                    worksheet.set_column(col_num, col_num, max_len)
-                
-                # Căn lề dòng dữ liệu (Cột đầu canh trái, các cột thông số canh giữa)
-                for row_idx in range(len(df_compare)):
-                    worksheet.write(row_idx + 1, 0, df_compare.iloc[row_idx, 0], left_format)
-                    for col_idx in range(1, len(df_compare.columns)):
-                        worksheet.write(row_idx + 1, col_idx, df_compare.iloc[row_idx, col_idx], center_format)
-            
+            with pd.ExcelWriter(towrite, engine='xlsxwriter') as writer:
+                df_xl.to_excel(writer, index=False, sheet_name='Spec_Report')
+                ws = writer.sheets['Spec_Report']
+                for i, col in enumerate(df_xl.columns):
+                    ws.set_column(i, i, max(df_xl[col].astype(str).map(len).max(), len(col)) + 4)
             towrite.seek(0)
             
-            # Thêm nút tải file Excel với UI Streamlit chính quy
-            st.download_button(
-                label="📥 Tải Báo Cáo Đối Chiếu (Excel)",
-                data=towrite,
-                file_name=f"Spec_Comparison_{d1['style_number_parsed']}_vs_{d2['style_number_parsed']}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
+            st.download_button(label="📥 Tải Báo Cáo Đối Chiếu (Excel)", data=towrite, file_name=f"Spec_Comparison_{d1['style_number_parsed']}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
 
    # =============================================================================
 # CHỨC NĂNG 3: TRỢ LÝ ĐỊNH MỨC VẢI (ISOLATED DATA PIPELINE & INTENT LAB - PHẦN 6A)
