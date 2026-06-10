@@ -113,7 +113,6 @@ def save_to_supabase_techpack_table(payload_data, raw_file_bytes=None, file_name
         public_image_url = ""
         image_data = None
 
-        # LUỒNG CAO CẤP: Nếu có file gốc dạng PDF, tự động dò tìm trang Sketch sạch 100%
         if raw_file_bytes and file_name.lower().endswith('.pdf'):
             try:
                 info_pdf = pdfinfo_from_bytes(raw_file_bytes)
@@ -128,14 +127,12 @@ def save_to_supabase_techpack_table(payload_data, raw_file_bytes=None, file_name
             except Exception:
                 image_data = None
 
-        # Hướng xử lý dự phòng loại bỏ import trùng (SỬA LỖI ĐOẠN CŨ)
         if not image_data and sketch_b64:
             try:
                 image_data = base64.b64decode(sketch_b64)
             except Exception:
                 pass
 
-        # Đẩy dữ liệu ảnh lên hệ thống Supabase Storage
         if image_data:
             try:
                 storage_headers = {
@@ -152,20 +149,17 @@ def save_to_supabase_techpack_table(payload_data, raw_file_bytes=None, file_name
             except Exception: 
                 pass
 
-        # ⚡ LUỒNG ĐỒNG BỘ THỊ GIÁC VÀ ĐÓNG KHỐI HOÀN THIỆN
-        visual_description_str = "technical garment layout specs"
         if image_data:
             gemini_key = get_secure_gemini_key()
             if gemini_key:
                 client = genai.Client(api_key=gemini_key)
-                # Logic gọi Gemini xử lý vector đặc trưng rập...
         
         return public_image_url
     except Exception as e:
         st.error(f"Lỗi đồng bộ Supabase: {str(e)}")
         return ""
 
-# 1. SIDEBAR: NẠP MASTER DATA TRƯỚC (Thông số, định mức gốc, khổ, độ co...)
+# 1. SIDEBAR: Form nạp trước thông số gốc, định mức định biên, vải, khổ, độ co...
 with st.sidebar:
     st.markdown('''
         <div class="sidebar-brand-container">
@@ -185,25 +179,23 @@ with st.sidebar:
     st.markdown("**Hiệu suất dự kiến**")
     hieu_suat_marker = st.slider("Hiệu suất sơ đồ dự kiến (%):", 80, 100, 92)
 
-# Khởi tạo các Tabs điều hướng chính
-tabs = st.tabs([
+# Thiết lập các phân hệ tab ngang lớn trên giao diện chính
+tab1, tab2, tab3, tab4 = st.tabs([
     "📊 Bài toán 1: Tính Định mức Báo giá", 
     "📉 Bài toán 2: Tính Định mức Đặt hàng", 
     "✂️ Bài toán 3: Lập Tác nghiệp Cắt",
     "🔬 Bài toán 4: Phân tích Rủi ro Khách hàng"
 ])
 # --- BÀI TOÁN 1: TÍNH ĐỊNH MỨC BÁO GIÁ (COSTING) ---
-with tabs[0]:
+with tab1:
     st.markdown('<div class="component-title-box">Bài toán 1: Tính Định mức Báo giá (Up tài liệu + Thông tin NPL)</div>', unsafe_allow_html=True)
     
-    # Khu vực Upload dữ liệu đầu vào của phân hệ báo giá
     col1, col2 = st.columns(2)
     with col1:
         st.file_uploader("📁 Upload Techpack gốc (PDF / Excel)", key="tp_b1")
     with col2:
         st.file_uploader("📁 Upload Bảng thông tin NPL dự kiến", key="npl_b1")
         
-    # + So sánh T/S (Hiển thị gọn, đẹp, trực quan)
     st.markdown('<div class="card-container"><h5>📝 BẢNG SO SÁNH THÔNG SỐ (T/S COMPARISON)</h5>', unsafe_allow_html=True)
     ts_b1_df = pd.DataFrame({
         "Vị trí đo (POM)": ["Dài quần", "Vòng eo", "Vòng mông", "Vòng đùi", "Rộng ống"],
@@ -214,7 +206,6 @@ with tabs[0]:
     st.dataframe(ts_b1_df, use_container_width=True, hide_index=True)
     st.markdown("</div>", unsafe_allow_html=True)
 
-    # + Cho kết quả Định mức (Bảng BOM gồm khổ, độ co, hiệu suất)
     st.markdown('<div class="card-container"><h5>📊 BẢNG ĐỊNH MỨC BÁO GIÁ THEO NPL (BOM CONSUMPTION)</h5>', unsafe_allow_html=True)
     bom_b1_df = pd.DataFrame({
         "STT":,
@@ -228,7 +219,6 @@ with tabs[0]:
     st.dataframe(bom_b1_df, use_container_width=True, hide_index=True)
     st.markdown("</div>", unsafe_allow_html=True)
 
-    # + Comment (rủi ro)
     st.markdown(f"""
     <div class="idle-alert-box">
         <strong>⚠️ AI COMMENT & PHÂN TÍCH RỦI RO ĐỊNH MỨC BÁO GIÁ:</strong><br>
@@ -237,21 +227,18 @@ with tabs[0]:
     </div>
     """, unsafe_allow_html=True)
 
-
-# --- BÀI TOÁN 2: TÍNH ĐỊNH MỨC ĐẶT HÀNG (BULK PRODUCTION) ---
-with tabs[1]:
+# --- BÀI TOÁN 2: TÍNH ĐỊNH MỨC ĐẠT HÀNG (BULK PRODUCTION) ---
+with tab2:
     st.markdown('<div class="component-title-box">Bài toán 2: Tính Định mức Đặt hàng (Dựa theo Rập, Tài liệu mới, SBD)</div>', unsafe_allow_html=True)
     
-    # Khu vực Upload dữ liệu đầu vào của phân hệ Đặt hàng sản xuất
     col1, col3, col4 = st.columns(3)
     with col1:
-        st.file_uploader("📁 Upload File Rập hình học (.DXF / .PLT / .AAMA)", key="rập_b2")
+        st.file_uploader("📁 Upload File Rập hình học (.DXF / .PLT / .AAMA)", key="rap_b2")
     with col3:
         st.file_uploader("📁 Upload Tài liệu kỹ thuật cập nhật mới", key="tp_b2")
     with col4:
         st.file_uploader("📁 Upload Bảng tỷ lệ cỡ vóc (Size Breakdown - SBD)", key="sbd_b2")
 
-    # + So sánh T/S với báo giá hoặc mã cũ
     st.markdown('<div class="card-container"><h5>🔄 ĐỐI CHIẾU THÔNG SỐ: BÁO GIÁ vs SẢN XUẤT THỰC TẾ</h5>', unsafe_allow_html=True)
     ts_b2_df = pd.DataFrame({
         "Vị trí đo (POM)": ["Dài quần", "Vòng eo", "Vòng mông", "Vòng đùi", "Rộng ống"],
@@ -263,7 +250,6 @@ with tabs[1]:
     st.dataframe(ts_b2_df, use_container_width=True, hide_index=True)
     st.markdown("</div>", unsafe_allow_html=True)
 
-    # + Kết quả Định mức đặt hàng theo BOM
     st.markdown('<div class="card-container"><h5>📦 BẢNG ĐỊNH MỨC ĐẶT HÀNG THỰC TẾ (PRODUCTION BOM)</h5>', unsafe_allow_html=True)
     bom_b2_df = pd.DataFrame({
         "STT":,
@@ -276,7 +262,6 @@ with tabs[1]:
     st.dataframe(bom_b2_df, use_container_width=True, hide_index=True)
     st.markdown("</div>", unsafe_allow_html=True)
 
-    # + Bảng tính tác nghiệp tổng (Ma trận Size Breakdown)
     st.markdown('<div class="card-container"><h5>🧮 BẢNG TÍNH TÁC NGHIỆP TỔNG VÀ SẢN LƯỢNG MUA (SIZE MATRIC BUYING)</h5>', unsafe_allow_html=True)
     tag_nghiep_df = pd.DataFrame({
         "Màu sắc (Colorway)": ["Dark Wash (Xanh đậm)", "Light Wash (Xanh nhạt)"],
@@ -291,7 +276,6 @@ with tabs[1]:
     st.dataframe(tag_nghiep_df, use_container_width=True, hide_index=True)
     st.markdown("</div>", unsafe_allow_html=True)
 
-    # + Comment rủi ro đặt hàng Bulk
     st.markdown("""
     <div class="idle-alert-box" style="background-color: #FEF2F2; border-left: 5px solid #EF4444; color: #991B1B;">
         <strong>⚠️ AI COMMENT & CẢNH BÁO RỦI RO SẢN XUẤT BULK:</strong><br>
@@ -301,11 +285,11 @@ with tabs[1]:
     """, unsafe_allow_html=True)
 
 # --- BÀI TOÁN 3: LẬP TÁC NGHIỆP CẮT ---
-with tabs[2]:
+with tab3:
     st.markdown('<div class="component-title-box">Bài toán 3: Phân hệ Lập Tác nghiệp Cắt (Cutting Room Planning)</div>', unsafe_allow_html=True)
     st.info("Hệ thống tự động đồng bộ số liệu từ ma trận SBD tại Bài toán 2 để tính toán phương án phối ghép sơ đồ bàn cắt tối ưu.")
 
 # --- BÀI TOÁN 4: PHÂN TÍCH RỦI RO ĐỊNH MỨC THEO KHÁCH HÀNG ---
-with tabs[3]:
+with tab4:
     st.markdown('<div class="component-title-box">Bài toán 4: Phân tích Rủi ro Định mức theo từng Khách hàng</div>', unsafe_allow_html=True)
     st.warning("Phân hệ nghiên cứu chuyên sâu: Đang cấu hình cổng đồng bộ dữ liệu Real-time qua API kết nối hệ thống Core ERP/MES.")
