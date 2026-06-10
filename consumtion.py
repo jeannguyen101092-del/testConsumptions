@@ -101,8 +101,8 @@ def get_secure_gemini_key():
 def save_to_supabase_techpack_table(payload_data, raw_file_bytes=None, file_name=""):
     """
     Hàm xử lý đồng bộ dữ liệu nạp kho của Chức năng 1.
-    🎯 ĐÃ VÁ LỖI CHÍ MẠNG: Đổi sang requests.put kết hợp tham số files chuẩn MIME,
-    giúp Supabase nhận diện đúng dữ liệu hình ảnh và hỗ trợ ghi đè (x-upsert) thành công.
+    🎯 ĐÃ SỬA LỖI ĐÓNG GÓI BINARY: Chuyển sang truyền data=image_data dạng dữ liệu thô (raw bytes)
+    kết hợp phương thức PUT, giúp xử lý triệt để lỗi ảnh vỡ (broken image) trên trình duyệt.
     """
     try:
         style_name_db = payload_data.get("style_number_parsed", "").strip()
@@ -162,13 +162,15 @@ def save_to_supabase_techpack_table(payload_data, raw_file_bytes=None, file_name
                 print(f"[BASE64 DECODE ERROR]: {str(b64_err)}")
                 image_data = None
 
-        # 2. ĐẨY TẬP TIN HÌNH ẢNH SẢN PHẨM LÊN SUPABASE STORAGE KHO_ANH (ĐÃ VÁ CHUẨN METHOD PUT VÀ FILES)
+        # 2. ĐẨY TẬP TIN HÌNH ẢNH SẢN PHẨM LÊN SUPABASE STORAGE KHO_ANH (ĐÃ SỬA SANG TRUYỀN RAW DATA)
         if image_data:
             try:
+                # Đặt Content-Type là image/jpeg cụ thể cho dữ liệu raw bytes truyền ở body
                 storage_headers = {
                     "apikey": SB_KEY, 
                     "Authorization": f"Bearer {SB_KEY}",
-                    "x-upsert": "true"  # Bắt buộc phải sử dụng với phương thức PUT để ghi đè thành công
+                    "Content-Type": "image/jpeg",
+                    "x-upsert": "true"  # Đi kèm phương thức PUT để ghi đè file cũ thành công
                 }
                 # Khóa trục tên file viết hoa sạch có dấu gạch ngang chuẩn chỉnh
                 style_clean_filename = re.sub(r'[^a-zA-Z0-9_-]', '', style_name_db).upper()
@@ -176,11 +178,11 @@ def save_to_supabase_techpack_table(payload_data, raw_file_bytes=None, file_name
                 # URL upload bắt buộc ghi /object/kho_anh/ (Không chứa chữ /public/)
                 storage_url = f"{SB_URL.rstrip('/')}/storage/v1/object/kho_anh/{style_clean_filename}.jpg"
                 
-                # Chuyển đổi sang requests.put và đóng gói image_data thông qua tham số files
+                # Truyển trực tiếp chuỗi bytes qua tham số data= (Không đóng gói qua files=)
                 upload_res = requests.put(
                     storage_url, 
                     headers=storage_headers, 
-                    files={'file': (f"{style_clean_filename}.jpg", image_data, 'image/jpeg')}, 
+                    data=image_data, 
                     timeout=20
                 )
                 
@@ -257,7 +259,6 @@ def save_to_supabase_techpack_table(payload_data, raw_file_bytes=None, file_name
         st.sidebar.error(f"Lỗi xử lý hệ thống nạp kho: {str(e)}")
         print(f"[CRITICAL ERROR] Toàn hệ thống nạp kho thất bại: {str(e)}")
         return False
-
 
 
 
