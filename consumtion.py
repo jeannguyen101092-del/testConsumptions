@@ -237,7 +237,8 @@ with tabs[0]:
     </div>
     """, unsafe_allow_html=True)
 
-# --- BÀI TOÁN 2: TÍNH ĐỊNH MỨC ĐẠT HÀNG (BULK PRODUCTION) ---
+
+# --- BÀI TOÁN 2: TÍNH ĐỊNH MỨC ĐẶT HÀNG (BULK PRODUCTION) ---
 with tabs[1]:
     st.markdown('<div class="component-title-box">Bài toán 2: Tính Định mức Đặt hàng (Dựa theo Rập, Tài liệu mới, SBD)</div>', unsafe_allow_html=True)
     
