@@ -820,6 +820,7 @@ def parse_fraction(val_str):
 def ai_consumption_analyst_engine(client, user_message, matched_techpack, bom_records, new_style_measurements, target_new_sketch_bytes, detected_size):
     """
     Bộ não xử lý tính toán định mức nâng cao bằng đơn vị YARD (Yds).
+    Tự động kích hoạt cơ chế Vecto Hình Học Ngành May nếu KHÔNG CÓ mã tương đồng.
     Tích hợp quy chuẩn đường may cố định 0.44" và dò tìm lai quần/áo trong TP.
     """
     style_old_name = matched_techpack.get("StyleName", "N/A") if matched_techpack else "N/A"
@@ -837,6 +838,24 @@ def ai_consumption_analyst_engine(client, user_message, matched_techpack, bom_re
     l_shrink = float(shrinkage_length[0]) if shrinkage_length else 0.0
     f_width = float(new_fabric_width[0]) if new_fabric_width else 0.0
 
+    if matched_techpack:
+        scenario_instruction = f"""
+        KỊCH BẢN: ĐỒNG DẠNG KHO (Sử dụng dữ liệu đối chứng lịch sử)
+        - Đối chiếu chênh lệch diện tích cấu trúc giữa Spec mới và Spec cũ {json.dumps(specs_old)}.
+        - Bù trừ định mức tăng/giảm từ nền tảng BOM gốc: {bom_summary}.
+        """
+    else:
+        scenario_instruction = f"""
+        KỊCH BẢN: PHÂN TÍCH VECTOR HÌNH HỌC NGÀNH MAY KHÔNG CÓ MÃ TƯƠNG ĐỒNG (GEOMETRIC LAYOUT ESTIMATION)
+        - Bạn không có dữ liệu lịch sử. Hãy dựa hoàn toàn vào bảng thông số 'New Spec (POM)' và hình ảnh bản vẽ rập chi tiết 'Flat Sketch' đính kèm.
+        - Hãy tính diện tích hình học rập mẫu thô của từng chi tiết cấu thành (Thân trước x2, Thân sau x2, Cạp quần, Túi, Đáp túi, v.v.).
+        - Tính ĐM Vải chính: Cộng dồn chiều dài các mảnh rập chính sau khi đã cộng đường may, nhân với hệ số hao hụt rải vải tiêu chuẩn ngành (giả lập Marker Efficiency = 82%-85%) xếp trên khổ vải requested: {f_width if f_width > 0 else '58 inch'}.
+        - Tính ĐM Nguyên Phụ Liệu (BOM Toàn diện): 
+          * Chỉ may: Tính tổng chu vi các đường ráp nối mảnh rập (nhân hệ số tiêu hao chỉ của loại đường may: móc xích tra cạp x4, vắt sổ x3, diễu x2).
+          * Thun cạp / Dây dệt: Tính toán trực tiếp từ thông số vòng eo/vòng gấu thành phẩm cộng độ chừa chồng mép tra phụ liệu.
+          * Nút / Khóa kéo / Đinh tán: Đếm và định lượng trực tiếp từ bản vẽ cấu trúc hình học bên trong của Flat Sketch.
+        """
+
     system_instruction = f"""
     You are a strict Industrial Garment Costing Engineer at PPJ Group. 
     Your answers must mimic ChatGPT's advanced code interpreter mode:
@@ -850,15 +869,14 @@ def ai_consumption_analyst_engine(client, user_message, matched_techpack, bom_re
     - Pocket Openings (Miệng túi): EXCLUDE the 0.44" rule. Pocket trims and facings must follow the exact techpack dimensions.
     - Garment Hem / Bottom Hem (Lai áo / Lai quần): DO NOT use 0.44". You MUST scan the 'New Spec (POM)' below to find the specific values for keywords like 'Hem', 'Bottom Width', 'Sleeve Hemfold'. Use that exact Techpack value for the hem calculation. If not specified, note it down.
 
+    {scenario_instruction}
+
     CRITICAL DATA FOR CALCULATION:
-    1. MATCHED OLD STYLE DATA: Name: {style_old_name}
-       - Old Spec (POM): {json.dumps(specs_old)}
-       - Old BOM database (convert any meters to YARDS if necessary): {bom_summary}
-    2. NEW STYLE TECHPACK DATA:
+    1. NEW STYLE TECHPACK DATA:
        - Target Base Size detected: Size {detected_size}
        - New Spec (POM) parsed by vision: {json.dumps(new_style_measurements)}
-    3. USER INPUT FABRIC CHANGES:
-       - Fabric Width requested: {f_width if f_width > 0 else 'Keep database standard'}
+    2. USER INPUT FABRIC CHANGES:
+       - Fabric Width requested: {f_width if f_width > 0 else '58 inch'}
        - Width Shrinkage (Co rút ngang): {w_shrink}%
        - Length Shrinkage (Co rút dọc): {l_shrink}%
     """
@@ -948,7 +966,7 @@ def process_single_pdf_batch(file_bytes, file_name):
                 if response and response.text:
                     parsed_json = json.loads(response.text)
                     sketch_idx = parsed_json.get("sketch_page_index_detected", 0)
-                    extracted_sketch_bytes = stored_pages_bytes[sketch_idx] if sketch_idx < len(stored_pages_bytes) else stored_pages_bytes[0]
+                    extracted_sketch_bytes = stored_pages_bytes[sketch_idx] if sketch_idx < len(stored_pages_bytes) else stored_pages_bytes
                     
                     return {
                         "success": True, 
@@ -961,7 +979,6 @@ def process_single_pdf_batch(file_bytes, file_name):
         return {"success": False, "error": "AI không thể cấu trúc dữ liệu JSON sau 3 lần thử."}
     except Exception as e:
         return {"success": False, "error": str(e)}
-# Khởi tạo cấu trúc lưu trữ và hứng tệp
 new_style_id_detected = "UNKNOWN_STYLE"
 new_style_category_detected = ""
 new_style_fabric_detected = "UNKNOWN_FABRIC"
@@ -1033,7 +1050,6 @@ if menu_selection == "🧵 BOM & Consumption Matrix":
     else:
         st.info(f"📋 **CƠ SỞ ĐỐI SOÁT KIỂM TRA:** Đang áp dụng quy chuẩn kích thước hình học rập mẫu cơ sở: **SIZE 32 / M (Mặc định)**")
 
-    # LUỒNG "MẮT THẦN NGHIÊM NGẶT" QUET SUPABASE
     with st.spinner("🧠 Hệ thống thị giác máy tính đang quét kết cấu phom dáng Flat Sketch..."):
         try:
             headers_db = {"apikey": SB_KEY, "Authorization": f"Bearer {SB_KEY}"}
@@ -1052,7 +1068,6 @@ if menu_selection == "🧵 BOM & Consumption Matrix":
                         "sketch_features_vector": s.get("sketch_vector", "")
                     })
                 
-                # SIẾT CHẶT QUY TẮC PHÒNG VỆ THỊ GIÁC: PHÂN TÍCH ĐƯỜNG MAY BÊN TRONG CẤM NHÌN KHUNG HÌNH CHUNG CHUNG
                 match_prompt = f"""
                 You are an expert Computer Vision Ingestion System specialized in Apparel Manufacturing at PPJ Group.
                 Analyze the ATTACHED NEW SKETCH IMAGE and find the single closest matching historical garment style from the pool.
@@ -1168,7 +1183,7 @@ if menu_selection == "🧵 BOM & Consumption Matrix":
                 else:
                     st.info("⚠️ Không có ảnh vật lý nào khớp trên Cloud Storage.")
         else:
-            st.info("💡 Không tìm thấy mã tương đồng cấu trúc phù hợp trong kho lưu trữ.")
+            st.warning("⚠️ KHÔNG TÌM THẤY MÃ TƯƠNG ĐỒNG TRONG KHO! Tự động kích hoạt cơ chế tính toán độc lập bằng Vector Hình Học Ngành May.")
 
     st.markdown("<br>### 📐 SO SÁNH HAI BẢNG THÔNG SỐ KỸ THUẬT RẬP MẪU", unsafe_allow_html=True)
     spec_col1, spec_col2 = st.columns(2)
@@ -1194,7 +1209,7 @@ if menu_selection == "🧵 BOM & Consumption Matrix":
             st.dataframe(df_old_spec, use_container_width=True, hide_index=True)
         else:
             st.markdown("📋 **Bảng 2: Thông số Mã tương đồng trong kho**")
-            st.info("Trống - Hệ thống tự động chuyển qua chế độ tính toán vector hình học rập mẫu mới.")
+            st.info("💡 Trạng thái: Trống dữ liệu kho. Hệ thống sẵn sàng tính toán diện tích rập mô phỏng tự động.")
 
     if matched_techpack and bom_records:
         st.markdown("<br>📦 **Chi Tiết Định Mức Định Hình (BOM Lịch Sử của Mã hàng cũ):**", unsafe_allow_html=True)
