@@ -1479,12 +1479,13 @@ elif menu_selection == "🛒 Purchase Consumption":
                                         st.error(f"Lỗi cổng kết nối AI: {str(chat_err)}")
                                 # -----------------------------------------------------------------------------
                                # -----------------------------------------------------------------------------
-                # ✂️ CHỨC NĂNG 2 - PHẦN 1: TIẾP NHẬN THÔNG SỐ VÀ DÁN DỮ LIỆU SƠ ĐỒ CAD (MÉT)
+                               # -----------------------------------------------------------------------------
+                # ✂️ CHỨC NĂNG 2 - PHẦN 1: TIẾP NHẬN ĐƠN HÀNG VÀ DÁN DỮ LIỆU SƠ ĐỒ CAD (MÉT)
                 # -----------------------------------------------------------------------------
                 elif menu_sub.startswith("✂️ CHỨC NĂNG 2"):
                     st.markdown("#### 📋 KHAI BÁO THÔNG SỐ TÁC NGHIỆP ĐƠN HÀNG VÀ BÀN VẢI MULTI-INSEAM")
                     
-                    # HÀNG 1: THÔNG SỐ ĐẦU VÀO CỐ ĐỊNH
+                    # HÀNG 1: THÔNG SỐ ĐẦU VÀO CỐ ĐỊNH (CHỈ GIỮ LẠI STYLE ID, PO QTY VÀ ĐM TÀI LIỆU DỰ KIẾN)
                     input_col1, input_col2, input_col3 = st.columns(3)
                     with input_col1:
                         style_id_input = st.text_input("🏷️ Tên mã hàng (Style ID):", value=str(detected_style_id).strip().upper())
@@ -1493,34 +1494,33 @@ elif menu_selection == "🛒 Purchase Consumption":
                     with input_col3:
                         consumption_input = st.number_input("🎯 Định mức tài liệu đề xuất (Yds/Pcs):", value=1.140, step=0.001, format="%.3f")
 
-                    # HÀNG 2: CẤU HÌNH CHIỀU DÀI BÀN VẢI VÀ Ô NHẬP COPY SƠ ĐỒ ĐA DÒNG
-                    input_col4, input_col5, input_col6 = st.columns(3)
+                    # HÀNG 2: THIẾT KẾ CARD TINH GỌN (TUYỆT ĐỐI KHÔNG CÒN Ô NHẬP CHIỀU DÀI SƠ ĐỒ CAD)
+                    input_col4, input_col6 = st.columns(2)
                     with input_col4:
                         max_table_length = st.number_input("📏 Chiều dài tối đa bàn vải (Meters):", value=12.00, step=1.0)
-                    
-                    with input_col5:
-                        if "shared_marker_length_yds" not in st.session_state:
-                            st.session_state["shared_marker_length_yds"] = 6.50
-                        marker_length_input = st.number_input(
-                            "📐 Chiều dài sơ đồ thực tế CAD (Yards):", 
-                            value=st.session_state["shared_marker_length_yds"], 
-                            step=0.01, format="%.2f"
-                        )
-                    
                     with input_col6:
-                        # Sửa nhãn thành KHỔ CẮT (%) theo sơ đồ thiết kế vẽ tay
+                        # Nhãn KHỔ CẮT (%) theo đúng sơ đồ thiết kế vẽ tay của anh
                         sewing_loss_rate = st.number_input("⚠️ KHỔ CẮT (% Hao hụt may chuyền):", value=3.0, step=0.5) / 100
                     
-                    # KHU VỰC DÁN CHUỖI SƠ ĐỒ CAD (HỖ TRỢ COPY NGUYÊN BẢNG TỪ EXCEL CAD)
                     st.markdown("<br>", unsafe_allow_html=True)
-                    st.markdown("<p style='font-weight:700; font-size:13px; color:#1E3A8A;'>📥 KHU VỰC DÁN DỮ LIỆU CAD (TÊN SƠ ĐỒ & DÀI SƠ ĐỒ COPY TỪ EXCEL)</p>", unsafe_allow_html=True)
+                    # BẤM NÚT BƯỚC 1: LẬP KHUNG SƠ ĐỒ PHỐI SIZE PHẲNG TRƯỚC
+                    btn_calc = st.button("⚡ TÍNH TOÁN LẬP SƠ ĐỒ", type="secondary", use_container_width=True, key="run_setup_marker_structure")
+                    
+                    if "step1_marker_ready" not in st.session_state:
+                        st.session_state["step1_marker_ready"] = False
+                    if btn_calc:
+                        st.session_state["step1_marker_ready"] = True
+                        
+                    # KHU VỰC DÁN CHUỖI SƠ ĐỒ CAD (ĐỊNH VỊ ĐẦU VÀO DUY NHẤT CHO CHIỀU DÀI THỰC TẾ)
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    st.markdown("<p style='font-weight:700; font-size:13px; color:#1E3A8A;'>📥 KHU VỰC DÁN DỮ LIỆU ĐỘ DÀI CAD THỰC TẾ (NHẬP SAU KHI ĐI SƠ ĐỒ)</p>", unsafe_allow_html=True)
                     cad_paste_zone = st.text_area(
-                        "Cho phép coppy dãy số chiều dài sơ đồ vào (Ví dụ dán trực tiếp: BLU-10-5844-R1-C01 10):",
-                        placeholder="Dán dữ liệu copy gồm cột TÊN SƠ ĐỒ và DÀI SƠ ĐỒ đứng cạnh nhau tại đây...",
+                        "Sau khi xem bảng sơ đồ phối phía dưới, hãy đi sơ đồ trên máy CAD rồi copy dán kết quả [Tên sơ đồ + Chiều dài mét] vào đây:",
+                        placeholder="Ví dụ dán bảng từ Excel CAD:\nBLU-10-5844-R1-C01\t10\nBLU-10-5844-R1-C02\t9",
                         height=90, key="cad_bulk_paste_input"
                     )
 
-                    # Thuật toán bóc tách dữ liệu chuỗi copy đa dòng từ Excel CAD sang mảng cục bộ
+                    # Thuật toán trích xuất dữ liệu mảng chuỗi copy đa dòng từ Excel CAD
                     cad_length_meters_list = []
                     cad_names_list = []
                     
@@ -1532,10 +1532,9 @@ elif menu_selection == "🛒 Purchase Consumption":
                                 raw_name = tokens
                                 raw_length = tokens
                                 
-                                # Tách chuỗi tự động lấy 3 ký tự cuối (C01, C02, C03...) của Tên sơ đồ
                                 if "-" in raw_name:
                                     sub_parts = raw_name.split("-")
-                                    clean_name = sub_parts[-1].upper()
+                                    clean_name = sub_parts[-1].upper() # Trích xuất mã đuôi C01, C02
                                 else:
                                     clean_name = raw_name[-3:].upper()
                                     
@@ -1543,31 +1542,27 @@ elif menu_selection == "🛒 Purchase Consumption":
                                     meters_val = float(raw_length)
                                     cad_length_meters_list.append(meters_val)
                                     cad_names_list.append(clean_name)
-                                    
-                                    if len(cad_length_meters_list) == 1:
-                                        st.session_state["shared_marker_length_yds"] = round(meters_val * 1.09361, 2)
                                 except Exception:
                                     continue
 
-                    # THÊM NÚT BẤM "⚡ THÊM NÚT TÍNH TN TỰ ĐỘNG" THEO BẢN VẼ
-                    st.markdown("<br>", unsafe_allow_html=True)
-                    btn_calc = st.button("⚡ THÊM NÚT TÍNH TN TỰ ĐỘNG", type="primary", use_container_width=True, key="run_auto_tn_computation")
+                    # BẤM NÚT BƯỚC 2: KÍCH HOẠT PHÉP QUY ĐỔI TOÁN HỌC SANG YARD VÀ TỰ ĐỘNG NHẢY SỐ VẢI
+                    btn_final_execute = st.button("⚡ KÍCH HOẠT QUY ĐỔI & TÍNH ĐỊNH MỨC THỰC TẾ", type="primary", use_container_width=True, key="run_final_yds_calculation")
                     
-                    if "tn_calculated_trigger" not in st.session_state:
-                        st.session_state["tn_calculated_trigger"] = False
+                    if "step2_computation_active" not in st.session_state:
+                        st.session_state["step2_computation_active"] = False
                     if "bulk_cad_data_store" not in st.session_state:
                         st.session_state["bulk_cad_data_store"] = []
                         
-                    if btn_calc:
-                        st.session_state["tn_calculated_trigger"] = True
+                    if btn_final_execute:
+                        st.session_state["step2_computation_active"] = True
                         st.session_state["bulk_cad_data_store"] = []
                         if cad_length_meters_list:
                             for idx_c in range(len(cad_length_meters_list)):
                                 st.session_state["bulk_cad_data_store"].append({
                                     "code": cad_names_list[idx_c],
-                                    "length_yds": round(cad_length_meters_list[idx_c] * 1.09361, 2)
+                                    "length_yds": round(cad_length_meters_list[idx_c] * 1.09361, 2) # Quy đổi 1m = 1.09361 yds
                                 })
-                                    # -----------------------------------------------------------------------------
+
                 # ✂️ CHỨC NĂNG 2 - PHẦN 1: TIẾP NHẬN ĐƠN HÀNG VÀ PHÂN CHIA SƠ ĐỒ BƯỚC ĐẦU
                 # -----------------------------------------------------------------------------
                 elif menu_sub.startswith("✂️ CHỨC NĂNG 2"):
