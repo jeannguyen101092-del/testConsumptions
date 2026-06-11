@@ -1656,7 +1656,8 @@ elif menu_selection == "🛒 Purchase Consumption":
                         })
 
                         # -----------------------------------------------------------------------------
-            # ✂️ CHỨC NĂNG 2 - PHẦN 2.1: VÒNG LẶP CHIA BÀN CẮT PHỐI GỘP ĐA GIÀNG DỰ KIẾN
+                       # -----------------------------------------------------------------------------
+            # ✂️ CHỨC NĂNG 2 - PHẦN 2.1: THUẬT TOÁN TỰ ĐỘNG HẠ TỶ LỆ KHỐNG CHẾ CHIỀU DÀI BÀN CẮT
             # -----------------------------------------------------------------------------
             if st.session_state["step1_marker_ready"]:
                 if not size_breakdown_main:
@@ -1664,6 +1665,13 @@ elif menu_selection == "🛒 Purchase Consumption":
                 else:
                     st.markdown("##### ✂️ LỊCH TRÌNH GỘP SIZE - CHIA TỶ LỆ PHỐI SƠ ĐỒ ĐA GIÀNG DỰ KIẾN")
                     MAX_LAYERS_PER_TABLE = 100
+                    
+                    # Quy đổi chiều dài tối đa bàn vải từ Mét sang Yard để đồng bộ phép tính sơ đồ CAD
+                    max_table_length_yds = max_table_length * 1.09361
+                    
+                    # ⚡ TOÁN HỌC KHỐNG CHẾ CHẶN TRÊN: Tính tổng số sản phẩm tối đa được xếp trên 1 lớp sơ đồ
+                    # Tránh kịch bản định mức lớn (e.g. 2Y) đi tổng tỷ lệ 8 làm dài sơ đồ vượt quá chiều dài bàn cắt
+                    max_pcs_per_marker = max(1, int(max_table_length_yds / consumption_input))
                     
                     cutting_sizes_pool = {str(sz).strip().upper(): int(qty) for sz, qty in size_breakdown_main.items()}
                     
@@ -1678,16 +1686,29 @@ elif menu_selection == "🛒 Purchase Consumption":
                         active_items = [k for k, v in cutting_sizes_pool.items() if v > 0]
                         if not active_items: 
                             break
+                        
+                        # Chọn nhóm size phẳng có sản lượng tồn lớn nhất
                         active_batch = sorted(active_items, key=lambda x: cutting_sizes_pool[x], reverse=True)[:4]
                         planned_layers = min([cutting_sizes_pool[sz] for sz in active_batch])
                         planned_layers = min(max(1, planned_layers), MAX_LAYERS_PER_TABLE)
                         
-                        current_combination, ratio_display = [], []
+                        current_combination = []
+                        ratio_display = []
                         actual_table_output = 0
+                        current_marker_total_pcs = 0
                         
                         for sz in active_batch:
+                            # Tính tỷ lệ dự kiến dựa trên lượng tồn
                             ratio_val = round(cutting_sizes_pool[sz] / planned_layers)
                             ratio_val = min(max(1, ratio_val), 2)
+                            
+                            # ⚡ THUẬT TOÁN KIỂM TRA CHẶN TRÊN CHIỀU DÀI:
+                            # Nếu cộng thêm tỷ lệ này vào mà tổng số sản phẩm trên sơ đồ vượt quá giới hạn chiều dài bàn, tự động hạ tỷ lệ xuống mốc 1 hoặc ngắt không cho gộp size thêm vào sơ đồ này nữa
+                            if (current_marker_total_pcs + ratio_val) > max_pcs_per_marker:
+                                if current_marker_total_pcs == 0:
+                                    ratio_val = 1  # Giữ tối thiểu 1 sản phẩm nếu là size đầu tiên của sơ đồ
+                                else:
+                                    break          # Ngắt luôn bàn cắt này, đẩy size dư sang sơ đồ tiếp theo để bảo vệ chiều dài bàn cắt
                             
                             pcs_to_cut = planned_layers * ratio_val
                             if pcs_to_cut > cutting_sizes_pool[sz]:
@@ -1696,8 +1717,25 @@ elif menu_selection == "🛒 Purchase Consumption":
                             
                             current_combination.append(sz)
                             ratio_display.append(str(ratio_val))
+                            current_marker_total_pcs += ratio_val
                             actual_table_output += pcs_to_cut
-                            cutting_sizes_pool[sz] = max(0, cutting_sizes_pool[sz] - pcs_to_cut)
+                        
+                        # Trường hợp khẩn cấp nếu batch bị trống do bị chặn chiều dài, ép lấy 1 size sản lượng lớn nhất
+                        if not current_combination:
+                            sz_backup = active_batch[0]
+                            ratio_val = 1
+                            pcs_to_cut = min(planned_layers * ratio_val, cutting_sizes_pool[sz_backup])
+                            current_combination.append(sz_backup)
+                            ratio_display.append(str(ratio_val))
+                            current_marker_total_pcs += ratio_val
+                            actual_table_output += pcs_to_cut
+                            
+                        for i, sz in enumerate(current_combination):
+                            # Trừ lùi sản lượng thực tế đã phân bổ ra khỏi kho pool SBD
+                            pcs_sub = planned_layers * int(ratio_display[i])
+                            if pcs_sub > cutting_sizes_pool[sz]:
+                                pcs_sub = cutting_sizes_pool[sz]
+                            cutting_sizes_pool[sz] = max(0, cutting_sizes_pool[sz] - pcs_sub)
                             
                         sum_of_ratios = sum([int(r) for r in ratio_display])
                         total_planned_cut_pcs += actual_table_output
@@ -1730,6 +1768,7 @@ elif menu_selection == "🛒 Purchase Consumption":
                             
                     df_marker_plan = pd.DataFrame(marker_tables_report)
                     st.dataframe(df_marker_plan, use_container_width=True, hide_index=True)
+
                     # -----------------------------------------------------------------------------
                     # ✂️ CHỨC NĂNG 2 - PHẦN 2.2: ĐỒ HỌA EXCEL CHUYÊN NGHIỆP VÀ ĐỒNG BỘ SUPABASE
                     # -----------------------------------------------------------------------------
