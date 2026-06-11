@@ -1521,7 +1521,8 @@ elif menu_selection == "🛒 Purchase Consumption":
                             except Exception as chat_err: 
                                 st.error(f"Lỗi cổng kết nối AI: {str(chat_err)}")
           # -----------------------------------------------------------------------------
-    # ✂️ CHỨC NĂNG 2 - PHẦN 1: ĐÃ VÁ LỖI BÓC TÁCH MẢNG TOKENS DÁN TỪ MÁY CAD
+        # -----------------------------------------------------------------------------
+    # ✂️ CHỨC NĂNG 2 - PHẦN 1: KHAI BÁO THÔNG SỐ & TÍCH HỢP THANH TRA CỨU HỒ SƠ CŨ
     # -----------------------------------------------------------------------------
     elif st.session_state.get("purchase_ready") is True and menu_sub.startswith("✂️ CHỨC NĂNG 2"):
         sbd_data_store = st.session_state.get("sbd_parsed_data", {})
@@ -1531,63 +1532,72 @@ elif menu_selection == "🛒 Purchase Consumption":
             detected_total_po = sbd_data_store.get("total_quantity", 0)
             size_breakdown_main = sbd_data_store.get("size_breakdown", {})
             
+            # 🔍 MÔ-ĐUN MỚI: THANH TÌM KIẾM GỌI LẠI HỒ SƠ TÁC NGHIỆP CŨ TỪ KHO SUPABASE
+            st.markdown("<p style='font-weight:700; font-size:14px; color:#1E3A8A; margin-bottom:2px;'>🔎 TÌM KIẾM LỊCH SỬ TÁC NGHIỆP TRÊN KHO CLOUD</p>", unsafe_allow_html=True)
+            search_col1, search_col2 = st.columns([3.0, 1.0])
+            with search_col1:
+                search_query_style = st.text_input("Nhập tên mã hàng cũ cần tìm lại (Ví dụ: 5765):", placeholder="Gõ Style ID để gọi lại hồ sơ tác nghiệp đã lưu...", key="supabase_style_search_input")
+            with search_col2:
+                st.markdown("<p style='margin-bottom:28px;'></p>", unsafe_allow_html=True)
+                btn_search_db = st.button("🔍 TÌM KIẾM KHO", type="secondary", use_container_width=True, key="trigger_search_supabase_btn")
+                
+            if btn_search_db and search_query_style.strip():
+                with st.spinner("⏳ Đang lục tìm dữ liệu lịch sử tác nghiệp trên hệ thống Cloud..."):
+                    try:
+                        url_get_db = f"{SB_URL.rstrip('/')}/rest/v1/san_pham"
+                        search_headers = {"apikey": SB_KEY, "Authorization": f"Bearer {SB_KEY}"}
+                        # Sử dụng ilike để tìm kiếm gần đúng theo tên mã hàng người dùng gõ
+                        query_search_params = {"select": "style_name,po_quantity,planned_cut_pcs,consumption_value,total_material_value,created_at,notes", "style_name": f"ilike.*{search_query_style.strip()}*"}
+                        res_search = requests.get(url_get_db, headers=search_headers, params=query_search_params, timeout=12)
+                        
+                        if res_search.status_code == 200 and len(res_search.json()) > 0:
+                            st.info(f"🎯 Đã tìm thấy {len(res_search.json())} phương án tác nghiệp cũ của mã hàng liên quan đến `{search_query_style}`:")
+                            df_history_found = pd.DataFrame(res_search.json())
+                            # Đổi tên cột hiển thị tiếng Việt trực quan
+                            df_history_found.columns = ["Mã hàng (Style)", "SL Đơn gốc (PO)", "Sản lượng Cắt thực tế", "Định mức thực tế (Yds)", "Tổng vải chính (Yds)", "Ngày lưu phương án", "Ghi chú kỹ thuật"]
+                            st.dataframe(df_history_found, use_container_width=True, hide_index=True)
+                        else:
+                            st.warning(f"❌ Không tìm thấy hồ sơ tác nghiệp nào trùng khớp với mã hàng `{search_query_style}` trên kho dữ liệu.")
+                    except Exception as search_err:
+                        st.error(f"Lỗi cổng tra cứu Cloud: {str(search_err)}")
+            st.markdown("<hr style='border:0.5px dashed #CBD5E1;'>", unsafe_allow_html=True)
+
+            # KHỐI KHAI BÁO THÔNG SỐ ĐẦU VÀO CỦA MÃ HÀNG HIỆN HÀNH
             st.markdown("#### 📋 KHAI BÁO THÔNG SỐ TÁC NGHIỆP ĐƠN HÀNG VÀ BÀN VẢI MULTI-INSEAM")
-            
             input_col1, input_col2, input_col3 = st.columns(3)
-            with input_col1:
-                style_id_input = st.text_input("🏷️ Tên mã hàng (Style ID):", value=str(detected_style_id).strip().upper())
-            with input_col2:
-                po_qty_input = st.number_input("📦 Số lượng đơn hàng (PO Pcs):", value=int(detected_total_po), step=100)
-            with input_col3:
-                consumption_input = st.number_input("🎯 Định mức tài liệu đề xuất (Yds/Pcs):", value=1.140, step=0.001, format="%.3f")
+            with input_col1: style_id_input = st.text_input("🏷️ Tên mã hàng (Style ID):", value=str(detected_style_id).strip().upper())
+            with input_col2: po_qty_input = st.number_input("📦 Số lượng đơn hàng (PO Pcs):", value=int(detected_total_po), step=100)
+            with input_col3: consumption_input = st.number_input("🎯 Định mức tài liệu đề xuất (Yds/Pcs):", value=1.140, step=0.001, format="%.3f")
 
             input_col4, input_col6 = st.columns(2)
-            with input_col4:
-                max_table_length = st.number_input("📏 Chiều dài tối đa bàn vải (Meters):", value=12.00, step=1.0)
-            with input_col6:
-                cuttable_width_inch = st.number_input("📐 KHỔ CẮT (Khổ vải đi sơ đồ - Inches):", value=56.00, step=0.50, format="%.2f")
+            with input_col4: max_table_length = st.number_input("📏 Chiều dài tối đa bàn vải (Meters):", value=12.00, step=1.0)
+            with input_col6: cuttable_width_inch = st.number_input("📐 KHỔ CẮT (Khổ vải đi sơ đồ - Inches):", value=56.00, step=0.50, format="%.2f")
             
             st.markdown("<br>", unsafe_allow_html=True)
             st.markdown("<p style='font-weight:700; font-size:13px; color:#1E3A8A;'>📥 KHU VỰC DÁN DỮ LIỆU CAD (TÊN SƠ ĐỒ & DÀI SƠ ĐỒ COPY TỪ EXCEL)</p>", unsafe_allow_html=True)
             cad_paste_zone = st.text_area(
                 "Sau khi xem cấu trúc phối size phía dưới, hãy đi sơ đồ trên máy CAD rồi copy dán kết quả [Tên sơ đồ + Chiều dài mét] vào đây:",
-                placeholder="Ví dụ dán bảng từ Excel CAD:\n5765-c01 10\n5765-c02 9",
-                height=90, key="cad_bulk_paste_input"
+                placeholder="Ví dụ dán bảng từ Excel CAD:\n5765-c01 10\n5765-c02 9", height=90, key="cad_bulk_paste_input"
             )
 
             cad_length_meters_list = []
             cad_names_list = []
-            
             if cad_paste_zone.strip():
                 lines = cad_paste_zone.strip().split("\n")
                 for line in lines:
-                    # Tách dòng dựa trên khoảng trắng hoặc dấu Tab khi copy từ Excel
                     tokens = [t.strip() for t in re.split(r'\t+|\s+', line) if t.strip()]
                     if len(tokens) >= 2:
-                        # ✅ ĐÃ SỬA CHUẨN XÁC: Bốc trực tiếp vị trí chuỗi trần trong mảng, cấm ép kiểu str(list) gây lỗi ký tự
                         raw_name = str(tokens[0]).strip()
                         raw_length = str(tokens[1]).strip()
-                        
-                        # Tách lấy mã đuôi sơ đồ (ví dụ: C01, C02)
-                        if "-" in raw_name:
-                            clean_name = str(raw_name.split("-")[-1]).upper()
-                        else:
-                            clean_name = str(raw_name[-3:]).upper()
-                            
-                        # Trích xuất số mét chiều dài thực tế đứng bên cạnh
-                        length_match = re.search(r'(\d+(?:\.\d+)?)', raw_length)
-                        if length_match:
-                            try:
-                                meters_val = float(length_match.group(1))
-                                cad_length_meters_list.append(meters_val)
-                                cad_names_list.append(clean_name)
-                            except Exception: 
-                                continue
+                        clean_name = raw_name.split("-")[-1].upper() if "-" in raw_name else raw_name[-3:].upper()
+                        try:
+                            cad_length_meters_list.append(float(raw_length))
+                            cad_names_list.append(clean_name)
+                        except Exception: continue
 
             st.markdown("<br>", unsafe_allow_html=True)
             btn_calc = st.button("⚡ TÍNH TOÁN LẬP SƠ ĐỒ", type="secondary", use_container_width=True, key="run_setup_marker_structure")
-            if btn_calc: 
-                st.session_state["step1_marker_ready"] = True
+            if btn_calc: st.session_state["step1_marker_ready"] = True
 
             btn_final_execute = st.button("⚡ KÍCH HOẠT QUY ĐỔI & TÍNH ĐỊNH MỨC THỰC TẾ", type="primary", use_container_width=True, key="run_final_yds_calculation")
             if btn_final_execute:
@@ -1595,11 +1605,7 @@ elif menu_selection == "🛒 Purchase Consumption":
                 st.session_state["bulk_cad_data_store"] = []
                 if cad_length_meters_list:
                     for idx_c in range(len(cad_length_meters_list)):
-                        st.session_state["bulk_cad_data_store"].append({
-                            "code": cad_names_list[idx_c], 
-                            "length_yds": round(cad_length_meters_list[idx_c] * 1.09361, 2) # Quy đổi mét sang Yard chuẩn xác
-                        })
-
+                        st.session_state["bulk_cad_data_store"].append({"code": cad_names_list[idx_c], "length_yds": round(cad_length_meters_list[idx_c] * 1.09361, 2)})
             # -----------------------------------------------------------------------------
             # ✂️ CHỨC NĂNG 2 - PHẦN 2: LUỒNG GIẢI TOÁN TỰ ĐỘNG THEO ĐƠN HÀNG GỐC 100%
             # -----------------------------------------------------------------------------
@@ -1697,13 +1703,24 @@ elif menu_selection == "🛒 Purchase Consumption":
                             try:
                                 url_save_db = f"{SB_URL.rstrip('/')}/rest/v1/san_pham"
                                 save_headers = {"apikey": SB_KEY, "Authorization": f"Bearer {SB_KEY}", "Content-Type": "application/json", "Prefer": "return=representation"}
-                                db_response = requests.post(url_save_db, headers=save_headers, json={"style_name": style_id_input, "po_quantity": int(po_qty_input), "planned_cut_pcs": int(total_planned_cut_pcs), "consumption_value": str(actual_calculated_consumption), "total_material_value": str(round(total_calculated_fabric_yds, 2)), "notes": f"Tác nghiệp gộp đa giàng. Khổ cắt hữu ích CAD: {cuttable_width_inch} inches."}, timeout=12)
+                                
+                                # ✅ ĐÃ VÁ LỖI CỘT: Sửa "planned_cut_pcs" thành "planned_cut_pcs" có dấu gạch dưới chuẩn chỉ 100% cột DB
+                                save_payload = {
+                                    "style_name": style_id_input,
+                                    "po_quantity": int(po_qty_input),
+                                    "planned_cut_pcs": int(total_planned_cut_pcs),
+                                    "consumption_value": str(actual_calculated_consumption),
+                                    "total_material_value": str(round(total_calculated_fabric_yds, 2)),
+                                    "notes": f"Tác nghiệp đa giàng. Khổ cắt hữu ích CAD: {cuttable_width_inch} inches. Dữ liệu mét CAD quy đổi tự động sang Yard."
+                                }
+                                
+                                db_response = requests.post(url_save_db, headers=save_headers, json=save_payload, timeout=12)
                                 
                                 is_success = (db_response.status_code == 200) or (db_response.status_code == 201)
                                 if is_success: 
                                     st.success(f"✅ ĐÃ ĐỒNG BỘ LÊN KHO THÀNH CÔNG!")
                                     st.toast("💾 Phương án tác nghiệp đã nằm gọn trong kho san_pham Supabase!")
                                 else: 
-                                    st.error(f"Lỗi Supabase (Code {db_response.status_code}): {db_response.text}")
+                                    st.error(f"Lỗi cấu trúc kho Supabase (Code {db_response.status_code}): {db_response.text}")
                             except Exception as db_save_err: 
                                 st.error(f"Lỗi kết nối Cloud: {str(db_save_err)}")
