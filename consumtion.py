@@ -1606,7 +1606,7 @@ elif menu_selection == "🛒 Purchase Consumption":
                 if cad_length_meters_list:
                     for idx_c in range(len(cad_length_meters_list)):
                         st.session_state["bulk_cad_data_store"].append({"code": cad_names_list[idx_c], "length_yds": round(cad_length_meters_list[idx_c] * 1.09361, 2)})
-            # -----------------------------------------------------------------------------
+                        # -----------------------------------------------------------------------------
             # ✂️ CHỨC NĂNG 2 - PHẦN 2: LUỒNG GIẢI TOÁN TỰ ĐỘNG THEO ĐƠN HÀNG GỐC 100%
             # -----------------------------------------------------------------------------
             if st.session_state["step1_marker_ready"]:
@@ -1704,14 +1704,14 @@ elif menu_selection == "🛒 Purchase Consumption":
                                 url_save_db = f"{SB_URL.rstrip('/')}/rest/v1/san_pham"
                                 save_headers = {"apikey": SB_KEY, "Authorization": f"Bearer {SB_KEY}", "Content-Type": "application/json", "Prefer": "return=representation"}
                                 
-                                # ✅ ĐÃ VÁ LỖI CỘT: Sửa "planned_cut_pcs" thành "planned_cut_pcs" có dấu gạch dưới chuẩn chỉ 100% cột DB
+                                # ✅ ĐÃ SỬA GỌN GÀNG: Loại bỏ hoàn toàn trường planned_cut_pcs gây lỗi lệch cột DB.
+                                # Nén toàn bộ dữ liệu cắt thực tế và khổ cắt hữu ích dồn chung vào trường notes văn bản trần an toàn.
                                 save_payload = {
                                     "style_name": style_id_input,
                                     "po_quantity": int(po_qty_input),
-                                    "planned_cut_pcs": int(total_planned_cut_pcs),
                                     "consumption_value": str(actual_calculated_consumption),
                                     "total_material_value": str(round(total_calculated_fabric_yds, 2)),
-                                    "notes": f"Tác nghiệp đa giàng. Khổ cắt hữu ích CAD: {cuttable_width_inch} inches. Dữ liệu mét CAD quy đổi tự động sang Yard."
+                                    "notes": f"Sản lượng cắt thực tế: {total_planned_cut_pcs} Pcs. Khổ cắt CAD: {cuttable_width_inch} inches. Quy đổi mét sang Yard từ dữ liệu dán CAD."
                                 }
                                 
                                 db_response = requests.post(url_save_db, headers=save_headers, json=save_payload, timeout=12)
