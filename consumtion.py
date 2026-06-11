@@ -1232,16 +1232,15 @@ if menu_selection == "🧵 BOM & Consumption Matrix":
 
     st.markdown("<br><hr style='border:0.5px solid #CBD5E1;'>", unsafe_allow_html=True)
     
-        chat_header_col1, chat_header_col2 = st.columns([3.2, 0.8])
+           # THIẾT KẾ CỤM ĐIỀU KHIỂN CHAT BOX THÔNG MINH SIÊU TỐC
+    chat_header_col1, chat_header_col2 = st.columns([3.2, 0.8])
     with chat_header_col1:
         st.markdown("### 💬 TRỢ LÝ AI PHÂN TÍCH ĐỊNH MỨC SẢN XUẤT (HỎI ĐÂU ĐÁP ĐÓ)")
     with chat_header_col2:
         # ✅ SỬA LỖI SIÊU TỐC: Xóa trực tiếp mảng và không ép hệ thống phải load lại file PDF từ đầu
         if st.button("🗑️ XÓA LỊCH SỬ CHAT", key="direct_clear_chat_btn", use_container_width=True):
             st.session_state["consumption_chat_history"] = []
-            # Sử h dụng st.toast để hiện thông báo nhanh góc màn hình thay vì st.success làm đẩy giao diện
             st.toast("♻️ Đã xóa sạch lịch sử chat tức thì!")
-                    )
 
     chat_container = st.container()
     with chat_container:
@@ -1269,13 +1268,14 @@ if menu_selection == "🧵 BOM & Consumption Matrix":
                     )
                     st.write(ai_reply)
         
+        # ✅ THUẬT TOÁN ĐÓNG ĐINH NEO CUỘN: Ép trình duyệt tự động scroll lướt màn hình xuống vị trí tin nhắn cuối cùng
         st.components.v1.html(
             """
             <script>
                 var doc = window.parent.document;
                 var sections = doc.querySelectorAll('section.main');
                 if (sections.length > 0) {
-                    sections.scrollTo({top: sections.scrollHeight, behavior: 'smooth'});
+                    sections[0].scrollTo({top: sections[0].scrollHeight, behavior: 'smooth'});
                 }
             </script>
             """,
