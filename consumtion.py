@@ -1241,7 +1241,7 @@ if menu_selection == "🧵 BOM & Consumption Matrix":
             st.session_state["consumption_chat_history"] = []
             # Sử h dụng st.toast để hiện thông báo nhanh góc màn hình thay vì st.success làm đẩy giao diện
             st.toast("♻️ Đã xóa sạch lịch sử chat tức thì!")
-)
+                    )
 
     chat_container = st.container()
     with chat_container:
