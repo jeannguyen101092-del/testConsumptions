@@ -1522,7 +1522,8 @@ elif menu_selection == "🛒 Purchase Consumption":
                                 st.error(f"Lỗi cổng kết nối AI: {str(chat_err)}")
           # -----------------------------------------------------------------------------
         # -----------------------------------------------------------------------------
-    # ✂️ CHỨC NĂNG 2 - PHẦN 1: KHAI BÁO THÔNG SỐ & TÍCH HỢP THANH TRA CỨU HỒ SƠ CŨ
+       # -----------------------------------------------------------------------------
+    # ✂️ CHỨC NĂNG 2 - PHẦN 1: KHAI BÁO THÔNG SỐ VÀ Ô TRA CỨU TRÊN KHO ĐỘC LẬP
     # -----------------------------------------------------------------------------
     elif st.session_state.get("purchase_ready") is True and menu_sub.startswith("✂️ CHỨC NĂNG 2"):
         sbd_data_store = st.session_state.get("sbd_parsed_data", {})
@@ -1532,32 +1533,34 @@ elif menu_selection == "🛒 Purchase Consumption":
             detected_total_po = sbd_data_store.get("total_quantity", 0)
             size_breakdown_main = sbd_data_store.get("size_breakdown", {})
             
-            # 🔍 MÔ-ĐUN MỚI: THANH TÌM KIẾM GỌI LẠI HỒ SƠ TÁC NGHIỆP CŨ TỪ KHO SUPABASE
-            st.markdown("<p style='font-weight:700; font-size:14px; color:#1E3A8A; margin-bottom:2px;'>🔎 TÌM KIẾM LỊCH SỬ TÁC NGHIỆP TRÊN KHO CLOUD</p>", unsafe_allow_html=True)
+            # 🔍 MÔ-ĐUN TRA CỨU: Gọi dữ liệu tác nghiệp cũ từ bảng riêng biệt tac_nghiep_ban_cat
+            st.markdown("<p style='font-weight:700; font-size:14px; color:#1E3A8A; margin-bottom:2px;'>🔎 TÌM KIẾM LỊCH SỬ TÁC NGHIỆP TRÊN KHO ĐỘC LẬP</p>", unsafe_allow_html=True)
             search_col1, search_col2 = st.columns([3.0, 1.0])
             with search_col1:
-                search_query_style = st.text_input("Nhập tên mã hàng cũ cần tìm lại (Ví dụ: 5765):", placeholder="Gõ Style ID để gọi lại hồ sơ tác nghiệp đã lưu...", key="supabase_style_search_input")
+                search_query_style = st.text_input("Nhập tên mã hàng cũ cần tìm lại (Ví dụ: 5765):", placeholder="Gõ Style ID để lôi hồ sơ tác nghiệp cũ về...", key="supabase_style_search_input")
             with search_col2:
                 st.markdown("<p style='margin-bottom:28px;'></p>", unsafe_allow_html=True)
                 btn_search_db = st.button("🔍 TÌM KIẾM KHO", type="secondary", use_container_width=True, key="trigger_search_supabase_btn")
                 
             if btn_search_db and search_query_style.strip():
-                with st.spinner("⏳ Đang lục tìm dữ liệu lịch sử tác nghiệp trên hệ thống Cloud..."):
+                with st.spinner("⏳ Đang lục tìm hồ sơ cũ trên kho tác nghiệp..."):
                     try:
-                        url_get_db = f"{SB_URL.rstrip('/')}/rest/v1/san_pham"
+                        # Hướng lệnh GET quét sang bảng riêng biệt mới tạo
+                        url_get_db = f"{SB_URL.rstrip('/')}/rest/v1/tac_nghiep_ban_cat"
                         search_headers = {"apikey": SB_KEY, "Authorization": f"Bearer {SB_KEY}"}
-                        # Sử dụng ilike để tìm kiếm gần đúng theo tên mã hàng người dùng gõ
-                        query_search_params = {"select": "style_name,po_quantity,planned_cut_pcs,consumption_value,total_material_value,created_at,notes", "style_name": f"ilike.*{search_query_style.strip()}*"}
+                        query_search_params = {
+                            "select": "style_name,po_quantity,planned_cut_pcs,consumption_value,total_material_value,cuttable_width_inch,created_at,notes", 
+                            "style_name": f"ilike.*{search_query_style.strip()}*"
+                        }
                         res_search = requests.get(url_get_db, headers=search_headers, params=query_search_params, timeout=12)
                         
                         if res_search.status_code == 200 and len(res_search.json()) > 0:
-                            st.info(f"🎯 Đã tìm thấy {len(res_search.json())} phương án tác nghiệp cũ của mã hàng liên quan đến `{search_query_style}`:")
+                            st.info(f"🎯 Đã tìm thấy {len(res_search.json())} phương án cũ thuộc kho chứa riêng biệt:")
                             df_history_found = pd.DataFrame(res_search.json())
-                            # Đổi tên cột hiển thị tiếng Việt trực quan
-                            df_history_found.columns = ["Mã hàng (Style)", "SL Đơn gốc (PO)", "Sản lượng Cắt thực tế", "Định mức thực tế (Yds)", "Tổng vải chính (Yds)", "Ngày lưu phương án", "Ghi chú kỹ thuật"]
+                            df_history_found.columns = ["Mã hàng (Style)", "SL Đơn gốc (PO)", "Sản lượng Cắt thực tế", "Định mức thực tế (Yds)", "Tổng vải chính (Yds)", "Khổ Cắt (Inch)", "Ngày lưu phương án", "Chi tiết lịch trình bàn cắt"]
                             st.dataframe(df_history_found, use_container_width=True, hide_index=True)
                         else:
-                            st.warning(f"❌ Không tìm thấy hồ sơ tác nghiệp nào trùng khớp với mã hàng `{search_query_style}` trên kho dữ liệu.")
+                            st.warning(f"❌ Không tìm thấy hồ sơ cũ nào của mã `{search_query_style}` trên kho chứa riêng biệt `tac_nghiep_ban_cat`.")
                     except Exception as search_err:
                         st.error(f"Lỗi cổng tra cứu Cloud: {str(search_err)}")
             st.markdown("<hr style='border:0.5px dashed #CBD5E1;'>", unsafe_allow_html=True)
@@ -1587,8 +1590,8 @@ elif menu_selection == "🛒 Purchase Consumption":
                 for line in lines:
                     tokens = [t.strip() for t in re.split(r'\t+|\s+', line) if t.strip()]
                     if len(tokens) >= 2:
-                        raw_name = str(tokens[0]).strip()
-                        raw_length = str(tokens[1]).strip()
+                        raw_name = str(tokens).strip()
+                        raw_length = str(tokens).strip()
                         clean_name = raw_name.split("-")[-1].upper() if "-" in raw_name else raw_name[-3:].upper()
                         try:
                             cad_length_meters_list.append(float(raw_length))
@@ -1606,9 +1609,8 @@ elif menu_selection == "🛒 Purchase Consumption":
                 if cad_length_meters_list:
                     for idx_c in range(len(cad_length_meters_list)):
                         st.session_state["bulk_cad_data_store"].append({"code": cad_names_list[idx_c], "length_yds": round(cad_length_meters_list[idx_c] * 1.09361, 2)})
-                        # -----------------------------------------------------------------------------
-                       # -----------------------------------------------------------------------------
-            # ✂️ CHỨC NĂNG 2 - PHẦN 2: LUỒNG GIẢI TOÁN TỰ ĐỘNG VÀ VÁ TRIỆT ĐỂ LỖI CỘT CLOUD
+            # -----------------------------------------------------------------------------
+            # ✂️ CHỨC NĂNG 2 - PHẦN 2: LUỒNG GIẢI TOÁN TỰ ĐỘNG VÀ ĐỒNG BỘ KHO ĐỘC LẬP
             # -----------------------------------------------------------------------------
             if st.session_state["step1_marker_ready"]:
                 if not size_breakdown_main:
@@ -1616,7 +1618,6 @@ elif menu_selection == "🛒 Purchase Consumption":
                 else:
                     st.markdown("##### ✂️ LỊCH TRÌNH GỘP SIZE - CHIA TỶ LỆ PHỐI SƠ ĐỒ ĐA GIÀNG DỰ KIẾN")
                     MAX_LAYERS_PER_TABLE = 100
-                    
                     cutting_sizes_pool = {str(sz).strip().upper(): int(qty) for sz, qty in size_breakdown_main.items()}
                     
                     marker_tables_report = []
@@ -1628,8 +1629,7 @@ elif menu_selection == "🛒 Purchase Consumption":
                     
                     while any(v > 0 for v in cutting_sizes_pool.values()):
                         active_items = [k for k, v in cutting_sizes_pool.items() if v > 0]
-                        if not active_items: 
-                            break
+                        if not active_items: break
                         active_batch = sorted(active_items, key=lambda x: cutting_sizes_pool[x], reverse=True)[:4]
                         planned_layers = min([cutting_sizes_pool[sz] for sz in active_batch])
                         planned_layers = min(max(1, planned_layers), MAX_LAYERS_PER_TABLE)
@@ -1640,12 +1640,10 @@ elif menu_selection == "🛒 Purchase Consumption":
                         for sz in active_batch:
                             ratio_val = round(cutting_sizes_pool[sz] / planned_layers)
                             ratio_val = min(max(1, ratio_val), 2)
-                            
                             pcs_to_cut = planned_layers * ratio_val
                             if pcs_to_cut > cutting_sizes_pool[sz]:
                                 pcs_to_cut = cutting_sizes_pool[sz]
                                 ratio_val = max(1, round(pcs_to_cut / planned_layers))
-                            
                             current_combination.append(sz)
                             ratio_display.append(str(ratio_val))
                             actual_table_output += pcs_to_cut
@@ -1667,22 +1665,16 @@ elif menu_selection == "🛒 Purchase Consumption":
                             display_marker_text, display_fabric_text = "Chờ máy CAD...", "Chờ nhập dài..."
                         
                         marker_tables_report.append({
-                            "Bàn cắt": current_so_do_name, 
-                            "Cấu trúc Size / Giàng phối hợp (Multi-Inseam)": " | ".join(current_combination),
-                            "Tỷ lệ sơ đồ (Ratio)": " : ".join(ratio_display), 
-                            "TỔNG TỶ LỆ (Sản phẩm/Lớp)": sum_of_ratios,
-                            "Số lớp vải (Layers)": f"{planned_layers} Lớp", 
-                            "DÀI SƠ ĐỒ QUY ĐỔI (Yds)": display_marker_text,
-                            "Sản lượng cắt (Pcs)": actual_table_output, 
-                            "Vải chính tự động nhảy (Yds)": display_fabric_text
+                            "Bàn cắt": current_so_do_name, "Cấu trúc Size / Giàng phối hợp (Multi-Inseam)": " | ".join(current_combination),
+                            "Tỷ lệ sơ đồ (Ratio)": " : ".join(ratio_display), "TỔNG TỶ LỆ (Sản phẩm/Lớp)": sum_of_ratios,
+                            "Số lớp vải (Layers)": f"{planned_layers} Lớp", "DÀI SƠ ĐỒ QUY ĐỔI (Yds)": display_marker_text,
+                            "Sản lượng cắt (Pcs)": actual_table_output, "Vải chính tự động nhảy (Yds)": display_fabric_text
                         })
                         table_counter += 1
-                        if table_counter > 60: 
-                            break
+                        if table_counter > 60: break
                             
                     df_marker_plan = pd.DataFrame(marker_tables_report)
                     st.dataframe(df_marker_plan, use_container_width=True, hide_index=True)
-                    
                     actual_calculated_consumption = round((total_calculated_fabric_yds / total_planned_cut_pcs), 3) if total_planned_cut_pcs > 0 else 0.0
                     
                     sum_col1, sum_col2 = st.columns(2)
@@ -1702,23 +1694,27 @@ elif menu_selection == "🛒 Purchase Consumption":
                         
                         if st.button("💾 LƯU PHƯƠNG ÁN LÊN KHO SUPABASE", type="primary", use_container_width=True, key="save_to_supabase_btn"):
                             try:
-                                url_save_db = f"{SB_URL.rstrip('/')}/rest/v1/san_pham"
+                                # Điều hướng lệnh POST lưu sang bảng riêng biệt tac_nghiep_ban_cat
+                                url_save_db = f"{SB_URL.rstrip('/')}/rest/v1/tac_nghiep_ban_cat"
                                 save_headers = {"apikey": SB_KEY, "Authorization": f"Bearer {SB_KEY}", "Content-Type": "application/json", "Prefer": "return=representation"}
                                 
-                                # ✅ GIẢI PHÁP AN TOÀN TUYỆT ĐỐI: Chỉ gọi các cột chắc chắn tồn tại trong bảng gốc của anh
-                                # Gom toàn bộ số liệu tác nghiệp nén gọn gàng vào chuỗi text 'notes' để tránh lỗi thiếu cột DB
+                                # Đóng gói đầy đủ các trường thông tin vật lý chuẩn khít 100% với bảng SQL mới tạo ở Bước 1
                                 save_payload = {
                                     "style_name": style_id_input,
-                                    "notes": f"SẢN LƯỢNG ĐƠN GỐC: {po_qty_input} Pcs | SẢN LƯỢNG CẮT: {total_planned_cut_pcs} Pcs | ĐỊNH MỨC THỰC TẾ: {actual_calculated_consumption} Yds/Pcs | TỔNG VẢI CHÍNH: {round(total_calculated_fabric_yds, 2)} Yds | Khổ cắt CAD: {cuttable_width_inch} inches. Quy đổi mét sang Yard từ CAD."
+                                    "po_quantity": int(po_qty_input),
+                                    "planned_cut_pcs": int(total_planned_cut_pcs),
+                                    "consumption_value": str(actual_calculated_consumption),
+                                    "total_material_value": str(round(total_calculated_fabric_yds, 2)),
+                                    "cuttable_width_inch": str(cuttable_width_inch),
+                                    "notes": "Lịch trình bàn cắt đa giàng tự động nhảy số theo Yards từ tệp dán Excel CAD."
                                 }
                                 
                                 db_response = requests.post(url_save_db, headers=save_headers, json=save_payload, timeout=12)
-                                
                                 is_success = (db_response.status_code == 200) or (db_response.status_code == 201)
                                 if is_success: 
-                                    st.success(f"✅ ĐÃ ĐỒNG BỘ LÊN KHO THÀNH CÔNG!")
-                                    st.toast("💾 Phương án tác nghiệp đa giàng đã nằm an toàn trong kho dữ liệu Supabase!")
+                                    st.success(f"✅ ĐÃ ĐỒNG BỘ LÊN KHO ĐỘC LẬP THÀNH CÔNG!")
+                                    st.toast("💾 Kế hoạch tác nghiệp đa giàng đã khóa lưu trữ riêng tư tại tac_nghiep_ban_cat!")
                                 else: 
-                                    st.error(f"Lỗi cấu trúc kho Supabase (Code {db_response.status_code}): {db_response.text}")
+                                    st.error(f"Lỗi Supabase (Code {db_response.status_code}): {db_response.text}")
                             except Exception as db_save_err: 
                                 st.error(f"Lỗi kết nối Cloud: {str(db_save_err)}")
