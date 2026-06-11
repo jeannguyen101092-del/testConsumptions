@@ -1451,7 +1451,8 @@ elif menu_selection == "🛒 Purchase Consumption":
                                         st.rerun()
                                     except Exception as chat_err: st.error(f"Lỗi cổng kết nối AI: {str(chat_err)}")
                                 # -----------------------------------------------------------------------------
-                # ✂️ CHỨC NĂNG 2 - PHẦN 1: KHAI BÁO THÔNG SỐ VÀ Ô TIẾP NHẬN DỮ LIỆU CAD EXCEL
+                               # -----------------------------------------------------------------------------
+                # ✂️ CHỨC NĂNG 2 - PHẦN 1: ĐÃ SỬA LỖI BIẾN CHUỖI TÁCH DAN DỮ LIỆU CAD EXCEL
                 # -----------------------------------------------------------------------------
                 elif menu_sub.startswith("✂️ CHỨC NĂNG 2"):
                     st.markdown("#### 📋 KHAI BÁO THÔNG SỐ TÁC NGHIỆP ĐƠN HÀNG VÀ BÀN VẢI MULTI-INSEAM")
@@ -1469,7 +1470,7 @@ elif menu_selection == "🛒 Purchase Consumption":
                     with input_col4:
                         max_table_length = st.number_input("📏 Chiều dài tối đa bàn vải (Meters):", value=12.00, step=1.0)
                     with input_col6:
-                        # ✅ ĐÃ SỬA CHUẨN ĐÉT: Giữ nguyên đơn vị số thực dạng INCH cho Khổ Vải đi sơ đồ, CẤM chia 100
+                        # Giữ nguyên đơn vị số thực dạng INCH cho Khổ Vải đi sơ đồ
                         cuttable_width_inch = st.number_input("📐 KHỔ CẮT (Khổ vải đi sơ đồ - Inches):", value=56.00, step=0.50, format="%.2f")
                     
                     # KHU VỰC DÁN CHUỖI SƠ ĐỒ CAD SAU KHI ĐI SƠ ĐỒ MỚI CÓ CHIỀU DÀI VẬT LÝ
@@ -1483,14 +1484,24 @@ elif menu_selection == "🛒 Purchase Consumption":
 
                     cad_length_meters_list = []
                     cad_names_list = []
+                    
                     if cad_paste_zone.strip():
                         lines = cad_paste_zone.strip().split("\n")
                         for line in lines:
+                            # Tách dòng sạch dựa trên Tab hoặc khoảng trắng lớn khi thợ copy từ Excel sang
                             tokens = [t.strip() for t in re.split(r'\t+|\s{2,}', line) if t.strip()]
                             if len(tokens) >= 2:
-                                raw_name = tokens
-                                raw_length = tokens
-                                clean_name = raw_name.split("-")[-1].upper() if "-" in raw_name else raw_name[-3:].upper()
+                                # ✅ ĐÃ SỬA TRIỆT ĐỂ: Chỉ định rõ ràng vị trí chuỗi (String), cấm gán đè kiểu List gây lỗi split
+                                raw_name = str(tokens[0]).strip()
+                                raw_length = str(tokens[1]).strip()
+                                
+                                # Tách lấy 3 ký tự mã đuôi cuối cùng của tên sơ đồ (C01, C02...)
+                                if "-" in raw_name:
+                                    sub_parts = raw_name.split("-")
+                                    clean_name = str(sub_parts[-1]).upper()
+                                else:
+                                    clean_name = str(raw_name[-3:]).upper()
+                                    
                                 try:
                                     cad_length_meters_list.append(float(raw_length))
                                     cad_names_list.append(clean_name)
@@ -1519,6 +1530,7 @@ elif menu_selection == "🛒 Purchase Consumption":
                                     "code": cad_names_list[idx_c], 
                                     "length_yds": round(cad_length_meters_list[idx_c] * 1.09361, 2)
                                 })
+
 
                                         # -----------------------------------------------------------------------------
                                        # -----------------------------------------------------------------------------
