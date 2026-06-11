@@ -1232,14 +1232,16 @@ if menu_selection == "🧵 BOM & Consumption Matrix":
 
     st.markdown("<br><hr style='border:0.5px solid #CBD5E1;'>", unsafe_allow_html=True)
     
-    chat_header_col1, chat_header_col2 = st.columns([3.2, 0.8])
+        chat_header_col1, chat_header_col2 = st.columns([3.2, 0.8])
     with chat_header_col1:
         st.markdown("### 💬 TRỢ LÝ AI PHÂN TÍCH ĐỊNH MỨC SẢN XUẤT (HỎI ĐÂU ĐÁP ĐÓ)")
     with chat_header_col2:
+        # ✅ SỬA LỖI SIÊU TỐC: Xóa trực tiếp mảng và không ép hệ thống phải load lại file PDF từ đầu
         if st.button("🗑️ XÓA LỊCH SỬ CHAT", key="direct_clear_chat_btn", use_container_width=True):
             st.session_state["consumption_chat_history"] = []
-            st.success("♻️ Đã xóa sạch hội thoại!")
-            st.rerun()
+            # Sử h dụng st.toast để hiện thông báo nhanh góc màn hình thay vì st.success làm đẩy giao diện
+            st.toast("♻️ Đã xóa sạch lịch sử chat tức thì!")
+)
 
     chat_container = st.container()
     with chat_container:
