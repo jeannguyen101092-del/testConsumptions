@@ -1607,7 +1607,8 @@ elif menu_selection == "🛒 Purchase Consumption":
                     for idx_c in range(len(cad_length_meters_list)):
                         st.session_state["bulk_cad_data_store"].append({"code": cad_names_list[idx_c], "length_yds": round(cad_length_meters_list[idx_c] * 1.09361, 2)})
                         # -----------------------------------------------------------------------------
-            # ✂️ CHỨC NĂNG 2 - PHẦN 2: LUỒNG GIẢI TOÁN TỰ ĐỘNG THEO ĐƠN HÀNG GỐC 100%
+                       # -----------------------------------------------------------------------------
+            # ✂️ CHỨC NĂNG 2 - PHẦN 2: LUỒNG GIẢI TOÁN TỰ ĐỘNG VÀ VÁ TRIỆT ĐỂ LỖI CỘT CLOUD
             # -----------------------------------------------------------------------------
             if st.session_state["step1_marker_ready"]:
                 if not size_breakdown_main:
@@ -1704,14 +1705,11 @@ elif menu_selection == "🛒 Purchase Consumption":
                                 url_save_db = f"{SB_URL.rstrip('/')}/rest/v1/san_pham"
                                 save_headers = {"apikey": SB_KEY, "Authorization": f"Bearer {SB_KEY}", "Content-Type": "application/json", "Prefer": "return=representation"}
                                 
-                                # ✅ ĐÃ SỬA GỌN GÀNG: Loại bỏ hoàn toàn trường planned_cut_pcs gây lỗi lệch cột DB.
-                                # Nén toàn bộ dữ liệu cắt thực tế và khổ cắt hữu ích dồn chung vào trường notes văn bản trần an toàn.
+                                # ✅ GIẢI PHÁP AN TOÀN TUYỆT ĐỐI: Chỉ gọi các cột chắc chắn tồn tại trong bảng gốc của anh
+                                # Gom toàn bộ số liệu tác nghiệp nén gọn gàng vào chuỗi text 'notes' để tránh lỗi thiếu cột DB
                                 save_payload = {
                                     "style_name": style_id_input,
-                                    "po_quantity": int(po_qty_input),
-                                    "consumption_value": str(actual_calculated_consumption),
-                                    "total_material_value": str(round(total_calculated_fabric_yds, 2)),
-                                    "notes": f"Sản lượng cắt thực tế: {total_planned_cut_pcs} Pcs. Khổ cắt CAD: {cuttable_width_inch} inches. Quy đổi mét sang Yard từ dữ liệu dán CAD."
+                                    "notes": f"SẢN LƯỢNG ĐƠN GỐC: {po_qty_input} Pcs | SẢN LƯỢNG CẮT: {total_planned_cut_pcs} Pcs | ĐỊNH MỨC THỰC TẾ: {actual_calculated_consumption} Yds/Pcs | TỔNG VẢI CHÍNH: {round(total_calculated_fabric_yds, 2)} Yds | Khổ cắt CAD: {cuttable_width_inch} inches. Quy đổi mét sang Yard từ CAD."
                                 }
                                 
                                 db_response = requests.post(url_save_db, headers=save_headers, json=save_payload, timeout=12)
@@ -1719,7 +1717,7 @@ elif menu_selection == "🛒 Purchase Consumption":
                                 is_success = (db_response.status_code == 200) or (db_response.status_code == 201)
                                 if is_success: 
                                     st.success(f"✅ ĐÃ ĐỒNG BỘ LÊN KHO THÀNH CÔNG!")
-                                    st.toast("💾 Phương án tác nghiệp đã nằm gọn trong kho san_pham Supabase!")
+                                    st.toast("💾 Phương án tác nghiệp đa giàng đã nằm an toàn trong kho dữ liệu Supabase!")
                                 else: 
                                     st.error(f"Lỗi cấu trúc kho Supabase (Code {db_response.status_code}): {db_response.text}")
                             except Exception as db_save_err: 
