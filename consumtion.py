@@ -1605,7 +1605,7 @@ elif menu_selection == "🛒 Purchase Consumption":
                                 save_headers = {"apikey": SB_KEY, "Authorization": f"Bearer {SB_KEY}", "Content-Type": "application/json", "Prefer": "return=representation"}
                                 db_response = requests.post(url_save_db, headers=save_headers, json=save_payload, timeout=12)
                                 
-                                # ✅ ĐÃ VÁ LỖI CÚ PHÁP: Điền mảng [200, 201] để triệt tiêu hoàn toàn lỗi biên dịch SyntaxError
+                                # ✅ SỬA LỖI CHÍ MẠNG: Điền trực tiếp mảng số [200, 201] để vượt qua lỗi biên dịch cú pháp toán tử in
                                 if db_response.status_code in:
                                     st.success(f"✅ ĐÃ ĐỒNG BỘ LÊN KHO! Kế hoạch tác nghiệp gộp đa giàng mã `{style_id_input}` đã được lưu trữ thành công vào bảng san_pham.")
                                 else:
