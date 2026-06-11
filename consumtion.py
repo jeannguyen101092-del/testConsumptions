@@ -1660,7 +1660,8 @@ elif menu_selection == "🛒 Purchase Consumption":
                         # -----------------------------------------------------------------------------
                        # -----------------------------------------------------------------------------
                        # -----------------------------------------------------------------------------
-            # ✂️ CHỨC NĂNG 2 - PHẦN 2.1: THUẬT TOÁN TÁC NGHIỆP MÔ HÌNH HÌNH THÁP (PYRAMID LAYOUT)
+                       # -----------------------------------------------------------------------------
+            # ✂️ CHỨC NĂNG 2 - PHẦN 2.1: THUẬT TOÁN HÌNH THÁP VUỐT THOẢI TUẦN TỰ VỀ 1 QUẦN (CHẮC CHẮN)
             # -----------------------------------------------------------------------------
             if st.session_state["step1_marker_ready"]:
                 if not size_breakdown_main:
@@ -1668,13 +1669,15 @@ elif menu_selection == "🛒 Purchase Consumption":
                 else:
                     st.markdown("##### ✂️ LỊCH TRÌNH GỘP SIZE - CHIA TỶ LỆ PHỐI SƠ ĐỒ ĐA GIÀNG DỰ KIẾN")
                     
-                    MAX_LAYERS_PER_TABLE = 100   # Chặn trên số lớp vải tối đa của 1 bàn cắt
-                    
+                    MAX_LAYERS_PER_TABLE = 100   # Chặn trên số lớp vải tối đa trên một bàn cắt
                     max_table_length_yds = max_table_length * 1.09361
-                    max_pcs_per_marker = max(1, int(max_table_length_yds / consumption_input))
+                    max_pcs_per_marker_limit = max(1, int(max_table_length_yds / consumption_input))
                     
-                    # Nhân bản ma trận nạp gốc từ bộ nhớ tạm an toàn chống mất biến
+                    # Nhân đôi ma trận nạp gốc từ bộ nhớ tạm an toàn chống mất biến
                     cutting_sizes_pool = {str(sz).strip().upper(): int(qty) for sz, qty in size_breakdown_main.items()}
+                    
+                    # Tính tổng sản lượng ban đầu của toàn bộ đơn hàng PO nạp vào
+                    initial_total_po_pcs = sum(cutting_sizes_pool.values())
                     
                     marker_tables_report = []
                     table_counter = 1
@@ -1683,51 +1686,61 @@ elif menu_selection == "🛒 Purchase Consumption":
                     cad_pool = st.session_state.get("bulk_cad_data_store", [])
                     is_calc_active = st.session_state["step2_computation_active"]
                     
-                    # ⚡ ĐỘ ĐỐC HÌNH THÁP: Bàn đầu tiên đặt mục tiêu tổng tỷ lệ tối đa cho phép của khổ vải/bàn cắt
-                    # Thông thường khống chế mốc khởi động hình tháp là 6 quần
-                    current_pyramid_target_pcs = min(6, max_pcs_per_marker)
-                    
                     while any(v > 0 for v in cutting_sizes_pool.values()):
                         active_items = [k for k, v in cutting_sizes_pool.items() if v > 0]
                         if not active_items: 
                             break
                         
+                        # ⚡ ĐỘNG LỰC HÌNH THÁP ĐO ĐẾM: Đo lượng sản lượng còn tồn lại trong kho pool để ép hạ bậc tháp thoai thoải
+                        current_remaining_pcs = sum(cutting_sizes_pool.values())
+                        remaining_ratio = current_remaining_pcs / initial_total_po_pcs
+                        
+                        if remaining_ratio > 0.65:
+                            max_allowed_pcs_on_marker = min(6, max_pcs_per_marker_limit)  # 6 Quần (Đỉnh tháp)
+                        elif remaining_ratio > 0.40:
+                            max_allowed_pcs_on_marker = min(5, max_pcs_per_marker_limit)  # Hạ xuống 5 Quần
+                        elif remaining_ratio > 0.20:
+                            max_allowed_pcs_on_marker = min(4, max_pcs_per_marker_limit)  # Hạ xuống 4 Quần
+                        elif remaining_ratio > 0.10:
+                            max_allowed_pcs_on_marker = min(3, max_pcs_per_marker_limit)  # Hạ xuống 3 Quần
+                        elif remaining_ratio > 0.03:
+                            max_allowed_pcs_on_marker = min(2, max_pcs_per_marker_limit)  # Hạ xuống 2 Quần
+                        else:
+                            max_allowed_pcs_on_marker = 1                                  # Đáy tháp: Ép cứng về Sơ đồ đơn 1 quần
+                            
                         # Sắp xếp danh sách size theo sản lượng tồn giảm dần
                         active_batch = sorted(active_items, key=lambda x: cutting_sizes_pool[x], reverse=True)
                         
-                        # Xác định số lớp dựa trên phần tử lớn nhất hoặc khống chế 100 lớp công nghiệp
-                        raw_max_layers = cutting_sizes_pool[active_batch[0]]
-                        planned_layers = min(raw_max_layers, MAX_LAYERS_PER_TABLE)
-                        
-                        # ⚡ ĐIỀU CHỈNH HÌNH THÁP ĐỘNG: Càng về sau, nếu số lớp bị sụt giảm sâu,
-                        # hệ thống tự động ép mốc mục tiêu tổng tỷ lệ sơ đồ thoải dần (Giam tu 6 -> 5 -> 4 -> 3 -> 2 -> 1)
-                        if planned_layers <= 15:
-                            current_pyramid_target_pcs = 1  # Chạm đáy: Chuyển hoàn toàn sang Sơ đồ đơn đầu khúc 1 quần
-                        elif planned_layers <= 30:
-                            current_pyramid_target_pcs = min(2, current_pyramid_target_pcs) # Vuốt lùi về mốc sơ đồ 2 quần
-                        elif planned_layers <= 50:
-                            current_pyramid_target_pcs = min(4, current_pyramid_target_pcs) # Vuốt lùi về mốc sơ đồ 3 - 4 quần
-                            
                         current_combination = []
                         ratio_display = []
                         actual_table_output = 0
                         current_marker_total_pcs = 0
                         
-                        # Vòng lặp nạp rập thông minh dồn theo mục tiêu hình tháp hiện hành
+                        # Định mốc số lớp vải tối ưu dựa trên lượng hàng tồn của size lớn nhất
+                        raw_max_layers = cutting_sizes_pool[active_batch[0]]
+                        
+                        # Điều chỉnh số lớp giật lùi dần theo bậc tháp
+                        if max_allowed_pcs_on_marker == 1:
+                            planned_layers = raw_max_layers  # Vét sạch lượng tồn lẻ ở đáy tháp
+                        else:
+                            planned_layers = min(raw_max_layers, MAX_LAYERS_PER_TABLE)
+                            
+                        if planned_layers <= 0:
+                            planned_layers = 1
+                            
+                        # Vòng lặp phân bổ tỷ lệ đặt rập khống chế nghiêm ngặt theo mốc hình tháp
                         for sz in active_batch:
-                            if cutting_sizes_pool[sz] <= 0:
-                                continue
+                            if current_marker_total_pcs >= max_allowed_pcs_on_marker:
+                                break
                                 
-                            # Tính tỷ lệ đặt rập dự kiến cho size này
                             ratio_val = round(cutting_sizes_pool[sz] / planned_layers)
                             ratio_val = min(max(1, ratio_val), 2)
                             
-                            # Kiểm tra nếu cộng thêm tỷ lệ này vào mà vượt quá mốc bậc tháp hiện tại thì ngắt chặn trên
-                            if (current_marker_total_pcs + ratio_val) > current_pyramid_target_pcs:
-                                if current_marker_total_pcs == 0:
-                                    ratio_val = 1 # Đảm bảo ít nhất có 1 sản phẩm trên sơ đồ
-                                else:
-                                    break # Ngắt để giữ đúng độ dài hình tháp thoai thoải
+                            # Ép chặn cứng không cho phép vượt qua bậc tháp hiện tại
+                            if (current_marker_total_pcs + ratio_val) > max_allowed_pcs_on_marker:
+                                ratio_val = 1  # Thử hạ tỷ lệ xuống 1 rập đơn để nhét vừa khung tháp
+                                if (current_marker_total_pcs + ratio_val) > max_allowed_pcs_on_marker:
+                                    continue
                                     
                             pcs_to_cut = planned_layers * ratio_val
                             if pcs_to_cut > cutting_sizes_pool[sz]:
@@ -1739,13 +1752,21 @@ elif menu_selection == "🛒 Purchase Consumption":
                             current_marker_total_pcs += ratio_val
                             actual_table_output += pcs_to_cut
                             
-                            # Khấu trừ trực tiếp sản lượng đã xếp bàn ra khỏi kho pool ma trận SBD
-                            cutting_sizes_pool[sz] = max(0, cutting_sizes_pool[sz] - pcs_to_cut)
+                        # Khóa phòng vệ bốc vét size lớn nhất nếu kịch bản bị trống dòng
+                        if not current_combination and active_batch:
+                            sz_bak = active_batch[0]
+                            ratio_val = 1
+                            current_combination.append(sz_bak)
+                            ratio_display.append(str(ratio_val))
+                            actual_table_output = min(planned_layers * ratio_val, cutting_sizes_pool[sz_bak])
                             
-                            # Nếu sơ đồ đã gom đủ tổng sản phẩm theo bậc tháp hiện tại, khóa không cho nạp thêm size
-                            if current_marker_total_pcs >= current_pyramid_target_pcs:
-                                break
-                                
+                        # Thực hiện khấu trừ sản lượng thực tế đã phát lệnh ra khỏi pool ma trận SBD
+                        for idx_sub, sz in enumerate(current_combination):
+                            pcs_sub = planned_layers * int(ratio_display[idx_sub])
+                            if pcs_sub > cutting_sizes_pool[sz]:
+                                pcs_sub = cutting_sizes_pool[sz]
+                            cutting_sizes_pool[sz] = max(0, cutting_sizes_pool[sz] - pcs_sub)
+                            
                         sum_of_ratios = sum([int(r) for r in ratio_display])
                         total_planned_cut_pcs += actual_table_output
                         
@@ -1771,23 +1792,13 @@ elif menu_selection == "🛒 Purchase Consumption":
                             "Sản lượng cắt (Pcs)": actual_table_output, 
                             "Vải chính tự động nhảy (Yds)": display_fabric_text
                         })
-                        
-                        # ⚡ HẠ BẬC THÁP TỰ ĐỘNG: Tạo độ dốc thoai thoải cho bàn cắt tiếp theo
-                        if table_counter <= 2:
-                            current_pyramid_target_pcs = min(6, max_pcs_per_marker) # Bàn 1 - 2 giữ mốc đỉnh tháp 6 quần
-                        elif table_counter <= 4:
-                            current_pyramid_target_pcs = min(5, max_pcs_per_marker) # Bàn 3 - 4 hạ dần xuống 5 quần
-                        elif table_counter <= 6:
-                            current_pyramid_target_pcs = min(4, max_pcs_per_marker) # Bàn 5 - 6 hạ dần xuống 4 quần
-                        else:
-                            current_pyramid_target_pcs = max(1, current_pyramid_target_pcs - 1) # Các bàn cuối hạ cuộn về 2 và 1 quần
-                            
                         table_counter += 1
                         if table_counter > 50: 
                             break
                             
                     df_marker_plan = pd.DataFrame(marker_tables_report)
                     st.dataframe(df_marker_plan, use_container_width=True, hide_index=True)
+
 
 
 
