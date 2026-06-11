@@ -1424,68 +1424,131 @@ if menu_selection == "🛒 Purchase Consumption":
                         st.dataframe(df_tp_matrix, use_container_width=True)
                     else:
                         st.warning("⏳ Bảng ma trận số đo Techpack trống hoặc đang được bóc tách.")
-                # -----------------------------------------------------------------------------
-                # 🚀 TÍNH NĂNG NÂNG CẤP: CỖ MÁY LẬP LỊCH TRÌNH TÁC NGHIỆP ĐẶT HÀNG TỰ ĐỘNG (PPJ PLANNER)
+                                # -----------------------------------------------------------------------------
+                # 🚀 TÍNH NĂNG NÂNG CẤP: CỖ MÁY LẬP LỊCH TRÌNH BÀN CẮT TÁC NGHIỆP TỰ ĐỘNG
                 # -----------------------------------------------------------------------------
                 st.markdown("<br><hr style='border:0.5px solid #CBD5E1;'>", unsafe_allow_html=True)
-                st.markdown("### ⚡ BẢNG LẬP KHẾ HOẠCH TÁC NGHIỆP ĐẶT HÀNG VẬT TƯ TỰ ĐỘNG (YARD / PCS)")
+                st.markdown("### ✂️ BẢNG HOẠCH ĐỊNH LẬP KẾ HOẠCH BÀN CẮT TÁC NGHIỆP TỰ ĐỘNG")
                 
-                # Cấu hình tham số tác nghiệp nhà máy đầu vào
-                sewing_loss_rate = 0.03  # Hao hụt đầu bàn cắt và lỗi may đường chuyền cố định 3% của PPJ
-                marker_efficiency_sim = 0.85 # Hiệu suất đi sơ đồ rập giả lập 85%
+                # Tham số cấu hình giới hạn kỹ thuật của bàn cắt nhà máy PPJ
+                MAX_LAYERS_PER_TABLE = 100  # Giới hạn tối đa 100 lớp vải trên một bàn cắt để đảm bảo độ chính xác
+                sewing_loss_rate = 0.03     # Hao hụt đầu bàn cắt và lỗi may chuyền 3%
                 
                 size_breakdown_dict = sbd_data.get("size_breakdown", {})
+                total_po_pcs = sbd_data.get("total_quantity", 0)
                 
-                st.markdown(f"** Quy trình tính toán tác nghiệp:** Áp hao hụt kỹ thuật cắt may chuyền `+{sewing_loss_rate*100}%` | Giả lập hiệu suất sơ đồ CAD ` {marker_efficiency_sim*100}%` | Quy chuẩn đường may `0.44\"` cố định.")
+                # --- MỤC 1: TÍNH ĐỊNH MỨC TRUNG BÌNH TOÀN MÃ HÀNG (AVERAGE CONSUMPTION ANALYSIS) ---
+                st.markdown("#### 📐 MỤC 1: PHÂN TÍCH ĐỊNH MỨC TRUNG BÌNH TOÀN MÃ HÀNG")
                 
-                action_planning_records = []
-                total_purchase_yard_all_po = 0.0
-                total_planned_cut_pcs_all_po = 0
+                weighted_consumption_sum = 0.0
+                total_po_verified = 0
                 
+                # Chạy ma trận trọng số (Định mức từng size x Sản lượng size) / Tổng sản lượng để ra ĐM trung bình
                 for size_name, po_qty in size_breakdown_dict.items():
-                    # 1. Tính toán sản lượng tác nghiệp cắt (Planned Cut Pcs) chừa hao hụt chuyền
-                    planned_cut_pcs = int(po_qty * (1 + sewing_loss_rate))
-                    total_planned_cut_pcs_all_po += planned_cut_pcs
+                    size_clean = str(size_name).strip().upper()
+                    if size_clean in ["14", "16", "18", "20", "22", "24", "XL", "XXL", "2X", "3X"]:
+                        size_specific_consumption = 1.25
+                    elif size_clean in ["6", "8", "10", "12", "M", "L", "1X"]:
+                        size_specific_consumption = 1.14  # Size cơ bản mặc định
+                    else:
+                        size_specific_consumption = 1.05
                     
-                    # 2. Bộ não Vector Hình Học tự động ước tính định mức Yard riêng cho từng Size (Grading Area Consumption)
-                    # Giả định nền móng định mức cơ sở cho Size 30 là 1.14 Yds, các size nhảy bước grading thêm/bớt diện tích hình học
-                    try:
-                        size_clean = str(size_name).strip().upper()
-                        # Thuật toán nhảy cỡ định mức tự động dựa trên tên size hình học
-                        if size_clean in ["34", "36", "XL", "XXL", "2X", "3X"]:
-                            size_specific_consumption = 1.28
-                        elif size_clean in ["32", "31", "L", "1X"]:
-                            size_specific_consumption = 1.19
-                        elif size_clean in ["28", "26", "S", "XS"]:
-                            size_specific_consumption = 1.05
-                        else:
-                            size_specific_consumption = 1.14 # Cỡ chuẩn cơ sở (Base size 30)
-                    except Exception:
-                        size_specific_consumption = 1.14
-                        
-                    # 3. Tính toán tổng nhu cầu vải mua theo Yard cho từng nhóm size phẳng của PO
-                    total_yard_required = round((planned_cut_pcs * size_specific_consumption), 2)
-                    total_purchase_yard_all_po += total_yard_required
-                    
-                    action_planning_records.append({
-                        "Kích thước (Size)": size_name,
-                        "Sản lượng Đơn (PO Pcs)": f"{po_qty:,}",
-                        "Sản lượng Cắt Dự Kiến (+3% Loss)": f"{planned_cut_pcs:,}",
-                        "Định mức hình học đề xuất (Yds)": f"{size_specific_consumption} Yds",
-                        "Tổng lượng vải cần đặt mua (Yds)": f"{total_yard_required:,} Yds"
-                    })
-                    
-                # Kết xuất bảng tác nghiệp tổng hợp lên giao diện Streamlit
-                df_action_plan = pd.DataFrame(action_planning_records)
-                st.dataframe(df_action_plan, use_container_width=True, hide_index=True)
+                    weighted_consumption_sum += (po_qty * size_specific_consumption)
+                    total_po_verified += po_qty
                 
-                # Hiển thị khối tổng kết khối lượng mua sắm vật tư (Purchasing Block Summary)
-                summary_col1, summary_col2 = st.columns(2)
-                with summary_col1:
-                    st.metric(label="Tổng Sản Lượng Cắt Tác Nghiệp Phát Lệnh", value=f"{total_planned_cut_pcs_all_po:,} Pcs")
-                with summary_col2:
-                    st.metric(label="Tổng Lượng Vải Chính Denim Cần Đặt Mua (Yard)", value=f"{round(total_purchase_yard_all_po, 2):,} Yds")
+                # Tính định mức bình quân của mã hàng
+                avg_consumption_final = round((weighted_consumption_sum / total_po_verified), 3) if total_po_verified > 0 else 1.14
+                
+                col_avg1, col_avg2 = st.columns(2)
+                with col_avg1:
+                    st.metric(label="Định mức cơ bản (Size trung bình)", value="1.14 Yds / Pcs")
+                with col_avg2:
+                    st.metric(label="🎯 ĐỊNH MỨC BÌNH QUÂN TOÀN MÃ HÀNG (Dựa trên SBD và Thông số)", value=f"{avg_consumption_final} Yds / Pcs")
+                
+                st.markdown("---")
+                
+                # --- MỤC 2: TÁC NGHIỆP CHIA TỶ LỆ VÀ LẬP LỊCH TRÌNH BÀN CẮT (AUTOMATIC CUT PLANNING) ---
+                st.markdown("#### 📋 MỤC 2: KẾ HOẠCH PHÁT LỆNH SƠ ĐỒ VÀ BÀN CẮT TÁC NGHIỆP TỰ ĐỘNG")
+                st.markdown(f" Quy trình tự động tính toán gom cụm size, lập tỷ lệ phối sơ đồ, chia số lớp vải (Tối đa `{MAX_LAYERS_PER_TABLE}` lớp/bàn).")
+                
+                # Chuẩn bị dữ liệu sản lượng cắt thực tế (PO + 3% Hao hụt)
+                cutting_sizes_pool = {}
+                for sz, qty in size_breakdown_dict.items():
+                    cutting_sizes_pool[str(sz).strip().upper()] = int(qty * (1 + sewing_loss_rate))
+                
+                # Thuật toán tác nghiệp tự động gom nhóm size theo tỷ lệ phân bổ công nghiệp
+                marker_tables_report = []
+                table_counter = 1
+                
+                # Vòng lặp tự động bóc tách sản lượng trong pool cho đến khi hết đơn hàng
+                while any(qty > 0 for qty in cutting_sizes_pool.values()):
+                    # Gom nhóm các size đang còn tồn sản lượng lớn để đi sơ đồ phối
+                    available_sizes = [sz for sz, qty in cutting_sizes_pool.items() if qty > 0]
                     
-                # Khối nhận xét bình luận rủi ro mua sắm vật tư tự động
-                st.markdown("💬 **Nhận xét rủi ro tác nghiệp lập kế hoạch vật tư:**")
-                st.warning(f"⚠️ **Rủi ro rải đầu tấm cắt:** Tổng nhu cầu vải đặt mua `{round(total_purchase_yard_all_po, 2):,} Yds` chưa bao gồm lượng khúc vải đầu tấm (vải dạt) phát sinh khi xưởng rải vải thực tế tại bàn cắt. Bộ phận thu mua nên chủ động cộng thêm **+1.5%** khối lượng an toàn trước khi mở đơn đặt hàng (PO) ký với nhà cung cấp vải chính.")
+                    if not available_sizes:
+                        break
+                        
+                    # Phân loại kịch bản phối sơ đồ dựa trên các size còn lại trong pool
+                    current_combination = []
+                    ratio_display = []
+                    
+                    # Ưu tiên gom 4 size đứng cạnh nhau để đi sơ đồ phối 4 thân (S-M-L-XL hoặc các nhóm size phẳng)
+                    active_batch = available_sizes[:4]
+                    
+                    # Tìm sản lượng nhỏ nhất trong nhóm được chọn để làm căn cứ tính số lớp vải của bàn này
+                    min_qty_in_batch = min([cutting_sizes_pool[sz] for sz in active_batch])
+                    
+                    # Tính toán số lớp vải thực tế cho bàn cắt (Không được vượt quá giới hạn 100 lớp)
+                    planned_layers = min(min_qty_in_batch, MAX_LAYERS_PER_TABLE)
+                    if planned_layers <= 0:
+                        planned_layers = 1
+                        
+                    # Xác định tỷ lệ phối sơ đồ (ví dụ bàn phối tỷ lệ 1:1:1:1 hoặc tỷ lệ lẻ 2:1 dựa trên lượng dư)
+                    for sz in active_batch:
+                        # Tính toán tỷ lệ dựa trên sản lượng còn lại của size đó so với số lớp vải định hình
+                        ratio_val = round(cutting_sizes_pool[sz] / planned_layers)
+                        if ratio_val <= 0:
+                            ratio_val = 1
+                        # Giới hạn tỷ lệ phối tối đa 2 sản phẩm trên 1 size trong cùng 1 sơ đồ
+                        ratio_val = min(ratio_val, 2) 
+                        
+                        current_combination.append(sz)
+                        ratio_display.append(str(ratio_val))
+                        
+                        # Khấu trừ sản lượng đã xếp vào bàn cắt ra khỏi pool dữ liệu
+                        cutting_sizes_pool[sz] = max(0, cutting_sizes_pool[sz] - (planned_layers * ratio_val))
+                    
+                    # Tính tổng sản lượng cắt ra của riêng bàn này
+                    table_output_pcs = sum([int(r) for r in ratio_display]) * planned_layers
+                    
+                    # Tính toán tổng số Yard vải tiêu hao cho riêng bàn cắt này dựa trên Định mức bình quân
+                    table_fabric_required_yds = round((table_output_pcs * avg_consumption_final), 2)
+                    
+                    marker_tables_report.append({
+                        "Bàn cắt số": f"BÀN CẮT {table_counter}",
+                        "Các Size phối hợp trên sơ đồ": " - ".join(current_combination),
+                        "Tỷ lệ phối sơ đồ (Ratio)": " : ".join(ratio_display),
+                        "Số lớp vải cần trải (Layers)": f"{planned_layers} Lớp",
+                        "Sản lượng cắt ra bàn này (Pcs)": f"{table_output_pcs:,} Pcs",
+                        "Vải chính tiêu hao (Yds)": f"{table_fabric_required_yds:,} Yds"
+                    })
+                    table_counter += 1
+                    
+                    # Khóa phòng vệ chống vòng lặp vô hạn nếu sản lượng không trừ hết
+                    if table_counter > 50:
+                        break
+                
+                # Xuất bảng lịch trình bàn cắt tác nghiệp trực quan lên màn hình Streamlit
+                df_marker_plan = pd.DataFrame(marker_tables_report)
+                st.dataframe(df_marker_plan, use_container_width=True, hide_index=True)
+                
+                # Khối tổng kết mua sắm kế hoạch dựa trên Định mức trung bình tổng hòa
+                total_fabric_all_po_final = round((int(total_po_pcs * (1 + sewing_loss_rate)) * avg_consumption_final), 2)
+                
+                sum_col1, sum_col2 = st.columns(2)
+                with sum_col1:
+                    st.metric(label="Tổng Sản Lượng Đơn Hàng Gốc (Total PO)", value=f"{total_po_pcs:,} Pcs")
+                with sum_col2:
+                    st.metric(label="Tổng Lượng Vải Chính Denim Đặt Mua Dự Kiến (Yard)", value=f"{total_fabric_all_po_final:,} Yds")
+                    
+                st.info(f"💡 **Khuyến nghị tác nghiệp:** Hệ thống đã phân chia tự động thành `{len(marker_tables_report)} bàn cắt` thực tế. Vui lòng chuyển sơ đồ tỷ lệ phối này sang tổ giác mẫu máy CAD để xuất file in sơ đồ giấy vẽ.")
