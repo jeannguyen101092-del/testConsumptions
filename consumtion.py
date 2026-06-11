@@ -821,8 +821,11 @@ def ai_consumption_analyst_engine(client, user_message, matched_techpack, bom_re
     """
     Bộ não xử lý tính toán định mức nâng cao bằng đơn vị YARD (Yds).
     Tự động kích hoạt cơ chế Vecto Hình Học Ngành May nếu KHÔNG CÓ mã tương đồng.
-    Tích hợp quy chuẩn đường may cố định 0.44" và dò tìm lai quần/áo trong TP.
+    Tích hợp quy chuẩn đường may cố định 0.44" và dò tìm lai cùng quy tắc nẹp áo.
     """
+    if not client:
+        return "🚨 Cổng phân tích chưa được cấu hình GEMINI_API_KEY bảo mật."
+        
     style_old_name = matched_techpack.get("StyleName", "N/A") if matched_techpack else "N/A"
     specs_old = matched_techpack.get("DetailedMeasurements", {}) if matched_techpack else {}
     
@@ -848,26 +851,27 @@ def ai_consumption_analyst_engine(client, user_message, matched_techpack, bom_re
         scenario_instruction = f"""
         KỊCH BẢN: PHÂN TÍCH VECTOR HÌNH HỌC NGÀNH MAY KHÔNG CÓ MÃ TƯƠNG ĐỒNG (GEOMETRIC LAYOUT ESTIMATION)
         - Bạn không có dữ liệu lịch sử. Hãy dựa hoàn toàn vào bảng thông số 'New Spec (POM)' và hình ảnh bản vẽ rập chi tiết 'Flat Sketch' đính kèm.
-        - Hãy tính diện tích hình học rập mẫu thô của từng chi tiết cấu thành (Thân trước x2, Thân sau x2, Cạp quần, Túi, Đáp túi, v.v.).
-        - Tính ĐM Vải chính: Cộng dồn chiều dài các mảnh rập chính sau khi đã cộng đường may, nhân với hệ số hao hụt rải vải tiêu chuẩn ngành (giả lập Marker Efficiency = 82%-85%) xếp trên khổ vải requested: {f_width if f_width > 0 else '58 inch'}.
-        - Tính ĐM Nguyên Phụ Liệu (BOM Toàn diện): 
-          * Chỉ may: Tính tổng chu vi các đường ráp nối mảnh rập (nhân hệ số tiêu hao chỉ của loại đường may: móc xích tra cạp x4, vắt sổ x3, diễu x2).
-          * Thun cạp / Dây dệt: Tính toán trực tiếp từ thông số vòng eo/vòng gấu thành phẩm cộng độ chừa chồng mép tra phụ liệu.
-          * Nút / Khóa kéo / Đinh tán: Đếm và định lượng trực tiếp từ bản vẽ cấu trúc hình học bên trong của Flat Sketch.
+        - Hãy tính diện tích hình học rập mẫu thô của từng chi tiết cấu thành (Thân trước x2, Thân sau x2, Cạp/Cổ, Túi, Nẹp).
+        - Tính ĐM Vải chính: Cộng dồn chiều dài các mảnh rập sau khi cộng biên may, nhân hệ số hao hụt rải vải tiêu chuẩn ngành (giả lập Marker Efficiency = 82%-85%) xếp trên khổ vải requested: {f_width if f_width > 0 else '58 inch'}.
         """
 
     system_instruction = f"""
     You are a strict Industrial Garment Costing Engineer at PPJ Group. 
     Your answers must mimic ChatGPT's advanced code interpreter mode:
     1. STRICT UNIT REQUIRED: All consumption values and fabric calculation results MUST be presented in YARDS (Yds) or Inches. NEVER use meters or cm.
-    2. DIRECT ANSWER FIRST: Output the exact final average consumption value in YARDS (Yds) in the very first sentence.
+    2. DIRECT ANSWER FIRST: Output the exact final average consumption value in YARDS (Yds) or Pieces in the very first sentence.
     3. STEP-BY-STEP MATHEMATICS: Present your logic using short, punchy bullet points showing raw numbers, shrinkage multipliers, and layout area deltas.
-    4. LANGUAGE: Answer directly in Vietnamese, using precise apparel terminology (co rút, định mức, hao hụt, khổ vải).
+    4. LANGUAGE: Answer directly in Vietnamese, using precise apparel terminology (co rút, định mức, hao hụt, khổ vải, nẹp liền, nẹp rời).
     
     FACTORY SEWING SEAM ALLOWANCE RULES (CRITICAL):
     - Standard Seam Allowance: ALWAYS add 0.44 inches to all general component seams (Thân trước, thân sau, sườn, giàng, dọc quần, tra cạp, v.v.).
     - Pocket Openings (Miệng túi): EXCLUDE the 0.44" rule. Pocket trims and facings must follow the exact techpack dimensions.
     - Garment Hem / Bottom Hem (Lai áo / Lai quần): DO NOT use 0.44". You MUST scan the 'New Spec (POM)' below to find the specific values for keywords like 'Hem', 'Bottom Width', 'Sleeve Hemfold'. Use that exact Techpack value for the hem calculation. If not specified, note it down.
+
+    GARMENT PLACKET RULES FOR TOPS/JACKETS (CRITICAL FOR WIDTH & AREA):
+    - If the item is a Top/Shirt/Jacket, you MUST check the Flat Sketch and POM for Placket (Nẹp áo).
+    - NẸP LIỀN (Fold-on/Extended Placket): If the placket is folded from the main body, you MUST add 2 times the placket width extension to the raw width of each front body panel pattern before calculating fabric consumption, otherwise width area will be insufficient.
+    - NẸP RỜI (Separate Placket): If the placket is a separate piece cut out, you MUST treat it as a standalone geometric pattern panel with length = body length + seams, and width = (placket width x 2) + standard seams (2 x 0.44"). This separate piece must be added to the overall layout marker area.
 
     {scenario_instruction}
 
@@ -908,7 +912,7 @@ if gemini_key:
 def process_single_pdf_batch(file_bytes, file_name):
     """
     Hàm bóc tách dữ liệu kỹ thuật từ một file PDF độc lập.
-    Quét đặc biệt thông số Lai quần/Lai áo để phục vụ luồng tính toán chừa biên may.
+    Quét đặc biệt thông số Lai và chi tiết Nẹp áo để phục vụ luồng tính toán chừa biên may.
     """
     import time
     try:
@@ -938,11 +942,11 @@ def process_single_pdf_batch(file_bytes, file_name):
         industrial_extraction_prompt = (
             "You are an expert Garment Specification Auditor at PPJ Group. Analyze all attached sheets page by page. "
             "1. Identify the core 'Base Size' / 'Sample Size'. "
-            "2. Identify the Buyer name and Category. "
+            "2. Identify the Buyer name and Category (Pant/Shirt/Jacket). "
             "3. Find the exact 'Style ID' / 'Style Number'. "
             "4. Extract the entire grading matrix table columns for ALL available sizes. "
             "5. Find the exact PAGE INDEX (0-based) that contains the FULL BODY APPAREL FLAT SKETCH. "
-            "6. CRITICAL APPRAISAL FOR HEM DETAILS: Pay extreme attention to look for bottom hem turn-up allowances, sleeve hem folds, and edge finishing definitions inside the techpack text or table columns. Ensure these 'Hem' measurements are clearly captured in the measurements dictionary. "
+            "6. CRITICAL APPRAISAL FOR HEM & PLACKET DETAILS: Pay extreme attention to bottom hem allowances. If the category is a Shirt or Jacket, scan for 'Placket Width', 'Center Front Placket', or center stitching lines. Identify if the placket is separate or grown-on/folded, and record its measurement inside the measurements dictionary accurately. "
             "Return a completely valid raw JSON string matching this schema (no markdown blocks): "
             "{"
             "  \"style_number_parsed\": \"string\","
@@ -1228,18 +1232,15 @@ if menu_selection == "🧵 BOM & Consumption Matrix":
 
     st.markdown("<br><hr style='border:0.5px solid #CBD5E1;'>", unsafe_allow_html=True)
     
-    # THIẾT KẾ CỤM ĐIỀU KHIỂN CHAT BOX THÔNG MINH
     chat_header_col1, chat_header_col2 = st.columns([3.2, 0.8])
     with chat_header_col1:
         st.markdown("### 💬 TRỢ LÝ AI PHÂN TÍCH ĐỊNH MỨC SẢN XUẤT (HỎI ĐÂU ĐÁP ĐÓ)")
     with chat_header_col2:
-        # ✅ THÊM NÚT XÓA CHAT NHANH NGAY TẠI KHU VỰC KHUNG CHAT
         if st.button("🗑️ XÓA LỊCH SỬ CHAT", key="direct_clear_chat_btn", use_container_width=True):
             st.session_state["consumption_chat_history"] = []
             st.success("♻️ Đã xóa sạch hội thoại!")
             st.rerun()
 
-    # Tạo một khung chứa chat cố định (Container)
     chat_container = st.container()
     with chat_container:
         for chat in st.session_state.get("consumption_chat_history", []):
@@ -1260,20 +1261,19 @@ if menu_selection == "🧵 BOM & Consumption Matrix":
                         user_message=user_query,
                         matched_techpack=matched_techpack,
                         bom_records=bom_records,
-                        new_style_measurements=new_measurements_dict if 'new_measurements_dict' in locals() else new_style_measurements_dict,
+                        new_style_measurements=new_style_measurements_dict,
                         target_new_sketch_bytes=target_new_sketch_bytes,
                         detected_size=new_style_base_size
                     )
                     st.write(ai_reply)
         
-        # ✅ THUẬT TOÁN ĐÓNG ĐINH NEO CUỘN: Ép trình duyệt tự động scroll lướt màn hình xuống vị trí tin nhắn cuối cùng
         st.components.v1.html(
             """
             <script>
                 var doc = window.parent.document;
                 var sections = doc.querySelectorAll('section.main');
                 if (sections.length > 0) {
-                    sections[0].scrollTo({top: sections[0].scrollHeight, behavior: 'smooth'});
+                    sections.scrollTo({top: sections.scrollHeight, behavior: 'smooth'});
                 }
             </script>
             """,
