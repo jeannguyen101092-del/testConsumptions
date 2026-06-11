@@ -1478,6 +1478,7 @@ elif menu_selection == "🛒 Purchase Consumption":
                                     except Exception as chat_err:
                                         st.error(f"Lỗi cổng kết nối AI: {str(chat_err)}")
                                 # -----------------------------------------------------------------------------
+                # -----------------------------------------------------------------------------
                 # ✂️ CHỨC NĂNG 2: MÁY TÍNH TÁC NGHIỆP BÀN CẮT ĐA GIÀNG TỰ ĐỘNG (TOÁN HỌC THUẦN TÚY)
                 # -----------------------------------------------------------------------------
                 elif menu_sub.startswith("✂️ CHỨC NĂNG 2"):
@@ -1534,6 +1535,7 @@ elif menu_selection == "🛒 Purchase Consumption":
                         table_output_pcs = sum([int(r) for r in ratio_display]) * planned_layers
                         total_planned_cut_pcs += table_output_pcs
                         
+                        # Cột vải chính tự động nhảy số theo thời gian thực dựa trên Chiều dài sơ đồ thực tế CAD nhập vào
                         table_fabric_required_yds = round((planned_layers * marker_length_input), 2)
                         total_calculated_fabric_yds += table_fabric_required_yds
                         
@@ -1605,8 +1607,10 @@ elif menu_selection == "🛒 Purchase Consumption":
                                 save_headers = {"apikey": SB_KEY, "Authorization": f"Bearer {SB_KEY}", "Content-Type": "application/json", "Prefer": "return=representation"}
                                 db_response = requests.post(url_save_db, headers=save_headers, json=save_payload, timeout=12)
                                 
-                                # ✅ SỬA LỖI CHÍ MẠNG: Điền trực tiếp mảng số [200, 201] để vượt qua lỗi biên dịch cú pháp toán tử in
-                                if db_response.status_code in:
+                                # ✅ SỬA LỖI TUYỆT ĐỐI: Thay thế toán tử "in" bằng so sánh logic OR để bảo đảm an toàn, sạch lỗi biên dịch cú pháp
+                                is_success = (db_response.status_code == 200) or (db_response.status_code == 201)
+                                
+                                if is_success:
                                     st.success(f"✅ ĐÃ ĐỒNG BỘ LÊN KHO! Kế hoạch tác nghiệp gộp đa giàng mã `{style_id_input}` đã được lưu trữ thành công vào bảng san_pham.")
                                 else:
                                     st.error(f"Lỗi Supabase (Code {db_response.status_code}): {db_response.text}")
