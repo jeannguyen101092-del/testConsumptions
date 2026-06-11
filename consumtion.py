@@ -1301,7 +1301,7 @@ if menu_selection == "🧵 BOM & Consumption Matrix":
 elif menu_selection == "🛒 Purchase Consumption":
     st.markdown('<div class="component-title-box">🛒 PURCHASE CONSUMPTION & INTELLIGENT PLANNING ENGINE</div>', unsafe_allow_html=True)
     
-    # ✅ ĐÃ DI CHUYỂN LÊN ĐẦU: Nút chọn công đoạn lộ diện ngay lập tức, không bị khóa bởi file tải lên
+    # DI CHUYỂN LÊN ĐẦU: Thanh chọn Radio xuất hiện độc lập ngay lập tức không bị khóa chéo menu
     menu_sub = st.radio(
         "💡 CHỌN CÔNG ĐOẠN TÁC NGHIỆP THỰC HIỆN:",
         ["🧠 CHỨC NĂNG 1: TRỢ LÝ AI TÍNH ĐỊNH MỨC TRUNG BÌNH (CẦN SBD + TECHPACK)", 
@@ -1311,7 +1311,7 @@ elif menu_selection == "🛒 Purchase Consumption":
     
     st.markdown("---")
     
-    # Khởi tạo bộ nhớ tạm an toàn cho hệ thống
+    # Khởi tạo bộ nhớ tạm Session State an toàn
     if "purchase_ready" not in st.session_state: st.session_state["purchase_ready"] = False
     if "sbd_parsed_data" not in st.session_state: st.session_state["sbd_parsed_data"] = {}
     if "pur_tp_parsed_data" not in st.session_state: st.session_state["pur_tp_parsed_data"] = {}
@@ -1319,23 +1319,21 @@ elif menu_selection == "🛒 Purchase Consumption":
     if "step2_computation_active" not in st.session_state: st.session_state["step2_computation_active"] = False
     if "bulk_cad_data_store" not in st.session_state: st.session_state["bulk_cad_data_store"] = []
 
-    # --- RẼ NHÁNH LUỒNG TIẾP NHẬN FILE THEO ĐÚNG TỪNG CHỨC NĂNG CỐ ĐỊNH ---
-    
-    # KỊCH BẢN CHỨC NĂNG 1: ĐÒI ĐỦ 2 FILE SBD VÀ TECHPACK
+    # =============================================================================
+    # KỊCH BẢN CHỨC NĂNG 1: ĐÒI ĐỦ CẢ 2 FILE SBD VÀ TECHPACK
+    # =============================================================================
     if menu_sub.startswith("🧠 CHỨC NĂNG 1"):
         st.markdown("""<div class="card-container"><div class="card-section-header">📦 MULTI-SOURCE INGESTION ENGINE</div>
-        <p style="color: #64748B; font-size:13px; margin:0;">Tải lên đồng thời File SBD (Số lượng chi tiết theo Size phẳng) và File Techpack để kích hoạt mạng nơ-ron lập lịch trình đặt hàng vật tư.</p></div>""", unsafe_allow_html=True)
+        <p style="color: #64748B; font-size:13px; margin:0;">Tải lên đồng thời File SBD (Số lượng chi tiết theo Size phẳng) và File Techpack để kích hoạt trợ lý AI đối soát.</p></div>""", unsafe_allow_html=True)
         
         col_left, col_right = st.columns(2)
         with col_left: file_sbd = st.file_uploader("📋 Chọn File SBD Số Lượng (Excel/PDF)", type=["xlsx", "xls", "pdf"], key="purchase_sbd_c1")
         with col_right: file_tp = st.file_uploader("📐 Chọn File Techpack Thông Số (PDF)", type=["pdf"], key="purchase_tp_c1")
         
-        # Chỉ chạy luồng số hóa AI khi có đủ cả 2 file thiết kế
         if file_sbd and file_tp:
             trigger_btn = st.button("⚡ KÍCH HOẠT SỐ HÓA ĐA LUỒNG SONG SONG", type="primary", use_container_width=True, key="activate_parallel_ingest_c1")
             if trigger_btn:
-                with st.spinner("🚀 AI đang bóc tách ma trận đơn hàng SBD và đối soát Techpack..."):
-                    # Thuật toán số hóa SBD Excel
+                with st.spinner("🚀 AI đang số hóa dữ liệu SBD và đối soát hồ sơ Techpack..."):
                     if "get_secure_gemini_key" in globals(): gemini_key = get_secure_gemini_key()
                     else: gemini_key = st.secrets.get("GEMINI_API_KEY", "").strip()
                     client_ai = genai.Client(api_key=gemini_key)
@@ -1343,6 +1341,7 @@ elif menu_selection == "🛒 Purchase Consumption":
                     sbd_bytes = file_sbd.getvalue()
                     sbd_content_str = ""
                     sbd_parts_payload = []
+                    
                     if file_sbd.name.lower().endswith(('.xlsx', '.xls')):
                         try:
                             excel_data = pd.read_excel(io.BytesIO(sbd_bytes), sheet_name=None)
@@ -1359,13 +1358,57 @@ elif menu_selection == "🛒 Purchase Consumption":
                     try:
                         res_sbd = client_ai.models.generate_content(model='gemini-2.5-flash', contents=sbd_parts_payload, config=types.GenerateContentConfig(response_mime_type="application/json"))
                         st.session_state["sbd_parsed_data"] = json.loads(res_sbd.text.strip().replace("```json", "").replace("```", "").strip())
-                    except Exception as e: st.session_state["sbd_parsed_data"] = {}
+                    except Exception: st.session_state["sbd_parsed_data"] = {}
                     
-                    # Thuật toán bóc tách Techpack PDF chi tiết
                     res_tp = process_single_pdf_batch(file_tp.getvalue(), file_tp.name)
                     st.session_state["pur_tp_parsed_data"] = res_tp["data"] if res_tp.get("success") else {}
                     st.session_state["purchase_ready"] = True
                     st.rerun()
+
+    # =============================================================================
+    # KỊCH BẢN CHỨC NĂNG 2: CHỈ HIỂN THỊ 1 Ô TẢI FILE SBD SỐ LƯỢNG, ẨN FILE TECHPACK
+    # =============================================================================
+    elif menu_sub.startswith("✂️ CHỨC NĂNG 2"):
+        st.markdown("""<div class="card-container"><div class="card-section-header">📋 PHÂN HỆ TÁC NGHIỆP BÀN CẮT ĐA GIÀNG</div>
+        <p style="color: #64748B; font-size:13px; margin:0;">Chức năng này không cần thông số rập mẫu. Chỉ cần tải lên File SBD số lượng để máy tính tự động chia tỷ lệ bàn cắt.</p></div>""", unsafe_allow_html=True)
+        
+        # Ô tải file độc lập duy nhất của Chức năng tác nghiệp bàn cắt
+        file_sbd_c2 = st.file_uploader("📋 Chọn File SBD Số Lượng Đơn Hàng (Excel/PDF)", type=["xlsx", "xls", "pdf"], key="purchase_sbd_c2_unique")
+        
+        if file_sbd_c2:
+            trigger_btn_c2 = st.button("⚡ SỐ HÓA MA TRẬN SẢN LƯỢNG ĐƠN HÀNG TÁC NGHIỆP", type="primary", use_container_width=True, key="activate_sbd_only_ingest_c2")
+            if trigger_btn_c2:
+                with st.spinner("🚀 Hệ thống đang phân tích mảng phân bổ size phẳng từ file SBD..."):
+                    if "get_secure_gemini_key" in globals(): gemini_key = get_secure_gemini_key()
+                    else: gemini_key = st.secrets.get("GEMINI_API_KEY", "").strip()
+                    client_ai = genai.Client(api_key=gemini_key)
+                    
+                    sbd_bytes = file_sbd_c2.getvalue()
+                    sbd_content_str = ""
+                    sbd_parts_payload = []
+                    
+                    if file_sbd_c2.name.lower().endswith(('.xlsx', '.xls')):
+                        try:
+                            excel_data = pd.read_excel(io.BytesIO(sbd_bytes), sheet_name=None)
+                            for sheet_name, df_sheet in excel_data.items():
+                                sbd_content_str += f"\n--- SHEET: {sheet_name} ---\n{df_sheet.fillna('').to_csv(index=False)}"
+                        except Exception: pass
+                    elif file_sbd_c2.name.lower().endswith('.pdf'):
+                        sbd_parts_payload.append(types.Part.from_bytes(data=sbd_bytes, mime_type='application/pdf'))
+                        
+                    sbd_prompt = "Extract style_id, total_quantity, and flat size mappings. Return raw JSON matching schema: {\"style_id\": \"string\", \"total_quantity\": integer, \"size_breakdown\": {\"Size Name\": integer}}"
+                    if sbd_content_str: sbd_parts_payload.append(types.Part.from_text(text=sbd_content_str))
+                    sbd_parts_payload.append(types.Part.from_text(text=sbd_prompt))
+                    
+                    try:
+                        res_sbd = client_ai.models.generate_content(model='gemini-2.5-flash', contents=sbd_parts_payload, config=types.GenerateContentConfig(response_mime_type="application/json"))
+                        st.session_state["sbd_parsed_data"] = json.loads(res_sbd.text.strip().replace("```json", "").replace("```", "").strip())
+                    except Exception: st.session_state["sbd_parsed_data"] = {}
+                    
+                    st.session_state["pur_tp_parsed_data"] = {"dummy_status": "skipped_not_needed"} # Gán biến mồi để mở cửa luồng xử lý
+                    st.session_state["purchase_ready"] = True
+                    st.rerun()
+
 
     # KỊCH BẢN CHỨC NĂNG 2: CHỈ HIỂN THỊ DUY NHẤT 1 Ô TẢI FILE SBD ĐƠN HÀNG, ẨN FILE TECHPACK DƯ THỪA
     elif menu_sub.startswith("✂️ CHỨC NĂNG 2"):
