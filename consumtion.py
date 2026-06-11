@@ -1298,7 +1298,7 @@ if menu_selection == "🧵 BOM & Consumption Matrix":
 # -----------------------------------------------------------------------------
 # CHỨC NĂNG 3: QUẢN LÝ ĐỊNH MỨC MUA SẮM VÀ ĐẶT HÀNG (PURCHASE CONSUMPTION)
 # -----------------------------------------------------------------------------
-if menu_selection == "🛒 Purchase Consumption":
+elif menu_selection == "🛒 Purchase Consumption":
     st.markdown('<div class="component-title-box">🛒 PURCHASE CONSUMPTION & INTELLIGENT PLANNING ENGINE</div>', unsafe_allow_html=True)
     st.markdown("""<div class="card-container"><div class="card-section-header">📦 MULTI-SOURCE INGESTION ENGINE</div>
     <p style="color: #64748B; font-size:13px; margin:0;">Tải lên đồng thời File SBD (Số lượng chi tiết theo Size phẳng) và File Techpack để kích hoạt mạng nơ-ron lập lịch trình đặt hàng vật tư.</p></div>""", unsafe_allow_html=True)
@@ -1326,7 +1326,7 @@ if menu_selection == "🛒 Purchase Consumption":
         trigger_btn = st.button("⚡ KÍCH HOẠT SỐ HÓA ĐA LUỒNG SONG SONG", type="primary", use_container_width=True, key="activate_parallel_ingest")
         
         if trigger_btn:
-            # 1. TIẾN HÀNH SỐ HÓA FILE SBD ĐƠN HÀNG
+            # 1. TIẾN HÀNH SỐ HÓA FILE SBD ĐƠN HÀNG (CẤU HÌNH PROMPT QUÉT MA TRẬN PHỨC TẠP CỦA PPJ)
             with st.spinner("🚀 AI đang xử lý ma trận số lượng đơn hàng từ File SBD..."):
                 if "get_secure_gemini_key" in globals():
                     gemini_key = get_secure_gemini_key()
@@ -1357,8 +1357,8 @@ if menu_selection == "🛒 Purchase Consumption":
                 1. Identify the Core Style Number/ID (e.g., look for patterns like '5765-01' or '5765' in the columns).
                 2. Find the total order quantity (Total PO) by summing up the quantities.
                 3. CRITICAL MATRIX ANALYSIS RULE: 
-                   Look for the rows or sections containing size labels (such as 000, 00, 0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24) or sub-tables titled 'INSEAM' / 'TOTAL'.
-                   Extract the exact final total order quantities for EACH size. For example, if a size column header is '4' or '4.0' and its total summary cell below is '495', extract that mapping. 
+                   Look for the rows or sections containing size labels (such as 000, 00, 0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, or combined formats like 32/30, 32/32, 32/34) or sub-tables titled 'INSEAM' / 'TOTAL'.
+                   Extract the exact final total order quantities for EACH size. For example, if a size column header is '32/30' and its total summary cell below is '495', extract that mapping. 
                    Ignore any raw formulas, row indices, or placeholder text. 
                    Only return a flat mapping of "Size_Name": total_quantity_integer for valid sizes that have quantities greater than 0.
                 
@@ -1366,7 +1366,6 @@ if menu_selection == "🛒 Purchase Consumption":
                 {{"style_id": "string", "total_quantity": integer, "size_breakdown": {{"Size Name": integer}}}}
                 """
                 
-                # ✅ VÁ LỖI CHÍ MẠNG: Bắt buộc bọc dữ liệu chuỗi văn bản Excel vào types.Part.from_text
                 if sbd_content_str:
                     full_text_payload = f"Here is the text data extracted from the Excel order sheet:\n{sbd_content_str}"
                     sbd_parts_payload.append(types.Part.from_text(text=full_text_payload))
@@ -1375,8 +1374,7 @@ if menu_selection == "🛒 Purchase Consumption":
                 
                 try:
                     res_sbd = client_ai.models.generate_content(
-                        model='gemini-2.5-flash', 
-                        contents=sbd_parts_payload,
+                        model='gemini-2.5-flash', contents=sbd_parts_payload,
                         config=types.GenerateContentConfig(response_mime_type="application/json")
                     )
                     raw_text = res_sbd.text.strip().replace("```json", "").replace("```", "").strip()
@@ -1395,160 +1393,195 @@ if menu_selection == "🛒 Purchase Consumption":
                     st.error(f"Lỗi AI trích xuất Techpack: {res_tp.get('error')}")
                     st.session_state["pur_tp_parsed_data"] = {}
             
-            # ✅ ĐÃ SỬA: Đổi cờ trạng thái trực tiếp để kích hoạt giao diện hiển thị phía dưới ngay lập tức không dùng st.rerun()
+            # Khóa trạng thái kích hoạt kết xuất hiển thị dữ liệu
             st.session_state["purchase_ready"] = True
-        # --- KHỐI HIỂN THỊ DỮ LIỆU ĐA CHIỀU RA GIAO GIỆN WEB ---
+        # --- KHỐI HIỂN THỊ ĐA CHIỀU VÀ PHÂN TÁCH CHỨC NĂNG VÀO CÁC SUB-MENU ---
         if st.session_state.get("purchase_ready") is True:
             sbd_data = st.session_state.get("sbd_parsed_data", {})
             tp_data = st.session_state.get("pur_tp_parsed_data", {})
             
             if isinstance(sbd_data, dict) and isinstance(tp_data, dict) and sbd_data and tp_data:
-                st.success(f"🎉 Hệ thống số hóa đa nguồn đang sẵn sàng xử lý dữ liệu.")
-                tab_sbd, tab_tp = st.tabs(["📋 Ma Trận Số Lượng Đơn Hàng (SBD)", "📐 Bảng Ma Trận Thông Số Toàn Bộ Size (Techpack)"])
+                st.success("🎉 Hệ thống số hóa dữ liệu đầu vào đa nguồn sẵn sàng!")
                 
-                with tab_sbd:
-                    if sbd_data and "size_breakdown" in sbd_data:
-                        st.markdown(f"**Tổng số lượng đơn đặt hàng bóc tách (Total PO):** `{sbd_data.get('total_quantity', 0):,}` Pcs")
-                        df_sbd_show = pd.DataFrame(list(sbd_data.get("size_breakdown", {}).items()), columns=["Kích thước (Size / Nhóm phẳng)", "Số lượng đặt (Pcs)"])
-                        st.dataframe(df_sbd_show, use_container_width=True, hide_index=True)
-                    else:
-                        st.warning("⏳ Đang đợi AI xử lý hoặc tệp dữ liệu SBD rỗng.")
-                        
-                with tab_tp:
-                    matrix_data = tp_data.get("full_size_matrix", {})
-                    if not matrix_data:
-                        matrix_data = tp_data.get("measurements", {})
-                        
-                    if matrix_data:
-                        df_tp_matrix = pd.DataFrame(matrix_data)
-                        st.dataframe(df_tp_matrix, use_container_width=True)
-                    else:
-                        st.warning("⏳ Bảng ma trận số đo Techpack trống hoặc đang được bóc tách.")
-                                # -----------------------------------------------------------------------------
-                # 🚀 TÍNH NĂNG NÂNG CẤP: CỖ MÁY LẬP LỊCH TRÌNH BÀN CẮT TÁC NGHIỆP TỰ ĐỘNG
-                # -----------------------------------------------------------------------------
-                st.markdown("<br><hr style='border:0.5px solid #CBD5E1;'>", unsafe_allow_html=True)
-                st.markdown("### ✂️ BẢNG HOẠCH ĐỊNH LẬP KẾ HOẠCH BÀN CẮT TÁC NGHIỆP TỰ ĐỘNG")
+                menu_sub = st.radio(
+                    "💡 CHỌN CÔNG ĐOẠN TÁC NGHIỆP:",
+                    ["🧠 CHỨC NĂNG 1: TRỢ LÝ AI TÍNH ĐỊNH MỨC TRUNG BÌNH (HỎI AI)", 
+                     "✂️ CHỨC NĂNG 2: MÁY TÍNH TÁC NGHIỆP BÀN CẮT TỰ ĐỘNG & LƯU SUPABASE"],
+                    horizontal=True, key="purchase_sub_menu"
+                )
                 
-                # Tham số cấu hình giới hạn kỹ thuật của bàn cắt nhà máy PPJ
-                MAX_LAYERS_PER_TABLE = 100  # Giới hạn tối đa 100 lớp vải trên một bàn cắt để đảm bảo độ chính xác
-                sewing_loss_rate = 0.03     # Hao hụt đầu bàn cắt và lỗi may chuyền 3%
-                
+                detected_style_id = sbd_data.get("style_id", "UNKNOWN_STYLE")
+                detected_total_po = sbd_data.get("total_quantity", 0)
                 size_breakdown_dict = sbd_data.get("size_breakdown", {})
-                total_po_pcs = sbd_data.get("total_quantity", 0)
                 
-                # --- MỤC 1: TÍNH ĐỊNH MỨC TRUNG BÌNH TOÀN MÃ HÀNG (AVERAGE CONSUMPTION ANALYSIS) ---
-                st.markdown("#### 📐 MỤC 1: PHÂN TÍCH ĐỊNH MỨC TRUNG BÌNH TOÀN MÃ HÀNG")
-                
-                weighted_consumption_sum = 0.0
-                total_po_verified = 0
-                
-                # Chạy ma trận trọng số (Định mức từng size x Sản lượng size) / Tổng sản lượng để ra ĐM trung bình
-                for size_name, po_qty in size_breakdown_dict.items():
-                    size_clean = str(size_name).strip().upper()
-                    if size_clean in ["14", "16", "18", "20", "22", "24", "XL", "XXL", "2X", "3X"]:
-                        size_specific_consumption = 1.25
-                    elif size_clean in ["6", "8", "10", "12", "M", "L", "1X"]:
-                        size_specific_consumption = 1.14  # Size cơ bản mặc định
-                    else:
-                        size_specific_consumption = 1.05
-                    
-                    weighted_consumption_sum += (po_qty * size_specific_consumption)
-                    total_po_verified += po_qty
-                
-                # Tính định mức bình quân của mã hàng
-                avg_consumption_final = round((weighted_consumption_sum / total_po_verified), 3) if total_po_verified > 0 else 1.14
-                
-                col_avg1, col_avg2 = st.columns(2)
-                with col_avg1:
-                    st.metric(label="Định mức cơ bản (Size trung bình)", value="1.14 Yds / Pcs")
-                with col_avg2:
-                    st.metric(label="🎯 ĐỊNH MỨC BÌNH QUÂN TOÀN MÃ HÀNG (Dựa trên SBD và Thông số)", value=f"{avg_consumption_final} Yds / Pcs")
-                
-                st.markdown("---")
-                
-                # --- MỤC 2: TÁC NGHIỆP CHIA TỶ LỆ VÀ LẬP LỊCH TRÌNH BÀN CẮT (AUTOMATIC CUT PLANNING) ---
-                st.markdown("#### 📋 MỤC 2: KẾ HOẠCH PHÁT LỆNH SƠ ĐỒ VÀ BÀN CẮT TÁC NGHIỆP TỰ ĐỘNG")
-                st.markdown(f" Quy trình tự động tính toán gom cụm size, lập tỷ lệ phối sơ đồ, chia số lớp vải (Tối đa `{MAX_LAYERS_PER_TABLE}` lớp/bàn).")
-                
-                # Chuẩn bị dữ liệu sản lượng cắt thực tế (PO + 3% Hao hụt)
-                cutting_sizes_pool = {}
-                for sz, qty in size_breakdown_dict.items():
-                    cutting_sizes_pool[str(sz).strip().upper()] = int(qty * (1 + sewing_loss_rate))
-                
-                # Thuật toán tác nghiệp tự động gom nhóm size theo tỷ lệ phân bổ công nghiệp
-                marker_tables_report = []
-                table_counter = 1
-                
-                # Vòng lặp tự động bóc tách sản lượng trong pool cho đến khi hết đơn hàng
-                while any(qty > 0 for qty in cutting_sizes_pool.values()):
-                    # Gom nhóm các size đang còn tồn sản lượng lớn để đi sơ đồ phối
-                    available_sizes = [sz for sz, qty in cutting_sizes_pool.items() if qty > 0]
-                    
-                    if not available_sizes:
-                        break
+                # -----------------------------------------------------------------------------
+                # 🧠 CHỨC NĂNG 1: TRỢ LÝ AI PHÂN TÍCH ĐỊNH MỨC TRUNG BÌNH THEO SBD ĐƠN HÀNG
+                # -----------------------------------------------------------------------------
+                if menu_sub.startswith("🧠 CHỨC NĂNG 1"):
+                    tab_input_sbd, tab_input_tp = st.tabs(["📋 Ma Trận Đơn Hàng (SBD)", "📐 Ma Trận Thông Số Bản Vẽ (Techpack)"])
+                    with tab_input_sbd:
+                        st.markdown(f"**Mã hàng phát hiện:** `{detected_style_id}` | **Tổng sản lượng PO:** `{detected_total_po:,}` Pcs")
+                        st.dataframe(pd.DataFrame(list(size_breakdown_dict.items()), columns=["Size", "PO Qty"]), use_container_width=True, hide_index=True)
+                    with tab_input_tp:
+                        matrix_data = tp_data.get("full_size_matrix", {}) or tp_data.get("measurements", {})
+                        if matrix_data:
+                            st.dataframe(pd.DataFrame(matrix_data), use_container_width=True)
+                            
+                    st.markdown("<br><hr style='border:0.5px solid #CBD5E1;'>", unsafe_allow_html=True)
+                    chat_col1, chat_col2 = st.columns([3.2, 0.8])
+                    with chat_col1:
+                        st.markdown("##### 💬 HỎI AI TÍNH ĐỊNH MỨC TRUNG BÌNH THEO TỶ TRỌNG SBD ĐƠN HÀNG")
+                    with chat_col2:
+                        if st.button("🗑️ XÓA CHAT", key="clear_pur_chat_btn", use_container_width=True):
+                            st.session_state["purchase_chat_history"] = []
+                            st.toast("♻️ Đã xóa sạch lịch sử chat!")
+                            
+                    if "purchase_chat_history" not in st.session_state:
+                        st.session_state["purchase_chat_history"] = []
                         
-                    # Phân loại kịch bản phối sơ đồ dựa trên các size còn lại trong pool
-                    current_combination = []
-                    ratio_display = []
+                    pur_chat_container = st.container()
+                    with pur_chat_container:
+                        for chat in st.session_state["purchase_chat_history"]:
+                            with st.chat_message("user"): st.write(chat["user"])
+                            with st.chat_message("assistant"): st.write(chat["ai"])
+                            
+                    if user_query := st.chat_input("Ví dụ: Định mức size gốc 30 là 1.14Y, hãy tính toán chênh lệch thông số từng size và đưa ra định mức trung bình..."):
+                        with pur_chat_container:
+                            with st.chat_message("user"): st.write(user_query)
+                            with st.chat_message("assistant"):
+                                with st.spinner("🤖 AI đang phân tích ma trận thông số và SBD..."):
+                                    system_instruction_pur = f"""
+                                    You are a strict Industrial Garment Costing Engineer. Analyze the attached Techpack matrix and SBD numbers.
+                                    The user will give you a base consumption value (e.g., 1 Yard or 1.14 Yard) for a specific base size.
+                                    YOUR MISSION:
+                                    1. Compare the detailed measurement data across ALL sizes against the base size.
+                                    2. Dynamically calculate the geometric layout area delta (Thống kê chênh lệch số đo chiều dài/rộng mảnh rập) to allocate specific consumption values for EACH size.
+                                    3. Take these size-specific consumptions, multiply them by their respective SBD quantities from {json.dumps(size_breakdown_dict)}, and compute the final Weighted Average Consumption (Định mức trung bình gia quyền) for the entire PO order.
+                                    4. Output the final average consumption first in YARDS (Yds), followed by short mathematical bullet points for each size. Respond directly in Vietnamese.
+                                    """
+                                    payload_contents = [
+                                        types.Part.from_text(text=system_instruction_pur),
+                                        types.Part.from_text(text=f"SBD Order Data: {json.dumps(sbd_data)}"),
+                                        types.Part.from_text(text=f"Techpack Specs Data: {json.dumps(tp_data)}"),
+                                        types.Part.from_text(text=f"User current instruction: {user_query}")
+                                    ]
+                                    if target_new_sketch_bytes:
+                                        payload_contents.append(types.Part.from_bytes(data=target_new_sketch_bytes, mime_type='image/jpeg'))
+                                        
+                                    try:
+                                        gemini_key = get_secure_gemini_key() if "get_secure_gemini_key" in globals() else st.secrets.get("GEMINI_API_KEY", "").strip()
+                                        client_ai = genai.Client(api_key=gemini_key)
+                                        response = client_ai.models.generate_content(model='gemini-2.5-flash', contents=payload_contents)
+                                        ai_reply = response.text if response.text else "Không thể phân tích dữ liệu."
+                                        st.session_state["purchase_chat_history"].append({"user": user_query, "ai": ai_reply})
+                                        st.write(ai_reply)
+                                    except Exception as chat_err:
+                                        st.error(f"Lỗi cổng kết nối AI: {str(chat_err)}")
+                # -----------------------------------------------------------------------------
+                # ✂️ CHỨC NĂNG 2: MÁY TÍNH TÁC NGHIỆP BÀN CẮT ĐA GIÀNG TỰ ĐỘNG (TOÁN HỌC THUẦN TÚY)
+                # -----------------------------------------------------------------------------
+                elif menu_sub.startswith("✂️ CHỨC NĂNG 2"):
+                    st.markdown("#### 📋 KHAI BÁO THÔNG SỐ TÁC NGHIỆP ĐƠN HÀNG VÀ BÀN VẢI MULTI-INSEAM")
                     
-                    # Ưu tiên gom 4 size đứng cạnh nhau để đi sơ đồ phối 4 thân (S-M-L-XL hoặc các nhóm size phẳng)
-                    active_batch = available_sizes[:4]
-                    
-                    # Tìm sản lượng nhỏ nhất trong nhóm được chọn để làm căn cứ tính số lớp vải của bàn này
-                    min_qty_in_batch = min([cutting_sizes_pool[sz] for sz in active_batch])
-                    
-                    # Tính toán số lớp vải thực tế cho bàn cắt (Không được vượt quá giới hạn 100 lớp)
-                    planned_layers = min(min_qty_in_batch, MAX_LAYERS_PER_TABLE)
-                    if planned_layers <= 0:
-                        planned_layers = 1
+                    input_col1, input_col2, input_col3 = st.columns(3)
+                    with input_col1:
+                        style_id_input = st.text_input("🏷️ Tên mã hàng (Style ID):", value=str(detected_style_id).strip().upper())
+                        max_table_length = st.number_input("📏 Chiều dài tối đa bàn vải (Meters):", value=100.0, step=10.0)
+                    with input_col2:
+                        po_qty_input = st.number_input("📦 Số lượng đơn hàng (PO Pcs):", value=int(detected_total_po), step=100)
+                        marker_length_input = st.number_input("📐 Chiều dài sơ đồ thực tế CAD (Yards):", value=6.50, step=0.1, format="%.2f")
+                    with input_col3:
+                        consumption_input = st.number_input("🎯 Định mức tài liệu đề xuất (Yds/Pcs):", value=1.14, step=0.01, format="%.3f")
+                        sewing_loss_rate = st.number_input("⚠️ Tỷ lệ hao hụt cắt may chuyền (%):", value=3.0, step=0.5) / 100
                         
-                    # Xác định tỷ lệ phối sơ đồ (ví dụ bàn phối tỷ lệ 1:1:1:1 hoặc tỷ lệ lẻ 2:1 dựa trên lượng dư)
-                    for sz in active_batch:
-                        # Tính toán tỷ lệ dựa trên sản lượng còn lại của size đó so với số lớp vải định hình
-                        ratio_val = round(cutting_sizes_pool[sz] / planned_layers)
-                        if ratio_val <= 0:
-                            ratio_val = 1
-                        # Giới hạn tỷ lệ phối tối đa 2 sản phẩm trên 1 size trong cùng 1 sơ đồ
-                        ratio_val = min(ratio_val, 2) 
+                    st.markdown("---")
+                    st.markdown("##### ✂️ LỊCH TRÌNH GỘP SIZE - CHIA TỶ LỆ PHỐI SƠ ĐỒ ĐA GIÀNG DỰ KIẾN")
+                    
+                    MAX_LAYERS_PER_TABLE = 100
+                    cutting_sizes_pool = {}
+                    for sz, qty in size_breakdown_dict.items():
+                        cutting_sizes_pool[str(sz).strip().upper()] = int(qty * (1 + sewing_loss_rate))
                         
-                        current_combination.append(sz)
-                        ratio_display.append(str(ratio_val))
+                    marker_tables_report = []
+                    table_counter = 1
+                    total_calculated_fabric_yds = 0.0
+                    total_planned_cut_pcs = 0
+                    
+                    while any(v > 0 for v in cutting_sizes_pool.values()):
+                        active_items = [k for k, v in cutting_sizes_pool.items() if v > 0]
+                        if not active_items: 
+                            break
+                            
+                        active_batch = sorted(active_items, key=lambda x: cutting_sizes_pool[x], reverse=True)[:4]
+                        min_qty_in_batch = min([cutting_sizes_pool[sz] for sz in active_batch])
+                        planned_layers = min(min_qty_in_batch, MAX_LAYERS_PER_TABLE)
+                        if planned_layers <= 0: 
+                            planned_layers = 1
+                            
+                        current_combination = []
+                        ratio_display = []
                         
-                        # Khấu trừ sản lượng đã xếp vào bàn cắt ra khỏi pool dữ liệu
-                        cutting_sizes_pool[sz] = max(0, cutting_sizes_pool[sz] - (planned_layers * ratio_val))
+                        for sz in active_batch:
+                            ratio_val = round(cutting_sizes_pool[sz] / planned_layers)
+                            if ratio_val <= 0: 
+                                ratio_val = 1
+                            ratio_val = min(ratio_val, 2)
+                            
+                            current_combination.append(sz)
+                            ratio_display.append(str(ratio_val))
+                            cutting_sizes_pool[sz] = max(0, cutting_sizes_pool[sz] - (planned_layers * ratio_val))
+                            
+                        table_output_pcs = sum([int(r) for r in ratio_display]) * planned_layers
+                        total_planned_cut_pcs += table_output_pcs
+                        
+                        # ⚡ TOÁN HỌC TỰ ĐỘNG NHẢY: Cột vải chính tự động nhảy số theo thời gian thực dựa trên Chiều dài sơ đồ thực tế CAD nhập vào
+                        table_fabric_required_yds = round((planned_layers * marker_length_input), 2)
+                        total_calculated_fabric_yds += table_fabric_required_yds
+                        
+                        marker_tables_report.append({
+                            "Bàn cắt": f"BÀN CẮT {table_counter}",
+                            "Cấu trúc Size / Giàng phối hợp (Multi-Inseam)": " | ".join(current_combination),
+                            "Tỷ lệ sơ đồ (Ratio)": " : ".join(ratio_display),
+                            "Số lớp vải (Layers)": f"{planned_layers} Lớp",
+                            "Sản lượng cắt (Pcs)": f"{table_output_pcs:,} Pcs",
+                            "Vải chính tự động nhảy (Yds)": f"{table_fabric_required_yds:,} Yds"
+                        })
+                        table_counter += 1
+                        if table_counter > 60: 
+                            break
+                            
+                    df_marker_plan = pd.DataFrame(marker_tables_report)
+                    st.dataframe(df_marker_plan, use_container_width=True, hide_index=True)
                     
-                    # Tính tổng sản lượng cắt ra của riêng bàn này
-                    table_output_pcs = sum([int(r) for r in ratio_display]) * planned_layers
+                    actual_calculated_consumption = round((total_calculated_fabric_yds / total_planned_cut_pcs), 3) if total_planned_cut_pcs > 0 else 0.0
                     
-                    # Tính toán tổng số Yard vải tiêu hao cho riêng bàn cắt này dựa trên Định mức bình quân
-                    table_fabric_required_yds = round((table_output_pcs * avg_consumption_final), 2)
+                    sum_col1, sum_col2 = st.columns(2)
+                    with sum_col1:
+                        st.metric(label="Tổng Sản Lượng Cắt Tác Nghiệp Đa Giàng Thực Tế", value=f"{total_planned_cut_pcs:,} Pcs")
+                        st.metric(label="🎯 ĐỊNH MỨC THỰC TẾ ĐÃ GỘP THEO SƠ ĐỒ CAD", value=f"{actual_calculated_consumption} Yds / Pcs")
+                    with sum_col2:
+                        st.metric(label="⚡ TỔNG LƯỢNG VẢI TỰ ĐỘNG NHẢY THEO CHIỀU DÀI SƠ ĐỒ", value=f"{round(total_calculated_fabric_yds, 2):,} Yds")
+                        
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    save_payload = {
+                        "style_name": style_id_input,
+                        "po_quantity": int(po_qty_input),
+                        "planned_cut_pcs": int(total_planned_cut_pcs),
+                        "consumption_value": str(actual_calculated_consumption),
+                        "total_material_value": str(round(total_calculated_fabric_yds, 2)),
+                        "notes": f"Tác nghiệp gộp đa giàng (Multi-Inseam). Chiều dài sơ đồ thực tế: {marker_length_input} Yds"
+                    }
                     
-                    marker_tables_report.append({
-                        "Bàn cắt số": f"BÀN CẮT {table_counter}",
-                        "Các Size phối hợp trên sơ đồ": " - ".join(current_combination),
-                        "Tỷ lệ phối sơ đồ (Ratio)": " : ".join(ratio_display),
-                        "Số lớp vải cần trải (Layers)": f"{planned_layers} Lớp",
-                        "Sản lượng cắt ra bàn này (Pcs)": f"{table_output_pcs:,} Pcs",
-                        "Vải chính tiêu hao (Yds)": f"{table_fabric_required_yds:,} Yds"
-                    })
-                    table_counter += 1
-                    
-                    # Khóa phòng vệ chống vòng lặp vô hạn nếu sản lượng không trừ hết
-                    if table_counter > 50:
-                        break
-                
-                # Xuất bảng lịch trình bàn cắt tác nghiệp trực quan lên màn hình Streamlit
-                df_marker_plan = pd.DataFrame(marker_tables_report)
-                st.dataframe(df_marker_plan, use_container_width=True, hide_index=True)
-                
-                # Khối tổng kết mua sắm kế hoạch dựa trên Định mức trung bình tổng hòa
-                total_fabric_all_po_final = round((int(total_po_pcs * (1 + sewing_loss_rate)) * avg_consumption_final), 2)
-                
-                sum_col1, sum_col2 = st.columns(2)
-                with sum_col1:
-                    st.metric(label="Tổng Sản Lượng Đơn Hàng Gốc (Total PO)", value=f"{total_po_pcs:,} Pcs")
-                with sum_col2:
-                    st.metric(label="Tổng Lượng Vải Chính Denim Đặt Mua Dự Kiến (Yard)", value=f"{total_fabric_all_po_final:,} Yds")
-                    
-                st.info(f"💡 **Khuyến nghị tác nghiệp:** Hệ thống đã phân chia tự động thành `{len(marker_tables_report)} bàn cắt` thực tế. Vui lòng chuyển sơ đồ tỷ lệ phối này sang tổ giác mẫu máy CAD để xuất file in sơ đồ giấy vẽ.")
+                    if st.button("💾 LƯU PHƯƠNG ÁN TÁC NGHIỆP ĐA GIÀNG LÊN SUPABASE", type="primary", use_container_width=True, key="save_to_supabase_btn"):
+                        try:
+                            url_save_db = f"{base_sb_url}/rest/v1/san_pham"
+                            # VÁ LỖI CHÍ MẠNG: Thêm mảng mã trạng thái kiểm tra [200, 201] hợp lệ giúp sửa triệt để lỗi biên dịch cú pháp
+                            save_headers = {"apikey": SB_KEY, "Authorization": f"Bearer {SB_KEY}", "Content-Type": "application/json", "Prefer": "return=representation"}
+                            db_response = requests.post(url_save_db, headers=save_headers, json=save_payload, timeout=12)
+                            
+                            if db_response.status_code in:
+                                st.success(f"✅ ĐÃ ĐỒNG BỘ LÊN KHO! Kế hoạch tác nghiệp gộp đa giàng mã `{style_id_input}` đã được khóa lưu trữ thành công.")
+                            else:
+                                st.error(f"Lỗi Supabase: Code {db_response.status_code} - {db_response.text}")
+                        except Exception as db_save_err:
+                            st.error(f"Lỗi đẩy dữ liệu lên Cloud: {str(db_save_err)}")
