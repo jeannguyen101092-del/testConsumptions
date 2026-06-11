@@ -1658,7 +1658,8 @@ elif menu_selection == "🛒 Purchase Consumption":
                         # -----------------------------------------------------------------------------
                        # -----------------------------------------------------------------------------
                         # -----------------------------------------------------------------------------
-            # ✂️ CHỨC NĂNG 2 - PHẦN 2.1: THUẬT TOÁN ÉP LỚP CÔNG NGHIỆP - CHỐNG TỐN CÔNG CẮT
+                       # -----------------------------------------------------------------------------
+            # ✂️ CHỨC NĂNG 2 - PHẦN 2.1: THUẬT TOÁN SƠ ĐỒ CHÍNH GỘP DÀI & SƠ ĐỒ ĐẦU KHÚC 1 QUẦN
             # -----------------------------------------------------------------------------
             if st.session_state["step1_marker_ready"]:
                 if not size_breakdown_main:
@@ -1666,13 +1667,14 @@ elif menu_selection == "🛒 Purchase Consumption":
                 else:
                     st.markdown("##### ✂️ LỊCH TRÌNH GỘP SIZE - CHIA TỶ LỆ PHỐI SƠ ĐỒ ĐA GIÀNG DỰ KIẾN")
                     
-                    # 📐 THAM SỐ CẤU HÌNH CÔNG NGHIỆP BÀN CẮT PPJ GROUP
-                    MAX_LAYERS_PER_TABLE = 100   # Ép chặn trên số lớp vải tối đa trên một bàn cắt
-                    MIN_LAYERS_LIMIT = 25       # ⚡ THAM SỐ VÀNG: Ép số lớp tối thiểu cho mỗi bàn cắt, cấm trải lẻ tẻ vài lớp tốn công
+                    # 📐 THAM SỐ KHỐNG CHẾ BÀN CẮT CÔNG NGHIỆP TRỰC QUAN
+                    MAX_LAYERS_PER_TABLE = 100   # Chặn trên số lớp vải tối đa của bàn cắt chính
+                    MIN_MAIN_LAYERS = 40         # Ngưỡng số lớp của bàn cắt chính (Dưới ngưỡng này tự động chuyển sang đầu khúc)
                     
                     max_table_length_yds = max_table_length * 1.09361
                     max_pcs_per_marker = max(1, int(max_table_length_yds / consumption_input))
                     
+                    # Nhân đôi ma trận nạp gốc từ bộ nhớ tạm an toàn chống mất biến
                     cutting_sizes_pool = {str(sz).strip().upper(): int(qty) for sz, qty in size_breakdown_main.items()}
                     
                     marker_tables_report = []
@@ -1687,68 +1689,51 @@ elif menu_selection == "🛒 Purchase Consumption":
                         if not active_items: 
                             break
                         
-                        # Quét lấy nhóm tối đa 4 size phẳng đang tồn nhiều sản lượng nhất trong pool
-                        active_batch = sorted(active_items, key=lambda x: cutting_sizes_pool[x], reverse=True)[:4]
-                        
-                        # Tính số lớp thô dự kiến dựa trên size nhỏ nhất
-                        raw_min_layers = min([cutting_sizes_pool[sz] for sz in active_batch])
-                        
-                        # ⚡ LUỒNG TOÁN HỌC ÉP LỚP: Nếu phát hiện số lớp dự kiến bị tụt sâu dưới ngưỡng 25 lớp công nghiệp
-                        # Hệ thống sẽ ép buộc số lớp của bàn này đạt mốc tối thiểu MIN_LAYERS_LIMIT để bảo vệ công cắt
-                        if raw_min_layers < MIN_LAYERS_LIMIT:
-                            planned_layers = MIN_LAYERS_LIMIT
-                        else:
-                            planned_layers = min(raw_min_layers, MAX_LAYERS_PER_TABLE)
-                            
-                        # Khóa phòng vệ: Nếu tổng sản lượng tồn của cả batch không đủ phủ mốc lớp tối thiểu, hạ số lớp về mốc tồn thực tế cao nhất
-                        max_single_qty = max([cutting_sizes_pool[sz] for sz in active_batch])
-                        if planned_layers > max_single_qty and max_single_qty > 0:
-                            planned_layers = max_single_qty
+                        # Sắp xếp danh sách size theo sản lượng tồn giảm dần
+                        active_batch = sorted(active_items, key=lambda x: cutting_sizes_pool[x], reverse=True)
                         
                         current_combination = []
                         ratio_display = []
                         actual_table_output = 0
-                        current_marker_total_pcs = 0
                         
-                        for sz in active_batch:
-                            # Tính tỷ lệ đặt rập (Ratio). Khi số lớp cố định ở mốc tối thiểu, tỷ lệ sẽ tự động nhảy tăng cao lên (3, 4, 5) để vét hết hàng tồn
-                            ratio_val = round(cutting_sizes_pool[sz] / planned_layers)
+                        # ⚡ ĐIỀU KIỂU 1: BÀN CẮT CHÍNH (SẢN LƯỢNG LỚN -> ÉP PHỐI GỘP NHIỀU SẢN PHẨM / TỶ LỆ LỚN)
+                        if cutting_sizes_pool[active_batch[0]] >= MIN_MAIN_LAYERS:
+                            planned_layers = min(cutting_sizes_pool[active_batch[0]], MAX_LAYERS_PER_TABLE)
                             
-                            # Nếu lượng tồn quá ít, thuật toán ép giữ mức 1 để gộp chung rập vét sạch pool
-                            if ratio_val <= 0 and cutting_sizes_pool[sz] > 0:
-                                ratio_val = 1
+                            # Ưu tiên gom tối đa 4 size phẳng đang tồn nhiều hàng nhất vào sơ đồ gộp dài
+                            selected_sizes = active_batch[:4]
+                            
+                            for sz in selected_sizes:
+                                # Thuật toán tự động chia tỷ lệ đặt rập (Ratio) thông minh
+                                ratio_val = round(cutting_sizes_pool[sz] / planned_layers)
+                                ratio_val = min(max(1, ratio_val), 2) # Giới hạn 1 hoặc 2 sản phẩm/size
                                 
-                            # Khống chế tỷ lệ tối đa cho phép gộp rập trên sơ đồ ngắn
-                            ratio_val = min(max(1, ratio_val), 5)
-                            
-                            # Khống chế chặn trên chiều dài bàn vải hình học
-                            if (current_marker_total_pcs + ratio_val) > max_pcs_per_marker:
-                                if current_marker_total_pcs == 0:
-                                    ratio_val = 1
-                                else:
+                                # Khống chế chặn trên chiều dài bàn vải hình học vật lý (Meters)
+                                if (sum([int(r) for r in ratio_display]) + ratio_val) > max_pcs_per_marker:
                                     break
+                                    
+                                pcs_to_cut = planned_layers * ratio_val
+                                if pcs_to_cut > cutting_sizes_pool[sz]:
+                                    pcs_to_cut = cutting_sizes_pool[sz]
+                                    ratio_val = max(1, round(pcs_to_cut / planned_layers))
+                                    
+                                current_combination.append(sz)
+                                ratio_display.append(str(ratio_val))
+                                actual_table_output += pcs_to_cut
+                                
+                        # ⚡ ĐIỀU KIỆN 2: CHUYỂN SANG CHẾ ĐỘ SƠ ĐỒ ĐẦU KHÚC (SẢN LƯỢNG LẺ Ở ĐÁY KHO PO)
+                        # Ép tổng tỷ lệ sơ đồ bằng đúng 1 quần hoặc tối đa 2 quần để vét sạch hàng khúc vải thừa
+                        else:
+                            # Chốt cứng sơ đồ đầu khúc chỉ chứa tối đa 1 quần (Tổng tỷ lệ = 1)
+                            sz_target = active_batch[0]
+                            planned_layers = cutting_sizes_pool[sz_target] # Số lớp tự nhảy bằng chính lượng hàng tồn lẻ còn lại
                             
-                            pcs_to_cut = planned_layers * ratio_val
-                            # Khóa khống chế không cho phép phát lệnh cắt vượt quá lượng đơn hàng gốc còn tồn trong pool
-                            if pcs_to_cut > cutting_sizes_pool[sz]:
-                                pcs_to_cut = cutting_sizes_pool[sz]
-                                ratio_val = max(1, round(pcs_to_cut / planned_layers))
-                            
-                            current_combination.append(sz)
-                            ratio_display.append(str(ratio_val))
-                            current_marker_total_pcs += ratio_val
-                            actual_table_output += pcs_to_cut
+                            current_combination.append(sz_target)
+                            ratio_display.append("1")                      # ✅ CHỐT CỨNG TỶ LỆ SƠ ĐỒ ĐẦU KHÚC LÀ 1 QUẦN
+                            actual_table_output = planned_layers * 1
                         
-                        if not current_combination:
-                            sz_backup = active_batch[0]
-                            ratio_val = 1
-                            pcs_to_cut = min(planned_layers * ratio_val, cutting_sizes_pool[sz_backup])
-                            current_combination.append(sz_backup)
-                            ratio_display.append(str(ratio_val))
-                            actual_table_output += pcs_to_cut
-                            
+                        # Cập nhật khấu trừ sản lượng thực tế đã xếp bàn ra khỏi pool kho ma trận SBD
                         for i, sz in enumerate(current_combination):
-                            # Trừ lùi sản lượng thực tế đã phân bổ ra khỏi pool ma trận SBD
                             pcs_sub = planned_layers * int(ratio_display[i])
                             if pcs_sub > cutting_sizes_pool[sz]:
                                 pcs_sub = cutting_sizes_pool[sz]
@@ -1769,6 +1754,9 @@ elif menu_selection == "🛒 Purchase Consumption":
                             current_so_do_name = f"C{table_counter:02d}"
                             display_marker_text, display_fabric_text = "Chờ máy CAD...", "Chờ nhập dài..."
                         
+                        # Render cấu trúc nhãn bảng tác nghiệp chuẩn xưởng cắt
+                        note_text = "Sơ đồ phối chính" if sum_of_ratios > 1 else "SƠ ĐỒ ĐẦU KHÚC (1 QUẦN)"
+                        
                         marker_tables_report.append({
                             "Bàn cắt": current_so_do_name, 
                             "Cấu trúc Size / Giàng phối hợp (Multi-Inseam)": " | ".join(current_combination),
@@ -1785,6 +1773,7 @@ elif menu_selection == "🛒 Purchase Consumption":
                             
                     df_marker_plan = pd.DataFrame(marker_tables_report)
                     st.dataframe(df_marker_plan, use_container_width=True, hide_index=True)
+
 
 
                     # -----------------------------------------------------------------------------
