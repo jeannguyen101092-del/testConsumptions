@@ -821,11 +821,8 @@ def ai_consumption_analyst_engine(client, user_message, matched_techpack, bom_re
     """
     Bộ não xử lý tính toán định mức nâng cao bằng đơn vị YARD (Yds).
     Tự động kích hoạt cơ chế Vecto Hình Học Ngành May nếu KHÔNG CÓ mã tương đồng.
-    Tích hợp quy chuẩn đường may cố định 0.44" và dò tìm lai cùng quy tắc nẹp áo.
+    Tích hợp biên may 0.44", dò tìm lai và quy tắc tách biệt Quần/Áo (Chống lộn Nẹp).
     """
-    if not client:
-        return "🚨 Cổng phân tích chưa được cấu hình GEMINI_API_KEY bảo mật."
-        
     style_old_name = matched_techpack.get("StyleName", "N/A") if matched_techpack else "N/A"
     specs_old = matched_techpack.get("DetailedMeasurements", {}) if matched_techpack else {}
     
@@ -837,9 +834,9 @@ def ai_consumption_analyst_engine(client, user_message, matched_techpack, bom_re
     shrinkage_length = re.findall(r'(?:CO RÚT DỌC|DỌC)\s*(\d+(?:\.\d+)?)\s*%', user_message.upper())
     new_fabric_width = re.findall(r'(?:KHỔ VẢI|KHỔ)\s*(\d+)\s*(?:\"|INCH|INCHES)?', user_message.upper())
 
-    w_shrink = float(shrinkage_width[0]) if shrinkage_width else 0.0
-    l_shrink = float(shrinkage_length[0]) if shrinkage_length else 0.0
-    f_width = float(new_fabric_width[0]) if new_fabric_width else 0.0
+    w_shrink = float(shrinkage_width) if shrinkage_width else 0.0
+    l_shrink = float(shrinkage_length) if shrinkage_length else 0.0
+    f_width = float(new_fabric_width) if new_fabric_width else 0.0
 
     if matched_techpack:
         scenario_instruction = f"""
@@ -851,15 +848,15 @@ def ai_consumption_analyst_engine(client, user_message, matched_techpack, bom_re
         scenario_instruction = f"""
         KỊCH BẢN: PHÂN TÍCH VECTOR HÌNH HỌC NGÀNH MAY KHÔNG CÓ MÃ TƯƠNG ĐỒNG (GEOMETRIC LAYOUT ESTIMATION)
         - Bạn không có dữ liệu lịch sử. Hãy dựa hoàn toàn vào bảng thông số 'New Spec (POM)' và hình ảnh bản vẽ rập chi tiết 'Flat Sketch' đính kèm.
-        - Hãy tính diện tích hình học rập mẫu thô của từng chi tiết cấu thành (Thân trước x2, Thân sau x2, Cạp/Cổ, Túi, Nẹp).
-        - Tính ĐM Vải chính: Cộng dồn chiều dài các mảnh rập sau khi cộng biên may, nhân hệ số hao hụt rải vải tiêu chuẩn ngành (giả lập Marker Efficiency = 82%-85%) xếp trên khổ vải requested: {f_width if f_width > 0 else '58 inch'}.
+        - Hãy tính diện tích hình học rập mẫu thô của từng chi tiết cấu thành dựa trên đúng phân loại sản phẩm.
+        - Tính ĐM Vải chính: Cộng dồn chiều dài các mảnh rập sau khi cộng biên may, nhân hệ số hao hụt rải vải tiêu chuẩn ngành xếp trên khổ vải: {f_width if f_width > 0 else '58 inch'}.
         """
 
     system_instruction = f"""
     You are a strict Industrial Garment Costing Engineer at PPJ Group. 
     Your answers must mimic ChatGPT's advanced code interpreter mode:
     1. STRICT UNIT REQUIRED: All consumption values and fabric calculation results MUST be presented in YARDS (Yds) or Inches. NEVER use meters or cm.
-    2. DIRECT ANSWER FIRST: Output the exact final average consumption value in YARDS (Yds) or Pieces in the very first sentence.
+    2. DIRECT ANSWER FIRST: Output the exact final average consumption value in YARDS (Yds) in the very first sentence.
     3. STEP-BY-STEP MATHEMATICS: Present your logic using short, punchy bullet points showing raw numbers, shrinkage multipliers, and layout area deltas.
     4. LANGUAGE: Answer directly in Vietnamese, using precise apparel terminology (co rút, định mức, hao hụt, khổ vải, nẹp liền, nẹp rời).
     
@@ -868,10 +865,18 @@ def ai_consumption_analyst_engine(client, user_message, matched_techpack, bom_re
     - Pocket Openings (Miệng túi): EXCLUDE the 0.44" rule. Pocket trims and facings must follow the exact techpack dimensions.
     - Garment Hem / Bottom Hem (Lai áo / Lai quần): DO NOT use 0.44". You MUST scan the 'New Spec (POM)' below to find the specific values for keywords like 'Hem', 'Bottom Width', 'Sleeve Hemfold'. Use that exact Techpack value for the hem calculation. If not specified, note it down.
 
-    GARMENT PLACKET RULES FOR TOPS/JACKETS (CRITICAL FOR WIDTH & AREA):
-    - If the item is a Top/Shirt/Jacket, you MUST check the Flat Sketch and POM for Placket (Nẹp áo).
-    - NẸP LIỀN (Fold-on/Extended Placket): If the placket is folded from the main body, you MUST add 2 times the placket width extension to the raw width of each front body panel pattern before calculating fabric consumption, otherwise width area will be insufficient.
-    - NẸP RỜI (Separate Placket): If the placket is a separate piece cut out, you MUST treat it as a standalone geometric pattern panel with length = body length + seams, and width = (placket width x 2) + standard seams (2 x 0.44"). This separate piece must be added to the overall layout marker area.
+    GARMENT CATEGORY SPECIFIC RULES (STRICT SEPARATION TO AVOID ERROR):
+    
+    1. IF THE CATEGORY IS PANT / SHORT / SKORT / TROUSER (NHÓM HÀNG QUẦN):
+       - STICK TO JEANS/PANTS LOGIC ONLY.
+       - ABSOLUTELY FORBIDDEN: Do NOT apply Shirt Placket rules (Cấm áp dụng quy tắc nẹp rời/nẹp liền gập cuốn của áo). 
+       - Waistband Construction (Cạp quần): Calculate waistband fabric based strictly on Waistband Height and Waist Circumference.
+       - Zipper Fly / Fly Placket (Cửa quần): Only calculate based on standard front fly extensions (typically adding a small standard extension of 1.5" to 2" for the fly j-stitch width on ONE side of the left front panel only. Do NOT multiply by 2 across both front panels like a shirt).
+       - Coin Pocket (Túi đồng xu): Check for coin pocket width/height if specified.
+       
+    2. IF THE CATEGORY IS SHIRT / JACKET / TOP / COAT (NHÓM HÀNG ÁO):
+       - NẸP LIỀN (Fold-on/Extended Placket): If folded from the main body, add 2 times the placket width extension to the raw width of each front body panel pattern before calculating fabric consumption.
+       - NẸP RỜI (Separate Placket): Treat it as a standalone independent geometric pattern strip panel (Length = body length + seams, Width = placket width x 2 + standard seams 2 x 0.44"). Add this separate piece to the overall layout marker area.
 
     {scenario_instruction}
 
@@ -909,6 +914,7 @@ else:
 
 if gemini_key:
     client = genai.Client(api_key=gemini_key, http_options=types.HttpOptions(api_version='v1'))
+
 def process_single_pdf_batch(file_bytes, file_name):
     """
     Hàm bóc tách dữ liệu kỹ thuật từ một file PDF độc lập.
