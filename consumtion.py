@@ -1655,8 +1655,8 @@ elif menu_selection == "🛒 Purchase Consumption":
                             "length_yds": round(cad_length_meters_list[idx_c] * 1.09361, 2) # Nhân hệ số đổi Mét sang Yard
                         })
 
-            # -----------------------------------------------------------------------------
-            # ✂️ CHỨC NĂNG 2 - PHẦN 2: LUỒNG GIẢI TOÁN TỰ ĐỘNG THEO ĐƠN HÀNG GỐC 100%
+                        # -----------------------------------------------------------------------------
+            # ✂️ CHỨC NĂNG 2 - PHẦN 2.1: VÒNG LẶP CHIA BÀN CẮT PHỐI GỘP ĐA GIÀNG DỰ KIẾN
             # -----------------------------------------------------------------------------
             if st.session_state["step1_marker_ready"]:
                 if not size_breakdown_main:
@@ -1664,6 +1664,7 @@ elif menu_selection == "🛒 Purchase Consumption":
                 else:
                     st.markdown("##### ✂️ LỊCH TRÌNH GỘP SIZE - CHIA TỶ LỆ PHỐI SƠ ĐỒ ĐA GIÀNG DỰ KIẾN")
                     MAX_LAYERS_PER_TABLE = 100
+                    
                     cutting_sizes_pool = {str(sz).strip().upper(): int(qty) for sz, qty in size_breakdown_main.items()}
                     
                     marker_tables_report = []
@@ -1675,20 +1676,24 @@ elif menu_selection == "🛒 Purchase Consumption":
                     
                     while any(v > 0 for v in cutting_sizes_pool.values()):
                         active_items = [k for k, v in cutting_sizes_pool.items() if v > 0]
-                        if not active_items: break
+                        if not active_items: 
+                            break
                         active_batch = sorted(active_items, key=lambda x: cutting_sizes_pool[x], reverse=True)[:4]
                         planned_layers = min([cutting_sizes_pool[sz] for sz in active_batch])
                         planned_layers = min(max(1, planned_layers), MAX_LAYERS_PER_TABLE)
                         
                         current_combination, ratio_display = [], []
                         actual_table_output = 0
+                        
                         for sz in active_batch:
                             ratio_val = round(cutting_sizes_pool[sz] / planned_layers)
                             ratio_val = min(max(1, ratio_val), 2)
+                            
                             pcs_to_cut = planned_layers * ratio_val
                             if pcs_to_cut > cutting_sizes_pool[sz]:
                                 pcs_to_cut = cutting_sizes_pool[sz]
                                 ratio_val = max(1, round(pcs_to_cut / planned_layers))
+                            
                             current_combination.append(sz)
                             ratio_display.append(str(ratio_val))
                             actual_table_output += pcs_to_cut
@@ -1710,16 +1715,24 @@ elif menu_selection == "🛒 Purchase Consumption":
                             display_marker_text, display_fabric_text = "Chờ máy CAD...", "Chờ nhập dài..."
                         
                         marker_tables_report.append({
-                            "Bàn cắt": current_so_do_name, "Cấu trúc Size / Giàng phối hợp (Multi-Inseam)": " | ".join(current_combination),
-                            "Tỷ lệ sơ đồ (Ratio)": " : ".join(ratio_display), "TỔNG TỶ LỆ (Sản phẩm/Lớp)": sum_of_ratios,
-                            "Số lớp vải (Layers)": f"{planned_layers} Lớp", "DÀI SƠ ĐỒ QUY ĐỔI (Yds)": display_marker_text,
-                            "Sản lượng cắt (Pcs)": actual_table_output, "Vải chính tự động nhảy (Yds)": display_fabric_text
+                            "Bàn cắt": current_so_do_name, 
+                            "Cấu trúc Size / Giàng phối hợp (Multi-Inseam)": " | ".join(current_combination),
+                            "Tỷ lệ sơ đồ (Ratio)": " : ".join(ratio_display), 
+                            "TỔNG TỶ LỆ (Sản phẩm/Lớp)": sum_of_ratios,
+                            "Số lớp vải (Layers)": f"{planned_layers} Lớp", 
+                            "DÀI SƠ ĐỒ QUY ĐỔI (Yds)": display_marker_text,
+                            "Sản lượng cắt (Pcs)": actual_table_output, 
+                            "Vải chính tự động nhảy (Yds)": display_fabric_text
                         })
                         table_counter += 1
-                        if table_counter > 60: break
+                        if table_counter > 60: 
+                            break
                             
                     df_marker_plan = pd.DataFrame(marker_tables_report)
                     st.dataframe(df_marker_plan, use_container_width=True, hide_index=True)
+                    # -----------------------------------------------------------------------------
+                    # ✂️ CHỨC NĂNG 2 - PHẦN 2.2: ĐỒ HỌA EXCEL CHUYÊN NGHIỆP VÀ ĐỒNG BỘ SUPABASE
+                    # -----------------------------------------------------------------------------
                     actual_calculated_consumption = round((total_calculated_fabric_yds / total_planned_cut_pcs), 3) if total_planned_cut_pcs > 0 else 0.0
                     
                     sum_col1, sum_col2 = st.columns(2)
@@ -1733,94 +1746,38 @@ elif menu_selection == "🛒 Purchase Consumption":
                         st.markdown("---")
                         st.markdown("##### 📥 XUẤT HỒ SƠ TÁC NGHIỆP KỸ THUẬT XUỐNG MÁY TÍNH")
                         
-                        # 🚀 THUẬT TOÁN DỆT MAY CẤU HÌNH EXCEL ĐẸP MẮT - ĐỔ MÀU CHUYÊN NGHIỆP CỦA PPJ GROUP
                         excel_buffer = io.BytesIO()
                         with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer:
-                            # 1. Khởi tạo Sheet Lịch trình bàn cắt độc lập
                             df_marker_plan.to_excel(writer, sheet_name='Lich_Trinh_Ban_Cat', index=False)
                             
-                            # Lấy Object workbook và worksheet của xlsxwriter để can thiệp định dạng đồ họa
                             workbook  = writer.book
                             worksheet = writer.sheets['Lich_Trinh_Ban_Cat']
                             
-                            # 🎨 ĐỊNH NẠP CÁC BỘ FORMAT ĐỒ HỌA MÀU SẮC CHUẨN DOANH NGHIỆP
                             header_format = workbook.add_format({
-                                'bold': True,
-                                'text_wrap': True,
-                                'valign': 'vcenter',
-                                'align': 'center',
-                                'fg_color': '#1E3A8A',       # Màu xanh Navy sang trọng chuẩn PPJ Corporate
-                                'font_color': '#FFFFFF',     # Chữ màu trắng tương phản cao
-                                'font_name': 'Segoe UI',
-                                'font_size': 11,
-                                'border': 1,
-                                'border_color': '#CBD5E1'
+                                'bold': True, 'text_wrap': True, 'valign': 'vcenter', 'align': 'center',
+                                'fg_color': '#1E3A8A', 'font_color': '#FFFFFF', 'font_name': 'Segoe UI', 'font_size': 11, 'border': 1, 'border_color': '#CBD5E1'
                             })
+                            cell_center_format = workbook.add_format({'align': 'center', 'valign': 'vcenter', 'font_name': 'Segoe UI', 'font_size': 10, 'border': 1, 'border_color': '#E2E8F0'})
+                            cell_left_format = workbook.add_format({'align': 'left', 'valign': 'vcenter', 'font_name': 'Segoe UI', 'font_size': 10, 'border': 1, 'border_color': '#E2E8F0'})
+                            number_format = workbook.add_format({'align': 'center', 'valign': 'vcenter', 'font_name': 'Segoe UI', 'font_size': 10, 'num_format': '#,##0', 'border': 1, 'border_color': '#E2E8F0'})
+                            decimal_format = workbook.add_format({'align': 'center', 'valign': 'vcenter', 'font_name': 'Segoe UI', 'font_size': 10, 'num_format': '#,##0.00', 'border': 1, 'border_color': '#E2E8F0'})
                             
-                            cell_center_format = workbook.add_format({
-                                'align': 'center',
-                                'valign': 'vcenter',
-                                'font_name': 'Segoe UI',
-                                'font_size': 10,
-                                'border': 1,
-                                'border_color': '#E2E8F0'
-                            })
-                            
-                            cell_left_format = workbook.add_format({
-                                'align': 'left',
-                                'valign': 'vcenter',
-                                'font_name': 'Segoe UI',
-                                'font_size': 10,
-                                'border': 1,
-                                'border_color': '#E2E8F0'
-                            })
-                            
-                            number_format = workbook.add_format({
-                                'align': 'center',
-                                'valign': 'vcenter',
-                                'font_name': 'Segoe UI',
-                                'font_size': 10,
-                                'num_format': '#,##0',       # Tự động phẩy phân cách hàng nghìn cho sản lượng
-                                'border': 1,
-                                'border_color': '#E2E8F0'
-                            })
-                            
-                            decimal_format = workbook.add_format({
-                                'align': 'center',
-                                'valign': 'vcenter',
-                                'font_name': 'Segoe UI',
-                                'font_size': 10,
-                                'num_format': '#,##0.00',    # Định dạng 2 số thập phân cho số Yard
-                                'border': 1,
-                                'border_color': '#E2E8F0'
-                            })
-                            
-                            # 📐 ĐÓNG ĐINH KÍCH THƯỚC VÀ ĐỔ ĐỊNH DẠNG CHO TỪNG CỘT TRONG SHEET
-                            worksheet.set_row(0, 26) # Ép chiều cao dòng tiêu đề rộng rãi dễ nhìn
-                            
-                            # Cột Bàn cắt (Cột A) -> Căn giữa
+                            worksheet.set_row(0, 26)
                             worksheet.set_column('A:A', 14, cell_center_format)
-                            # Cột Cấu trúc phối Size (Cột B) -> Căn trái cho chuỗi dài dễ đọc
                             worksheet.set_column('B:B', 38, cell_left_format)
-                            # Cột Tỷ lệ phối (Cột C) -> Căn giữa
                             worksheet.set_column('C:C', 18, cell_center_format)
-                            # Cột TỔNG TỶ LỆ (Cột D) -> Căn giữa dạng số
                             worksheet.set_column('D:D', 15, number_format)
-                            # Cột Số lớp vải Layers (Cột E) -> Căn giữa
                             worksheet.set_column('E:E', 18, cell_center_format)
-                            # Cột Dài sơ đồ Yards (Cột F) -> Căn giữa thập phân
                             worksheet.set_column('F:F', 20, decimal_format)
-                            # Cột Sản lượng cắt Pcs (Cột G) -> Căn giữa định dạng số hàng nghìn
                             worksheet.set_column('G:G', 18, number_format)
-                            # Cột Vải chính nhảy số (Cột H) -> Căn giữa
                             worksheet.set_column('H:H', 22, cell_center_format)
                             
-                            # Đè định dạng tiêu đề chữ trắng nền xanh Navy cho dòng đầu tiên
                             for col_num, value in enumerate(df_marker_plan.columns):
                                 worksheet.write(0, col_num, value, header_format)
                                 
-                            # 📊 2. TẠO SHEET TỔNG HỢP CHI TIẾT ĐƠN HÀNG TOÀN DIỆN (INFO SHEET ĐỔ MÀU VÀNG CHỮ ĐEN)
-                            # Gom toàn bộ 100% thông tin đầu vào, đầu ra, khổ cắt gom gọn vào một bảng tổng hợp
+                            import datetime as dt_core
+                            now_str = dt_core.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                            
                             info_records = [
                                 {"THÔNG TIN TÁC NGHIỆP": "🏷️ TÊN MÃ HÀNG (STYLE ID)", "GIÁ TRỊ THỰC TẾ": style_id_input},
                                 {"THÔNG TIN TÁC NGHIỆP": "📦 SẢN LƯỢNG ĐƠN HÀNG GỐC (PO)", "GIÁ TRỊ THỰC TẾ": int(po_qty_input)},
@@ -1829,7 +1786,7 @@ elif menu_selection == "🛒 Purchase Consumption":
                                 {"THÔNG TIN TÁC NGHIỆP": "🎯 ĐỊNH MỨC THỰC TẾ BÌNH QUÂN (YDS/PCS)", "GIÁ TRỊ THỰC TẾ": actual_calculated_consumption},
                                 {"THÔNG TIN TÁC NGHIỆP": "⚡ TỔNG KHỐI LƯỢNG VẢI ĐẶT MUA (YARDS)", "GIÁ TRỊ THỰC TẾ": round(total_calculated_fabric_yds, 2)},
                                 {"THÔNG TIN TÁC NGHIỆP": "🎯 ĐỊNH MỨC TÀI LIỆU ĐỀ XUẤT", "GIÁ TRỊ THỰC TẾ": consumption_input},
-                                {"THÔNG TIN TÁC NGHIỆP": "🕒 NGÀY GIỜ PHÁT LỆNH TÁC NGHIỆP", "GIÁ TRỊ THỰC TẾ": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+                                {"THÔNG TIN TÁC NGHIỆP": "🕒 NGÀY GIỜ PHÁT LỆNH TÁC NGHIỆP", "GIÁ TRỊ THỰC TẾ": now_str}
                             ]
                             df_info_sheet = pd.DataFrame(info_records)
                             df_info_sheet.to_excel(writer, sheet_name='Tong_Hop_Thong_Tin', index=False)
@@ -1839,12 +1796,7 @@ elif menu_selection == "🛒 Purchase Consumption":
                             worksheet_info.set_column('A:A', 36, cell_left_format)
                             worksheet_info.set_column('B:B', 28, cell_center_format)
                             
-                            # Định dạng tiêu đề cho Sheet tổng hợp bằng màu vàng cam chữ đen cực nổi bật
-                            info_header_format = workbook.add_format({
-                                'bold': True, 'valign': 'vcenter', 'align': 'center',
-                                'fg_color': '#D97706', 'font_color': '#000000',
-                                'font_name': 'Segoe UI', 'font_size': 11, 'border': 1
-                            })
+                            info_header_format = workbook.add_format({'bold': True, 'valign': 'vcenter', 'align': 'center', 'fg_color': '#D97706', 'font_color': '#000000', 'font_name': 'Segoe UI', 'font_size': 11, 'border': 1})
                             for col_num, value in enumerate(df_info_sheet.columns):
                                 worksheet_info.write(0, col_num, value, info_header_format)
                         
@@ -1852,7 +1804,6 @@ elif menu_selection == "🛒 Purchase Consumption":
                         
                         file_action_col1, file_action_col2 = st.columns(2)
                         with file_action_col1:
-                            # Nút bấm tải file Excel đồ họa cao xuống máy tính
                             st.download_button(
                                 label="📥 TẢI FILE EXCEL TÁC NGHIỆP ĐẸP MẮT (.xlsx)",
                                 data=excel_bytes,
@@ -1860,3 +1811,28 @@ elif menu_selection == "🛒 Purchase Consumption":
                                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                                 use_container_width=True
                             )
+                            
+                        with file_action_col2:
+                            if st.button("💾 LƯU PHƯƠNG ÁN LÊN KHO SUPABASE", type="primary", use_container_width=True, key="save_to_supabase_btn"):
+                                try:
+                                    url_save_db = f"{SB_URL.rstrip('/')}/rest/v1/tac_nghiep_ban_cat"
+                                    save_headers = {"apikey": SB_KEY, "Authorization": f"Bearer {SB_KEY}", "Content-Type": "application/json", "Prefer": "return=representation"}
+                                    
+                                    save_payload = {
+                                        "style_name": style_id_input,
+                                        "po_quantity": int(po_qty_input),
+                                        "planned_cut_pcs": int(total_planned_cut_pcs),
+                                        "consumption_value": str(actual_calculated_consumption),
+                                        "total_material_value": str(round(total_calculated_fabric_yds, 2)),
+                                        "cuttable_width_inch": str(cuttable_width_inch),
+                                        "notes": f"Lưu lịch sử tác nghiệp đa giàng thành công lúc: {now_str}"
+                                    }
+                                    db_response = requests.post(url_save_db, headers=save_headers, json=save_payload, timeout=12)
+                                    is_success = (db_response.status_code == 200) or (db_response.status_code == 201)
+                                    if is_success: 
+                                        st.success(f"✅ ĐÃ ĐỒNG BỘ LÊN KHO ĐỘC LẬP THÀNH CÔNG!")
+                                        st.toast("💾 Kế hoạch tác nghiệp đa giàng đã khóa lưu trữ riêng tư tại tac_nghiep_ban_cat!")
+                                    else: 
+                                        st.error(f"Lỗi Supabase (Code {db_response.status_code}): {db_response.text}")
+                                except Exception as db_save_err: 
+                                    st.error(f"Lỗi kết nối Cloud: {str(db_save_err)}")
