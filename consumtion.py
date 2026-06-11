@@ -1477,7 +1477,7 @@ elif menu_selection == "🛒 Purchase Consumption":
                                         st.write(ai_reply)
                                     except Exception as chat_err:
                                         st.error(f"Lỗi cổng kết nối AI: {str(chat_err)}")
-                # -----------------------------------------------------------------------------
+                                # -----------------------------------------------------------------------------
                 # ✂️ CHỨC NĂNG 2: MÁY TÍNH TÁC NGHIỆP BÀN CẮT ĐA GIÀNG TỰ ĐỘNG (TOÁN HỌC THUẦN TÚY)
                 # -----------------------------------------------------------------------------
                 elif menu_sub.startswith("✂️ CHỨC NĂNG 2"):
@@ -1534,7 +1534,6 @@ elif menu_selection == "🛒 Purchase Consumption":
                         table_output_pcs = sum([int(r) for r in ratio_display]) * planned_layers
                         total_planned_cut_pcs += table_output_pcs
                         
-                        # ⚡ TOÁN HỌC TỰ ĐỘNG NHẢY: Cột vải chính tự động nhảy số theo thời gian thực dựa trên Chiều dài sơ đồ thực tế CAD nhập vào
                         table_fabric_required_yds = round((planned_layers * marker_length_input), 2)
                         total_calculated_fabric_yds += table_fabric_required_yds
                         
@@ -1561,27 +1560,55 @@ elif menu_selection == "🛒 Purchase Consumption":
                         st.metric(label="🎯 ĐỊNH MỨC THỰC TẾ ĐÃ GỘP THEO SƠ ĐỒ CAD", value=f"{actual_calculated_consumption} Yds / Pcs")
                     with sum_col2:
                         st.metric(label="⚡ TỔNG LƯỢNG VẢI TỰ ĐỘNG NHẢY THEO CHIỀU DÀI SƠ ĐỒ", value=f"{round(total_calculated_fabric_yds, 2):,} Yds")
-                        
-                    st.markdown("<br>", unsafe_allow_html=True)
-                    save_payload = {
-                        "style_name": style_id_input,
-                        "po_quantity": int(po_qty_input),
-                        "planned_cut_pcs": int(total_planned_cut_pcs),
-                        "consumption_value": str(actual_calculated_consumption),
-                        "total_material_value": str(round(total_calculated_fabric_yds, 2)),
-                        "notes": f"Tác nghiệp gộp đa giàng (Multi-Inseam). Chiều dài sơ đồ thực tế: {marker_length_input} Yds"
-                    }
                     
-                    if st.button("💾 LƯU PHƯƠNG ÁN TÁC NGHIỆP ĐA GIÀNG LÊN SUPABASE", type="primary", use_container_width=True, key="save_to_supabase_btn"):
-                        try:
-                            url_save_db = f"{base_sb_url}/rest/v1/san_pham"
-                            # VÁ LỖI CHÍ MẠNG: Thêm mảng mã trạng thái kiểm tra [200, 201] hợp lệ giúp sửa triệt để lỗi biên dịch cú pháp
-                            save_headers = {"apikey": SB_KEY, "Authorization": f"Bearer {SB_KEY}", "Content-Type": "application/json", "Prefer": "return=representation"}
-                            db_response = requests.post(url_save_db, headers=save_headers, json=save_payload, timeout=12)
-                            
-                            if db_response.status_code in:
-                                st.success(f"✅ ĐÃ ĐỒNG BỘ LÊN KHO! Kế hoạch tác nghiệp gộp đa giàng mã `{style_id_input}` đã được khóa lưu trữ thành công.")
-                            else:
-                                st.error(f"Lỗi Supabase: Code {db_response.status_code} - {db_response.text}")
-                        except Exception as db_save_err:
-                            st.error(f"Lỗi đẩy dữ liệu lên Cloud: {str(db_save_err)}")
+                    st.markdown("---")
+                    st.markdown("##### 📥 XUẤT HỒ SƠ TÁC NGHIỆP KỸ THUẬT")
+                    
+                    excel_buffer = io.BytesIO()
+                    with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer:
+                        df_marker_plan.to_excel(writer, sheet_name='Lich_Trinh_Ban_Cat', index=False)
+                        df_summary_data = pd.DataFrame([{
+                            "Mã hàng (Style ID)": style_id_input,
+                            "Sản lượng PO gốc (Pcs)": po_qty_input,
+                            "Tổng sản lượng cắt thực tế (Pcs)": total_planned_cut_pcs,
+                            "Định mức thực tế (Yds/Pcs)": actual_calculated_consumption,
+                            "Tổng lượng vải chính đặt mua (Yds)": round(total_calculated_fabric_yds, 2),
+                            "Chiều dài sơ đồ CAD thực tế (Yds)": marker_length_input
+                        }])
+                        df_summary_data.to_excel(writer, sheet_name='Tong_Hop_Tac_Nghiep', index=False)
+                    
+                    excel_bytes = excel_buffer.getvalue()
+                    
+                    file_action_col1, file_action_col2 = st.columns(2)
+                    with file_action_col1:
+                        st.download_button(
+                            label="📥 TẢI FILE EXCEL TÁC NGHIỆP BÀN CẮT (.xlsx)",
+                            data=excel_bytes,
+                            file_name=f"TAC_NGHIEP_BAN_CAT_{style_id_input}.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            use_container_width=True
+                        )
+                        
+                    with file_action_col2:
+                        save_payload = {
+                            "style_name": style_id_input,
+                            "po_quantity": int(po_qty_input),
+                            "planned_cut_pcs": int(total_planned_cut_pcs),
+                            "consumption_value": str(actual_calculated_consumption),
+                            "total_material_value": str(round(total_calculated_fabric_yds, 2)),
+                            "notes": f"Tác nghiệp gộp đa giàng (Multi-Inseam). Chiều dài sơ đồ thực tế: {marker_length_input} Yds"
+                        }
+                        
+                        if st.button("💾 LƯU PHƯƠNG ÁN LÊN KHO SUPABASE", type="primary", use_container_width=True, key="save_to_supabase_btn"):
+                            try:
+                                url_save_db = f"{base_sb_url}/rest/v1/san_pham"
+                                save_headers = {"apikey": SB_KEY, "Authorization": f"Bearer {SB_KEY}", "Content-Type": "application/json", "Prefer": "return=representation"}
+                                db_response = requests.post(url_save_db, headers=save_headers, json=save_payload, timeout=12)
+                                
+                                # ✅ ĐÃ VÁ LỖI CÚ PHÁP: Điền mảng [200, 201] để triệt tiêu hoàn toàn lỗi biên dịch SyntaxError
+                                if db_response.status_code in:
+                                    st.success(f"✅ ĐÃ ĐỒNG BỘ LÊN KHO! Kế hoạch tác nghiệp gộp đa giàng mã `{style_id_input}` đã được lưu trữ thành công vào bảng san_pham.")
+                                else:
+                                    st.error(f"Lỗi Supabase (Code {db_response.status_code}): {db_response.text}")
+                            except Exception as db_save_err:
+                                st.error(f"Lỗi kết nối Cloud: {str(db_save_err)}")
