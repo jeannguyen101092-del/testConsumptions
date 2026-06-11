@@ -1520,10 +1520,8 @@ elif menu_selection == "🛒 Purchase Consumption":
                                 st.rerun()
                             except Exception as chat_err: 
                                 st.error(f"Lỗi cổng kết nối AI: {str(chat_err)}")
-          # -----------------------------------------------------------------------------
-        # -----------------------------------------------------------------------------
-       # -----------------------------------------------------------------------------
-    # ✂️ CHỨC NĂNG 2 - PHẦN 1: KHAI BÁO THÔNG SỐ VÀ Ô TRA CỨU TRÊN KHO ĐỘC LẬP
+           # -----------------------------------------------------------------------------
+    # ✂️ CHỨC NĂNG 2 - PHẦN 1: ĐÃ VÁ LỖI BÓC TÁCH MẢNG TOKENS DÁN TỪ MÁY CAD
     # -----------------------------------------------------------------------------
     elif st.session_state.get("purchase_ready") is True and menu_sub.startswith("✂️ CHỨC NĂNG 2"):
         sbd_data_store = st.session_state.get("sbd_parsed_data", {})
@@ -1545,7 +1543,6 @@ elif menu_selection == "🛒 Purchase Consumption":
             if btn_search_db and search_query_style.strip():
                 with st.spinner("⏳ Đang lục tìm hồ sơ cũ trên kho tác nghiệp..."):
                     try:
-                        # Hướng lệnh GET quét sang bảng riêng biệt mới tạo
                         url_get_db = f"{SB_URL.rstrip('/')}/rest/v1/tac_nghiep_ban_cat"
                         search_headers = {"apikey": SB_KEY, "Authorization": f"Bearer {SB_KEY}"}
                         query_search_params = {
@@ -1567,40 +1564,62 @@ elif menu_selection == "🛒 Purchase Consumption":
 
             # KHỐI KHAI BÁO THÔNG SỐ ĐẦU VÀO CỦA MÃ HÀNG HIỆN HÀNH
             st.markdown("#### 📋 KHAI BÁO THÔNG SỐ TÁC NGHIỆP ĐƠN HÀNG VÀ BÀN VẢI MULTI-INSEAM")
+            
             input_col1, input_col2, input_col3 = st.columns(3)
-            with input_col1: style_id_input = st.text_input("🏷️ Tên mã hàng (Style ID):", value=str(detected_style_id).strip().upper())
-            with input_col2: po_qty_input = st.number_input("📦 Số lượng đơn hàng (PO Pcs):", value=int(detected_total_po), step=100)
-            with input_col3: consumption_input = st.number_input("🎯 Định mức tài liệu đề xuất (Yds/Pcs):", value=1.140, step=0.001, format="%.3f")
+            with input_col1:
+                style_id_input = st.text_input("🏷️ Tên mã hàng (Style ID):", value=str(detected_style_id).strip().upper())
+            with input_col2:
+                po_qty_input = st.number_input("📦 Số lượng đơn hàng (PO Pcs):", value=int(detected_total_po), step=100)
+            with input_col3:
+                consumption_input = st.number_input("🎯 Định mức tài liệu đề xuất (Yds/Pcs):", value=1.140, step=0.001, format="%.3f")
 
             input_col4, input_col6 = st.columns(2)
-            with input_col4: max_table_length = st.number_input("📏 Chiều dài tối đa bàn vải (Meters):", value=12.00, step=1.0)
-            with input_col6: cuttable_width_inch = st.number_input("📐 KHỔ CẮT (Khổ vải đi sơ đồ - Inches):", value=56.00, step=0.50, format="%.2f")
+            with input_col4:
+                max_table_length = st.number_input("📏 Chiều dài tối đa bàn vải (Meters):", value=12.00, step=1.0)
+            with input_col6:
+                cuttable_width_inch = st.number_input("📐 KHỔ CẮT (Khổ vải đi sơ đồ - Inches):", value=56.00, step=0.50, format="%.2f")
             
             st.markdown("<br>", unsafe_allow_html=True)
             st.markdown("<p style='font-weight:700; font-size:13px; color:#1E3A8A;'>📥 KHU VỰC DÁN DỮ LIỆU CAD (TÊN SƠ ĐỒ & DÀI SƠ ĐỒ COPY TỪ EXCEL)</p>", unsafe_allow_html=True)
             cad_paste_zone = st.text_area(
                 "Sau khi xem cấu trúc phối size phía dưới, hãy đi sơ đồ trên máy CAD rồi copy dán kết quả [Tên sơ đồ + Chiều dài mét] vào đây:",
-                placeholder="Ví dụ dán bảng từ Excel CAD:\n5765-c01 10\n5765-c02 9", height=90, key="cad_bulk_paste_input"
+                placeholder="Ví dụ dán bảng từ Excel CAD:\n5765-c05 4\n5765-c06 3",
+                height=90, key="cad_bulk_paste_input"
             )
 
             cad_length_meters_list = []
             cad_names_list = []
+            
             if cad_paste_zone.strip():
                 lines = cad_paste_zone.strip().split("\n")
                 for line in lines:
-                    tokens = [t.strip() for t in re.split(r'\t+|\s+', line) if t.strip()]
+                    if not line.strip():
+                        continue
+                    # Tách dòng tự động dựa trên khoảng trắng hoặc dấu Tab khi copy từ Excel
+                    tokens = [t.strip() for t in re.split(r'\t+|\s+', line.strip()) if t.strip()]
                     if len(tokens) >= 2:
-                        raw_name = str(tokens).strip()
-                        raw_length = str(tokens).strip()
-                        clean_name = raw_name.split("-")[-1].upper() if "-" in raw_name else raw_name[-3:].upper()
+                        # ✅ THUẬT TOÁN MỚI: Bốc trực tiếp chuỗi văn bản trần, không dùng hàm str(list) lỗi ký tự
+                        raw_name = tokens[0]
+                        raw_length = tokens[1]
+                        
+                        # Tách lấy mã đuôi sơ đồ (ví dụ: C05, C06) sau dấu gạch ngang cuối cùng
+                        if "-" in raw_name:
+                            clean_name = str(raw_name.split("-")[-1]).upper()
+                        else:
+                            clean_name = str(raw_name[-3:]).upper()
+                            
+                        # Trích xuất số mét từ token thứ hai
                         try:
-                            cad_length_meters_list.append(float(raw_length))
+                            meters_val = float(raw_length)
+                            cad_length_meters_list.append(meters_val)
                             cad_names_list.append(clean_name)
-                        except Exception: continue
+                        except Exception: 
+                            continue
 
             st.markdown("<br>", unsafe_allow_html=True)
             btn_calc = st.button("⚡ TÍNH TOÁN LẬP SƠ ĐỒ", type="secondary", use_container_width=True, key="run_setup_marker_structure")
-            if btn_calc: st.session_state["step1_marker_ready"] = True
+            if btn_calc: 
+                st.session_state["step1_marker_ready"] = True
 
             btn_final_execute = st.button("⚡ KÍCH HOẠT QUY ĐỔI & TÍNH ĐỊNH MỨC THỰC TẾ", type="primary", use_container_width=True, key="run_final_yds_calculation")
             if btn_final_execute:
@@ -1608,7 +1627,11 @@ elif menu_selection == "🛒 Purchase Consumption":
                 st.session_state["bulk_cad_data_store"] = []
                 if cad_length_meters_list:
                     for idx_c in range(len(cad_length_meters_list)):
-                        st.session_state["bulk_cad_data_store"].append({"code": cad_names_list[idx_c], "length_yds": round(cad_length_meters_list[idx_c] * 1.09361, 2)})
+                        st.session_state["bulk_cad_data_store"].append({
+                            "code": cad_names_list[idx_c], 
+                            "length_yds": round(cad_length_meters_list[idx_c] * 1.09361, 2) # Quy đổi mét sang Yard chuẩn xác
+                        })
+
             # -----------------------------------------------------------------------------
             # ✂️ CHỨC NĂNG 2 - PHẦN 2: LUỒNG GIẢI TOÁN TỰ ĐỘNG VÀ ĐỒNG BỘ KHO ĐỘC LẬP
             # -----------------------------------------------------------------------------
