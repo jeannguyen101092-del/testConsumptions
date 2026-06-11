@@ -1450,13 +1450,13 @@ elif menu_selection == "🛒 Purchase Consumption":
                                         st.session_state["purchase_chat_history"].append({"user": user_query, "ai": ai_reply})
                                         st.rerun()
                                     except Exception as chat_err: st.error(f"Lỗi cổng kết nối AI: {str(chat_err)}")
-                # -----------------------------------------------------------------------------
+                                # -----------------------------------------------------------------------------
                 # ✂️ CHỨC NĂNG 2 - PHẦN 1: KHAI BÁO THÔNG SỐ VÀ Ô TIẾP NHẬN DỮ LIỆU CAD EXCEL
                 # -----------------------------------------------------------------------------
                 elif menu_sub.startswith("✂️ CHỨC NĂNG 2"):
                     st.markdown("#### 📋 KHAI BÁO THÔNG SỐ TÁC NGHIỆP ĐƠN HÀNG VÀ BÀN VẢI MULTI-INSEAM")
                     
-                    # Ô KHAI BÁO TINH GỌN - TUYỆT ĐỐI KHÔNG CÒN Ô NHẬP CHIỀU DÀI SƠ ĐỒ CAD THỦ CÔNG
+                    # HÀNG THÔNG SỐ ĐẦU VÀO CỐ ĐỊNH TINH GỌN
                     input_col1, input_col2, input_col3 = st.columns(3)
                     with input_col1:
                         style_id_input = st.text_input("🏷️ Tên mã hàng (Style ID):", value=str(detected_style_id).strip().upper())
@@ -1469,7 +1469,8 @@ elif menu_selection == "🛒 Purchase Consumption":
                     with input_col4:
                         max_table_length = st.number_input("📏 Chiều dài tối đa bàn vải (Meters):", value=12.00, step=1.0)
                     with input_col6:
-                        sewing_loss_rate = st.number_input("⚠️ KHỔ CẮT (% Hao hụt may chuyền):", value=3.0, step=0.5) / 100
+                        # ✅ ĐÃ SỬA CHUẨN ĐÉT: Giữ nguyên đơn vị số thực dạng INCH cho Khổ Vải đi sơ đồ, CẤM chia 100
+                        cuttable_width_inch = st.number_input("📐 KHỔ CẮT (Khổ vải đi sơ đồ - Inches):", value=56.00, step=0.50, format="%.2f")
                     
                     # KHU VỰC DÁN CHUỖI SƠ ĐỒ CAD SAU KHI ĐI SƠ ĐỒ MỚI CÓ CHIỀU DÀI VẬT LÝ
                     st.markdown("<br>", unsafe_allow_html=True)
@@ -1518,6 +1519,7 @@ elif menu_selection == "🛒 Purchase Consumption":
                                     "code": cad_names_list[idx_c], 
                                     "length_yds": round(cad_length_meters_list[idx_c] * 1.09361, 2)
                                 })
+
                                         # -----------------------------------------------------------------------------
                     # ✂️ CHỨC NĂNG 2 - PHẦN 2: ĐÃ VÁ LỖI TOÁN HỌC KHẤU TRỪ SẢN LƯỢNG CHUẨN PO GỐC
                     # -----------------------------------------------------------------------------
