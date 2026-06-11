@@ -1518,12 +1518,14 @@ elif menu_selection == "🛒 Purchase Consumption":
                                     "code": cad_names_list[idx_c], 
                                     "length_yds": round(cad_length_meters_list[idx_c] * 1.09361, 2)
                                 })
-                    # -----------------------------------------------------------------------------
-                    # ✂️ CHỨC NĂNG 2 - PHẦN 2: LUỒNG GIẢI TOÁN TỰ ĐỘNG NHẢY ĐỊNH MỨC VẢI CAD YARDS
+                                        # -----------------------------------------------------------------------------
+                    # ✂️ CHỨC NĂNG 2 - PHẦN 2: ĐÃ VÁ LỖI TOÁN HỌC KHẤU TRỪ SẢN LƯỢNG CHUẨN PO GỐC
                     # -----------------------------------------------------------------------------
                     if st.session_state["step1_marker_ready"]:
                         st.markdown("##### ✂️ LỊCH TRÌNH GỘP SIZE - CHIA TỶ LỆ PHỐI SƠ ĐỒ ĐA GIÀNG DỰ KIẾN")
                         MAX_LAYERS_PER_TABLE = 100
+                        
+                        # Khởi tạo pool sản lượng cắt thực tế chuẩn (PO + % Hao hụt Khổ Cắt)
                         cutting_sizes_pool = {str(sz).strip().upper(): int(qty * (1 + sewing_loss_rate)) for sz, qty in size_breakdown_dict.items()}
                         
                         marker_tables_report = []
@@ -1533,23 +1535,45 @@ elif menu_selection == "🛒 Purchase Consumption":
                         cad_pool = st.session_state.get("bulk_cad_data_store", [])
                         is_calc_active = st.session_state["step2_computation_active"]
                         
+                        # Vòng lặp bóc tách sản lượng khép kín cho đến khi pool sạch dữ liệu
                         while any(v > 0 for v in cutting_sizes_pool.values()):
+                            # CHỈ LẤY CÁC SIZE CÒN SẢN LƯỢNG LỚN HƠN 0
                             active_items = [k for k, v in cutting_sizes_pool.items() if v > 0]
                             if not active_items: 
                                 break
+                                
+                            # Sắp xếp lấy tối đa 4 size có sản lượng lớn nhất còn tồn để phối sơ đồ gộp
                             active_batch = sorted(active_items, key=lambda x: cutting_sizes_pool[x], reverse=True)[:4]
-                            planned_layers = max(1, min(min([cutting_sizes_pool[sz] for sz in active_batch]), MAX_LAYERS_PER_TABLE))
                             
-                            current_combination, ratio_display = [], []
+                            # Xác định số lớp vải dựa trên size có sản lượng tồn nhỏ nhất trong Batch
+                            planned_layers = min([cutting_sizes_pool[sz] for sz in active_batch])
+                            planned_layers = min(max(1, planned_layers), MAX_LAYERS_PER_TABLE)
+                            
+                            current_combination = []
+                            ratio_display = []
+                            actual_table_output = 0
+                            
                             for sz in active_batch:
-                                ratio_val = min(max(1, round(cutting_sizes_pool[sz] / planned_layers)), 2)
+                                # Tính toán tỷ lệ phối sơ đồ công nghiệp dựa trên lượng tồn thực tế
+                                ratio_val = round(cutting_sizes_pool[sz] / planned_layers)
+                                ratio_val = min(max(1, ratio_val), 2) # Khống chế tỷ lệ trong ngưỡng 1 hoặc 2 sản phẩm/lớp
+                                
+                                # ⚡ KHẤU TRỪ CHUẨN XÁC: Tính toán sản lượng thực tế sẽ cắt ra của size này trong bàn hiện tại
+                                pcs_to_cut = planned_layers * ratio_val
+                                if pcs_to_cut > cutting_sizes_pool[sz]:
+                                    # Nếu lượng tính toán vượt quá lượng tồn thực tế trong kho pool, ép lùi về bằng lượng tồn
+                                    pcs_to_cut = cutting_sizes_pool[sz]
+                                    ratio_val = max(1, round(pcs_to_cut / planned_layers))
+                                
                                 current_combination.append(sz)
                                 ratio_display.append(str(ratio_val))
-                                cutting_sizes_pool[sz] = max(0, cutting_sizes_pool[sz] - (planned_layers * ratio_val))
+                                actual_table_output += pcs_to_cut
+                                
+                                # Trừ lùi trực tiếp sản lượng đã phát lệnh cắt ra khỏi pool ma trận
+                                cutting_sizes_pool[sz] = max(0, cutting_sizes_pool[sz] - pcs_to_cut)
                                 
                             sum_of_ratios = sum([int(r) for r in ratio_display])
-                            table_output_pcs = sum_of_ratios * planned_layers
-                            total_planned_cut_pcs += table_output_pcs
+                            total_planned_cut_pcs += actual_table_output
                             
                             idx_lookup = table_counter - 1
                             if is_calc_active and idx_lookup < len(cad_pool):
@@ -1563,7 +1587,6 @@ elif menu_selection == "🛒 Purchase Consumption":
                                 current_so_do_name = f"C{table_counter:02d}"
                                 display_marker_text, display_fabric_text = "Chờ máy CAD...", "Chờ nhập dài..."
                             
-                            # KẾT XUẤT ĐẦY ĐỦ CỘT TỔNG VÀ CỘT DÀI SƠ ĐỒ CHUẨN ĐÉT THEO PHƯƠNG ÁN VẼ TAY VÀ COPPY DÁN CAD
                             marker_tables_report.append({
                                 "Bàn cắt": current_so_do_name, 
                                 "Cấu trúc Size / Giàng phối hợp (Multi-Inseam)": " | ".join(current_combination),
@@ -1571,14 +1594,16 @@ elif menu_selection == "🛒 Purchase Consumption":
                                 "TỔNG TỶ LỆ (Sản phẩm/Lớp)": sum_of_ratios,
                                 "Số lớp vải (Layers)": f"{planned_layers} Lớp", 
                                 "DÀI SƠ ĐỒ QUY ĐỔI (Yds)": display_marker_text,
-                                "Sản lượng cắt (Pcs)": table_output_pcs, 
+                                "Sản lượng cắt (Pcs)": actual_table_output, # ✅ ĐÃ SỬA: ĂN THEO SẢN LƯỢNG THỰC TẾ KHẤU TRỪ
                                 "Vải chính tự động nhảy (Yds)": display_fabric_text
                             })
                             table_counter += 1
                             if table_counter > 60: 
                                 break
                                 
-                        st.dataframe(pd.DataFrame(marker_tables_report), use_container_width=True, hide_index=True)
+                        df_marker_plan = pd.DataFrame(marker_tables_report)
+                        st.dataframe(df_marker_plan, use_container_width=True, hide_index=True)
+                        
                         actual_calculated_consumption = round((total_calculated_fabric_yds / total_planned_cut_pcs), 3) if total_planned_cut_pcs > 0 else 0.0
                         
                         sum_col1, sum_col2 = st.columns(2)
@@ -1592,7 +1617,7 @@ elif menu_selection == "🛒 Purchase Consumption":
                             st.markdown("---")
                             excel_buffer = io.BytesIO()
                             with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer:
-                                pd.DataFrame(marker_tables_report).to_excel(writer, sheet_name='Lich_Trinh_Ban_Cat', index=False)
+                                df_marker_plan.to_excel(writer, sheet_name='Lich_Trinh_Ban_Cat', index=False)
                             st.download_button(label="📥 TẢI FILE EXCEL TÁC NGHIỆP BÀN CẮT (.xlsx)", data=excel_buffer.getvalue(), file_name=f"TAC_NGHIEP_BAN_CAT_{style_id_input}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
                             
                             if st.button("💾 LƯU PHƯƠNG ÁN LÊN KHO SUPABASE", type="primary", use_container_width=True, key="save_to_supabase_btn"):
@@ -1608,4 +1633,4 @@ elif menu_selection == "🛒 Purchase Consumption":
                                     else: 
                                         st.error(f"Lỗi Supabase (Code {db_response.status_code}): {db_response.text}")
                                 except Exception as db_save_err: 
-                                    st.error(f"Lỗi kết nối Cloud: {str(db_save_err)}")
+                                    st.sidebar.error(f"Lỗi kết nối Cloud: {str(db_save_err)}")
