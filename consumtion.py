@@ -1962,7 +1962,7 @@ elif menu_selection == "🛒 Purchase Consumption":
                 if trigger_consumption:
                     st.session_state["consumption_activated"] = True
                     st.rerun()
-                # BƯỚC 3: LIÊN KẾT ĐỐI CHIẾU DỮ LIỆU Ô CAD, ĐẨY SUPABASE & KẾT XUẤT EXCEL
+                                # BƯỚC 3: LIÊN KẾT ĐỐI CHIẾU DỮ LIỆU Ô CAD, ĐẨY SUPABASE & KẾT XUẤT EXCEL
                 if st.session_state.get("auto_cutting_results") is not None:
                     import re
                     import io
@@ -2023,7 +2023,7 @@ elif menu_selection == "🛒 Purchase Consumption":
                     total_fabric_yds_final = total_fabric_m * 1.09361
                     final_avg_yield = total_fabric_yds_final / (total_cut_pcs_sum if total_cut_pcs_sum > 0 else 1)
                     
-                    # 💾 ĐẨY DỮ LIỆU ĐỒNG BỘ LÊN SUPABASE (Đã gọi chính xác hàm get_supabase_client)
+                    # 💾 ĐẨY DỮ LIỆU ĐỒNG BỘ LÊN SUPABASE
                     if st.button("💾 ĐẨY DỮ LIỆU TÁC NGHIỆP LÊN DATABASE SUPABASE", type="secondary", use_container_width=True):
                         try:
                             payload_db = {
@@ -2031,7 +2031,6 @@ elif menu_selection == "🛒 Purchase Consumption":
                                 "planned_cut_pcs": int(total_cut_pcs_sum), "consumption_value": str(round(final_avg_yield, 3)),
                                 "total_material_value": str(round(total_fabric_yds_final, 2)), "cuttable_width_inch": float(cuttable_width_inch)
                             }
-                            # Gọi hàm kết nối database chính chủ của ứng dụng
                             if "get_supabase_client" in globals():
                                 sb_client = get_supabase_client()
                                 sb_client.table("tac_nghiep_ban_cat").insert(payload_db).execute()
@@ -2074,15 +2073,36 @@ elif menu_selection == "🛒 Purchase Consumption":
                         )
                     except Exception: pass
 
-                    # 🎯 SỬA LỖI MÀU VÀNG: Sử dụng hàm .apply trục axis=1 để nhuộm màu kéo dài hết toàn bộ dòng từ trái qua phải
+                    # 🎯 TẠO TIÊU ĐỀ 2 TẦNG (HÀNG TRÊN INSEAM, HÀNG DƯỚI SIZE) THEO ĐÚNG Ý BẠN
+                    # Thuật toán tự bóc tách chuỗi (ví dụ: '32 x 30' -> Hàng trên: 'Inseam: 30', Hàng dưới: 'Size: 32')
+                    multi_cols_tuples = []
+                    for col_name in df_final_report.columns:
+                        if col_name in active_sizes and "x" in str(col_name).lower():
+                            parts = str(col_name).lower().split("x")
+                            size_part = parts[0].strip()
+                            inseam_part = parts[1].strip()
+                            # Tuple gồm (Hàng trên, Hàng dưới)
+                            multi_cols_tuples.append((f"Inseam {inseam_part}", f"Size {size_part}"))
+                        elif col_name in active_sizes:
+                            # Dự phòng nếu tên size trong file SBD của bạn là dạng số phẳng không có chữ x
+                            multi_cols_tuples.append((f"Inseam: {detected_inseam}", col_name))
+                        else:
+                            # Các cột thông số kỹ thuật (Số lớp, Số bàn...) giữ nguyên hàng trên trống, hàng dưới hiện tên cột
+                            multi_cols_tuples.append(("", col_name))
+                    
+                    # Áp cấu trúc tiêu đề đa tầng vào bảng dữ liệu
+                    df_final_report.columns = pd.MultiIndex.from_tuples(multi_cols_tuples)
+
+                    # 🎯 THUẬT TOÁN TÔ MÀU VÀNG TOÀN DÒNG: Dùng hàm Styler quét theo trục index (axis=1) khớp chính xác với tiêu đề đa tầng mới
                     def style_full_balance_rows(row):
-                        if row["Sơ đồ / Trạng thái"] == "Balance":
+                        # Lấy giá trị ô đầu tiên của dòng hiện tại (cột Sơ đồ / Trạng thái)
+                        if row.iloc[0] == "Balance":
                             return ['background-color: #FEF08A; color: #991B1B; font-weight: 700;'] * len(row)
                         return [''] * len(row)
                     
                     styled_df_report = df_final_report.style.apply(style_full_balance_rows, axis=1)
 
-                    st.markdown(f"<div style='padding:4px; background-color:#1E3A8A; color:white; font-weight:700; text-align:center; font-size:12px; border-radius:4px 4px 0 0;'>NHÓM INSEAM: {str(detected_inseam).upper()}</div>", unsafe_allow_html=True)
+                    st.markdown("<p style='font-weight:700; font-size:14px; color:#1E3A8A; margin-top:15px;'>📊 BẢNG THEO DÕI TÁC NGHIỆP & CÂN ĐỐI ĐƠN HÀNG MULTI-INSEAM</p>", unsafe_allow_html=True)
                     st.dataframe(styled_df_report, use_container_width=True, hide_index=True)
                     
                     st.markdown("---")
