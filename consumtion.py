@@ -1889,44 +1889,43 @@ elif menu_selection == "🛒 Purchase Consumption":
                 else:
                     st.info("💡 Không tìm thấy dữ liệu chia size chi tiết từ file SBD. Vui lòng nhập thủ công bên dưới nếu cần.")
 
-                # 2. XỬ LÝ DỮ LIỆU CAD KHI NGƯỜI DÙNG DÁN VÀO TRƯỜNG CAD_PASTE_ZONE
+                                # 2. XỬ LÝ DỮ LIỆU CAD KHI NGƯỜI DÙNG DÁN VÀO TRƯỜNG CAD_PASTE_ZONE
+                st.markdown("#### ✂️ KẾT QUẢ ĐỒNG BỘ VÀ TÍNH TOÁN HIỆU SUẤT BÀN CẮT")
+                
+                parsed_cad_data = []
+                total_marker_length_meters = 0.0
+                
+                # Tiến hành bóc tách nếu có dữ liệu dán vào
                 if cad_paste_zone.strip():
-                    st.markdown("#### ✂️ KẾT QUẢ ĐỒNG BỘ VÀ TÍNH TOÁN HIỆU SUẤT BÀN CẮT")
-                    
                     cad_lines = cad_paste_zone.strip().split("\n")
-                    parsed_cad_data = []
-                    total_marker_length_meters = 0.0
-                    
                     for line in cad_lines:
                         parts = line.split()
                         if len(parts) >= 2:
-                            marker_name = parts[0]
+                            marker_name = " ".join(parts[:-1]) # Lấy toàn bộ phần chữ làm tên sơ đồ
                             try:
-                                # Lấy phần tử cuối cùng làm chiều dài sơ đồ (Meters)
-                                marker_len = float(parts[-1])
+                                marker_len = float(parts[-1]) # Lấy phần tử cuối cùng làm chiều dài
                                 parsed_cad_data.append({"Tên Sơ Đồ": marker_name, "Dài Sơ Đồ (Meters)": marker_len})
                                 total_marker_length_meters += marker_len
                             except ValueError:
                                 pass
+
+                # LUÔN LUÔN HIỂN THỊ BẢNG (Có dữ liệu thì hiện bảng dữ liệu, chưa có thì hiện bảng trống để theo dõi)
+                df_cad = pd.DataFrame(parsed_cad_data if parsed_cad_data else [{"Tên Sơ Đồ": "Chưa có dữ liệu", "Dài Sơ Đồ (Meters)": 0.0}])
+                st.table(df_cad)
+                
+                # Tính toán các chỉ số tác nghiệp nhanh
+                total_marker_length_yards = total_marker_length_meters * 1.09361
+                est_consumption = total_marker_length_yards / (po_qty_input if po_qty_input > 0 else 1)
+                variance = est_consumption - consumption_input if cad_paste_zone.strip() else 0.0
+                
+                # LUÔN LUÔN HIỂN THỊ CÁC THẺ ĐO LƯỜNG (METRICS)
+                m_col1, m_col2, m_col3 = st.columns(3)
+                with m_col1:
+                    st.metric("Tổng chiều dài sơ đồ", f"{total_marker_length_meters:.2f} M")
+                with m_col2:
+                    st.metric("Định mức thực tế (Yds/Pcs)", f"{est_consumption:.3f}" if cad_paste_zone.strip() else "0.000")
+                with m_col3:
+                    st.metric("Chênh lệch định mức", f"{variance:+.3f}" if cad_paste_zone.strip() else "0.000", delta_color="inverse" if variance > 0 else "normal")
                     
-                    if parsed_cad_data:
-                        # Hiển thị bảng dữ liệu CAD đã đồng bộ thành công
-                        df_cad = pd.DataFrame(parsed_cad_data)
-                        st.table(df_cad)
-                        
-                        # Tính toán các chỉ số tác nghiệp kinh doanh vải cơ bản
-                        total_marker_length_yards = total_marker_length_meters * 1.09361
-                        est_consumption = total_marker_length_yards / (po_qty_input if po_qty_input > 0 else 1)
-                        
-                        # Hiển thị thẻ báo cáo chỉ số nhanh (Key Metrics)
-                        m_col1, m_col2, m_col3 = st.columns(3)
-                        with m_col1:
-                            st.metric("Tổng chiều dài sơ đồ", f"{total_marker_length_meters:.2f} M")
-                        with m_col2:
-                            st.metric("Định mức thực tế (Yds/Pcs)", f"{est_consumption:.3f}")
-                        with m_col3:
-                            # Đo lường độ lệch so với định mức tài liệu đề xuất ban đầu
-                            variance = est_consumption - consumption_input
-                            st.metric("Chênh lệch định mức", f"{variance:+.3f}", delta_color="inverse" if variance > 0 else "normal")
-                    else:
-                        st.error("❌ Cú pháp dữ liệu CAD không hợp lệ. Vui lòng dán theo đúng định dạng cấu trúc: [Tên_sơ_đồ Chieu_dai_so_do]")
+                if cad_paste_zone.strip() and not parsed_cad_data:
+                    st.error("❌ Cú pháp dữ liệu CAD không hợp lệ. Vui lòng dán theo đúng định dạng cấu trúc: [Tên_sơ_đồ Chieu_dai_so_do]")
