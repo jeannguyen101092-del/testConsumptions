@@ -2103,7 +2103,7 @@ def generate_premium_excel_file(style_id, po_qty, planned_cut, consumption_input
 if st.session_state.get("auto_cutting_results") is not None:
     cad_lengths_map = {}
     
-    # Bẫy an toàn kiểm tra sự tồn tại của biến cad_paste_zone
+    # Kiểm tra an toàn sự tồn tại của biến cad_paste_zone
     cad_zone_value = globals().get("cad_paste_zone", locals().get("cad_paste_zone", ""))
     
     if str(cad_zone_value).strip() and st.session_state.get("consumption_activated"):
@@ -2116,11 +2116,10 @@ if st.session_state.get("auto_cutting_results") is not None:
                 try: cad_lengths_map[suffix_key] = float(match.group(2))
                 except ValueError: pass
 
-    # 🎯 FIX CỐT LÕI: Tự động khôi phục danh sách size từ dữ liệu nếu chức năng 2 làm mất biến active_sizes
+    # Tự động khôi phục danh sách size từ dữ liệu để tránh lỗi NameError
     local_active_sizes = globals().get("active_sizes", locals().get("active_sizes", None))
     if local_active_sizes is None:
         try:
-            # Lấy tất cả các khóa kích cỡ từ phần tử đầu tiên của kết quả phối sơ đồ
             first_item = st.session_state["auto_cutting_results"][0]
             local_active_sizes = list(first_item["Ratios"].keys())
         except Exception:
@@ -2132,7 +2131,6 @@ if st.session_state.get("auto_cutting_results") is not None:
     
     for item in st.session_state["auto_cutting_results"]:
         display_row = {"SIZE": item["Sơ đồ / Trạng thái"]}
-        # Sử dụng danh sách kích cỡ đã được bẫy an toàn
         for sz in local_active_sizes: display_row[sz] = item["Ratios"].get(sz, 0)
             
         if item["Sơ đồ / Trạng thái"] != "Balance":
@@ -2178,18 +2176,23 @@ if st.session_state.get("auto_cutting_results") is not None:
     ordered_size_keys = [item["original"] for item in parsed_size_columns]
     other_tech_keys = ["Số lớp", "Số bàn", "Dài sơ đồ", "Số sp/SĐ", "Đ.Mức SĐ", "Vải cần (M)"]
     
-    # Đồng bộ lại danh sách cột thực tế của DataFrame
     existing_cols = [c for c in df_final_report.columns if c in ordered_size_keys]
     df_final_report = df_final_report[["SIZE"] + existing_cols + other_tech_keys]
 
     st.write("### 📊 BẢNG KẾT QUẢ TÁC NGHIỆP CHI TIẾT")
     st.dataframe(df_final_report, use_container_width=True)
 
-    # Đọc an toàn các biến cấu hình giao diện nhập liệu đầu trang
-    style_id_val = globals().get("style_id_input", "UNKNOWN")
-    po_qty_val = globals().get("po_qty_input", 0)
-    consumption_val = globals().get("consumption_input", 0.0)
-    width_val = globals().get("cuttable_width_inch", 0.0)
+    # 🎯 FIX KHẨN CẤP: Bẫy ép kiểu an toàn cho toàn bộ biến đầu vào, tránh lỗi ép kiểu rỗng gây sập app
+    style_id_val = globals().get("style_id_input", locals().get("style_id_input", "UNKNOWN"))
+    
+    try: po_qty_val = int(globals().get("po_qty_input", locals().get("po_qty_input", 0)))
+    except Exception: po_qty_val = 0
+        
+    try: consumption_val = float(globals().get("consumption_input", locals().get("consumption_input", 0.0)))
+    except Exception: consumption_val = 0.0
+        
+    try: width_val = float(globals().get("cuttable_width_inch", locals().get("cuttable_width_inch", 0.0)))
+    except Exception: width_val = 0.0
 
     excel_file_data = generate_premium_excel_file(
         style_id_val, po_qty_val, total_cut_pcs_sum, consumption_val, 
@@ -2200,7 +2203,7 @@ if st.session_state.get("auto_cutting_results") is not None:
     col1, col2 = st.columns(2)
 
     with col1:
-        if st.button("💾 ĐẨY DỮ LIỆU TÁC NGHIỆP LÊN DATABASE SUPABASE", type="secondary", use_container_width=True, key="sb_sync_btn_v12"):
+        if st.button("💾 ĐẨY DỮ LIỆU TÁC NGHIỆP LÊN DATABASE SUPABASE", type="secondary", use_container_width=True, key="sb_sync_btn_v13"):
             push_to_supabase_table(style_id_val, po_qty_val, total_cut_pcs_sum, final_avg_yield, total_fabric_yds_final, width_val)
 
     with col2:
@@ -2211,5 +2214,5 @@ if st.session_state.get("auto_cutting_results") is not None:
                 file_name=f"Bao_Cao_Tac_Nghiep_{str(style_id_val).strip()}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 use_container_width=True,
-                key="download_excel_v12"
+                key="download_excel_v13"
             )
