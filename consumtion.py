@@ -1870,38 +1870,7 @@ elif menu_selection == "🛒 Purchase Consumption":
                     except Exception:
                         pass
 
-                # Định nghĩa cấu trúc mảng kích cỡ và nhóm Inseam
-                active_sizes = [str(k) for k, v in size_breakdown_main.items() if int(v) > 0]
-                if not active_sizes:
-                    active_sizes = ["S", "M", "L", "XL", "2XL", "3XL"]
-                detected_inseam = sbd_data_store.get("inseam_group", "None")
-                st.markdown(f"**📌 Nhóm Inseam hiện hành:** `{detected_inseam}`")
-                
-                # Bộ đôi hai nút bấm kích hoạt quy trình sản xuất độc lập
-                btn_col1, btn_col2 = st.columns(2)
-                with btn_col1:
-                    trigger_auto_cutting = st.button("⚡ 1. KÍCH HOẠT TÍNH TÁC NGHIỆP SƠ ĐỒ (HÌNH THÁP)", type="primary", use_container_width=True)
-                with btn_col2:
-                    trigger_consumption = st.button("📊 2. KÍCH HOẠT TÍNH ĐỊNH MỨC (KHI ĐÃ CÓ CAD)", type="secondary", use_container_width=True)
-
-                if "auto_cutting_results" not in st.session_state:
-                    st.session_state["auto_cutting_results"] = None
-                if "consumption_activated" not in st.session_state:
-                    st.session_state["consumption_activated"] = False
-
-                                # =============================================================================
-                                # =============================================================================
-                                # =============================================================================
-                                # =============================================================================
-                                # =============================================================================
-                # ĐOẠN 1: DÙNG AI GEMINI ĐỂ GIẢI TOÁN TÁC NGHIỆP HÌNH THÁP NGƯỢC TỰ ĐỘNG
-                # =============================================================================
-                st.markdown("<br>", unsafe_allow_html=True)
-                
-                               # Định nghĩa cấu trúc mảng kích cỡ và nhóm Inseam
-                active_sizes = [str(k) for k, v in size_breakdown_main.items() if int(v) > 0]
-                if not active_sizes:
-                    active_sizes = ["S", "M", "L", "XL", "2XL", "3XL"]
+              
                 detected_inseam = sbd_data_store.get("inseam_group", "None")
                 st.markdown(f"**📌 Nhóm Inseam hiện hành:** `{detected_inseam}`")
                 
