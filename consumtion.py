@@ -1882,6 +1882,8 @@ elif menu_selection == "🛒 Purchase Consumption":
                     st.info("💡 Không tìm thấy dữ liệu chia size chi tiết từ file SBD. Vui lòng nhập thủ công bên dưới nếu cần.")
                               # =============================================================================
                 # ĐOẠN 1: NÚT BẤM KÍCH HOẠT & THUẬT TOÁN TỰ ĐỘNG GIẢI TOÁN HÌNH THÁP NGƯỢC
+                #                # =============================================================================
+                # ĐOẠN 1: NÚT BẤM KÍCH HOẠT & THUẬT TOÁN TỰ ĐỘNG GIẢI TOÁN HÌNH THÁP NGƯỢC
                 # =============================================================================
                 st.markdown("<br>", unsafe_allow_html=True)
                 trigger_auto_cutting = st.button("⚡ KÍCH HOẠT TÍNH TÁC NGHIỆP BÀN CẮT TỰ ĐỘNG (HÌNH THÁP NGƯỢC)", type="primary", use_container_width=True)
@@ -1896,9 +1898,14 @@ elif menu_selection == "🛒 Purchase Consumption":
 
                 if trigger_auto_cutting:
                     with st.spinner("🔮 Hệ thống đang lập kế hoạch cắt hình tháp ngược tối ưu..."):
+                        
+                        # 📥 THÊM DÒNG NÀY VÀO ĐÂY ĐỂ VÁ LỖI NAMEERROR:
+                        import math
+                        
                         # 1. Tính số sản phẩm tối đa trên một sơ đồ dựa trên chiều dài bàn và định mức tạm
                         cons_meters = consumption_input / 1.09361 # Quy đổi định mức yds sang mét
                         max_pcs_per_marker = math.floor(max_table_length / (cons_meters if cons_meters > 0 else 1.0))
+
                         if max_pcs_per_marker <= 0: 
                             max_pcs_per_marker = 4
                         
