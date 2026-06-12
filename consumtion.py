@@ -2073,7 +2073,9 @@ elif menu_selection == "🛒 Purchase Consumption":
                     
                     df_final_report.columns = pd.MultiIndex.from_tuples(multi_cols_tuples)
                     # 🎯 THUẬT TOÁN NHUỘM MÀU VÀNG FULL BẢNG 100%: Quét màu dựa trên trục tọa độ Index thay vì cột tên
+                                       # 🎯 THUẬT TOÁN NHUỘM MÀU VÀNG FULL BẢNG 100%: Quét màu dựa trên trục tọa độ Index của bảng đa cấp
                     def style_full_balance_rows(row):
+                        # Dò tìm chữ "Balance" nằm ở ô đầu tiên (vị trí số 0) bất kể tiêu đề có bao nhiêu cấp lồng nhau
                         if row.iloc[0] == "Balance":
                             return ['background-color: #FEF08A; color: #991B1B; font-weight: 700; border: 1px solid #FDE047;'] * len(row)
                         return [''] * len(row)
