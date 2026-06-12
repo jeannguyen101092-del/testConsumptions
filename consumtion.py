@@ -2030,7 +2030,7 @@ elif menu_selection == "🛒 Purchase Consumption":
                         if any(char in col_str.lower() for char in ["x", "-", "/"]):
                             parts = re.split(r'[\sXx\-\/]+', col_str)
                             if len(parts) >= 2:
-                                parsed_size_columns.append({"original": col_name, "size_num": parts[0].strip(), "giang_num": parts[1].strip()})
+                                parsed_size_columns.append({"original": col_name, "size_num": parts.strip(), "giang_num": parts.strip()})
                             else:
                                 parsed_size_columns.append({"original": col_name, "size_num": col_str, "giang_num": str(detected_inseam)})
                         else:
@@ -2044,7 +2044,7 @@ elif menu_selection == "🛒 Purchase Consumption":
                     ordered_size_keys = [item["original"] for item in parsed_size_columns]
                     other_tech_keys = ["Số lớp", "Số bàn", "Dài sơ đồ", "Số sp/SĐ", "Đ.Mức SĐ", "Vải cần (M)"]
                     df_final_report = df_final_report[["SIZE"] + ordered_size_keys + other_tech_keys]
-               # --- KHỐI KẾT XUẤT VÀ ĐÓNG KHUNG FILE EXCEL THƯƠNG MẠI ---
+                # --- KHỐI KẾT XUẤT VÀ ĐÓNG KHUNG FILE EXCEL THƯƠNG MẠI ---
                     try:
                         buffer = io.BytesIO()
                         with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
@@ -2089,25 +2089,25 @@ elif menu_selection == "🛒 Purchase Consumption":
                             label="📥 XUẤT FILE EXCEL TÁC NGHIỆP CHUẨN THƯƠNG MẠI", data=buffer.getvalue(),
                             file_name=f"BÁO_CÁO_TÁC_NGHIỆP_BÀN_CẮT_{style_id_input}.xlsx",
                             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True,
-                            key="excel_download_btn_final_v11"
+                            key="excel_download_btn_final_v12"
                         )
                     except Exception: pass
 
-                    # 🎯 SỬA CHÍNH XÁC: Ép cấu trúc tiêu đề MultiIndex lồng nhau lên lưới trước khi nhuộm màu Web
+                    # 🎯 GIẢI PHÁP SỬA MÀU VÀNG: Ép cấu trúc mảng Styler bôi màu trên bảng phẳng trước
+                    def style_full_balance_rows(row):
+                        if row["SIZE"] == "Balance":
+                            return ['background-color: #FEF08A; color: #991B1B; font-weight: 700; border: 1px solid #FDE047;'] * len(row)
+                        return [''] * len(row)
+                    
+                    styled_df_report = df_final_report.style.apply(style_full_balance_rows, axis=1)
+
+                    # Sau khi đối tượng Styler bắt cứng màu vàng full dòng, ta mới gán tiêu đề MultiIndex lên DataFrame gốc để Streamlit vẽ đồ họa
                     web_multi_cols = [("", "SIZE")]
                     for item in parsed_size_columns:
                         web_multi_cols.append((f"GIÀNG: {item['giang_num']}", item['size_num']))
                     for col_name in other_tech_keys:
                         web_multi_cols.append(("THÔNG SỐ TÁC NGHIỆP", col_name))
                     df_final_report.columns = pd.MultiIndex.from_tuples(web_multi_cols)
-
-                    # 🎯 SỬA CHÍNH XÁC: Quét màu dựa trên trục tọa độ Index (.iloc) thay vì tên cột để loại bỏ hoàn toàn KeyError
-                    def style_full_balance_rows(row):
-                        if row.iloc == "Balance":
-                            return ['background-color: #FEF08A; color: #991B1B; font-weight: 700; border: 1px solid #FDE047;'] * len(row)
-                        return [''] * len(row)
-                    
-                    styled_df_report = df_final_report.style.apply(style_full_balance_rows, axis=1)
 
                     st.markdown("<p style='font-weight:700; font-size:14px; color:#1E3A8A; margin-top:15px;'>📊 BẢNG THEO DÕI TÁC NGHIỆP & CÂN ĐỐI ĐƠN HÀNG MULTI-INSEAM</p>", unsafe_allow_html=True)
                     st.dataframe(styled_df_report, use_container_width=True, hide_index=True)
