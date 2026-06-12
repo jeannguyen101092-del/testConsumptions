@@ -1963,171 +1963,118 @@ elif menu_selection == "🛒 Purchase Consumption":
                     st.session_state["consumption_activated"] = True
                     st.rerun()
                                                # BƯỚC 3: LIÊN KẾT ĐỐI CHIẾU DỮ LIỆU Ô CAD, ĐẨY SUPABASE & KẾT XUẤT EXCEL
-                                # BƯỚC 3: LIÊN KẾT ĐỐI CHIẾU DỮ LIỆU Ô CAD, ĐẨY SUPABASE & KẾT XUẤT EXCEL
-                if st.session_state.get("auto_cutting_results") is not None:
-                    import re
-                    import io
-                    
-                    cad_lengths_map = {}
-                    if cad_paste_zone.strip() and st.session_state["consumption_activated"]:
-                        cad_lines = cad_paste_zone.strip().split("\n")
-                        for line in cad_lines:
-                            if not line.strip(): continue
-                            match = re.search(r'(c\d{2})[\s\t]+([0-9]*\.?[0-9]+)', line.lower().strip())
-                            if match:
-                                suffix_key = match.group(1)
-                                try:
-                                    cad_lengths_map[suffix_key] = float(match.group(2))
-                                except ValueError: pass
-
-                    final_rows_display = []
-                    total_fabric_m = 0.0
-                    total_cut_pcs_sum = 0
-                    
-                    for item in st.session_state["auto_cutting_results"]:
-                        display_row = {"SIZE": item["Sơ đồ / Trạng thái"]} # Đã đổi tên cột đầu tiên từ Sơ đồ thành SIZE
-                        for sz in active_sizes:
-                            display_row[sz] = item["Ratios"].get(sz, 0)
-                            
-                        if item["Sơ đồ / Trạng thái"] != "Balance":
-                            layers = item["Số lớp"]
-                            tables = item["Số bàn"]
-                            sp_sd = item["Số sp/SĐ"]
-                            current_marker_id = item["Sơ đồ / Trạng thái"].lower().strip()
-                            
-                            m_len = cad_lengths_map.get(current_marker_id, 0.0) if st.session_state["consumption_activated"] else 0.0
-                            vail_can_m = m_len * layers * tables
-                            total_fabric_m += vail_can_m
-                            
-                            total_ratios_sum = sum(item["Ratios"].values())
-                            pcs_cut = total_ratios_sum * layers * tables
-                            total_cut_pcs_sum += pcs_cut
-                            
-                            dm_sd = (vail_can_m * 1.09361) / pcs_cut if pcs_cut > 0 else 0.0
-                            
-                            display_row["Số lớp"] = layers
-                            display_row["Số bàn"] = tables
-                            display_row["Dài sơ đồ"] = m_len
-                            display_row["Số sp/SĐ"] = sp_sd
-                            display_row["Đ.Mức SĐ"] = round(dm_sd, 3)
-                            display_row["Vải cần (M)"] = round(vail_can_m, 1)
-                        else:
-                            display_row["Số lớp"] = ""
-                            display_row["Số bàn"] = ""
-                            display_row["Dài sơ đồ"] = ""
-                            display_row["Số sp/SĐ"] = ""
-                            display_row["Đ.Mức SĐ"] = ""
-                            display_row["Vải cần (M)"] = ""
-                        final_rows_display.append(display_row)
+                               # BƯỚC 1: CHẠY THUẬT TOÁN HÌNH THÁP NGƯỢC KHỐNG CHẾ SỐ LỚP VẢI SẢN XUẤT
+                if trigger_auto_cutting:
+                    st.session_state["consumption_activated"] = False
+                    with st.spinner("🔮 Hệ thống đang phân bổ sơ đồ hình tháp..."):
+                        import math
+                        cons_meters = consumption_input / 1.09361
+                        max_pcs_per_marker = math.floor(max_table_length / (cons_meters if cons_meters > 0 else 1.0))
+                        if max_pcs_per_marker <= 0: max_pcs_per_marker = 6
                         
-                    df_final_report = pd.DataFrame(final_rows_display)
-                    total_fabric_yds_final = total_fabric_m * 1.09361
-                    final_avg_yield = total_fabric_yds_final / (total_cut_pcs_sum if total_cut_pcs_sum > 0 else 1)
-                    
-                    # 💾 ĐẨY DỮ LIỆU ĐỒNG BỘ LÊN SUPABASE
-                    if st.button("💾 ĐẨY DỮ LIỆU TÁC NGHIỆP LÊN DATABASE SUPABASE", type="secondary", use_container_width=True):
-                        try:
-                            payload_db = {
-                                "style_name": str(style_id_input).strip().upper(), "po_quantity": int(po_qty_input),
-                                "planned_cut_pcs": int(total_cut_pcs_sum), "consumption_value": str(round(final_avg_yield, 3)),
-                                "total_material_value": str(round(total_fabric_yds_final, 2)), "cuttable_width_inch": float(cuttable_width_inch)
-                            }
-                            if "get_supabase_client" in globals():
-                                sb_client = get_supabase_client()
-                                sb_client.table("tac_nghiep_ban_cat").insert(payload_db).execute()
-                                st.success(f"🎉 Đã đồng bộ dữ liệu mã hàng {style_id_input} lên hệ thống Supabase thành công!")
+                        balance_tracker = {sz: int(size_breakdown_main.get(sz, 0)) for sz in active_sizes}
+                        calculated_steps = []
+                        step_idx = 1
+                        max_loops = 25
+                        
+                        while sum(balance_tracker.values()) > 0 and step_idx <= max_loops:
+                            marker_id = f"c{step_idx:02d}"
+                            sorted_sizes = sorted(balance_tracker.items(), key=lambda x: x, reverse=True)
+                            
+                            current_ratios = {sz: 0 for sz in active_sizes}
+                            assigned_pcs = 0
+                            
+                            for sz, bal in sorted_sizes:
+                                if bal <= 0 or assigned_pcs >= max_pcs_per_marker: continue
+                                if step_idx == 1: ratio_to_give = min(4, math.ceil(bal / 150))
+                                elif step_idx == 2: ratio_to_give = min(3, math.ceil(bal / 100))
+                                elif step_idx == 3: ratio_to_give = min(2, math.ceil(bal / 80))
+                                else: ratio_to_give = 1
+                                    
+                                if assigned_pcs + ratio_to_give > max_pcs_per_marker:
+                                    ratio_to_give = max_pcs_per_marker - assigned_pcs
+                                current_ratios[sz] = ratio_to_give
+                                assigned_pcs += ratio_to_give
+                            
+                            if assigned_pcs == 0:
+                                current_ratios[sorted_sizes[0][0]] = 1
+                                assigned_pcs = 1
+                                
+                            # 🎯 CẢI TIẾN: Khống chế số lớp cơ sở tỷ lệ thuận với số sản phẩm đi sơ đồ (assigned_pcs)
+                            # Đảm bảo số lớp vải cắt thực tế luôn dày dặn (Tối thiểu 50-60 lớp trở lên) để chạy sơ đồ dài 12M
+                            base_layers_per_pc = 35 
+                            computed_layers = int(assigned_pcs * base_layers_per_pc)
+                            if computed_layers < 50: 
+                                computed_layers = 50
+                            
+                            # Khống chế số lớp tối đa không vượt quá sản lượng còn lại thực tế của đơn hàng
+                            for sz, rat in current_ratios.items():
+                                if rat > 0:
+                                    max_allowable_layers = math.ceil(balance_tracker[sz] / rat)
+                                    if computed_layers > max_allowable_layers:
+                                        computed_layers = max_allowable_layers
+
+                            if computed_layers <= 0: computed_layers = 1
+                            if computed_layers > 150:
+                                num_tables = math.ceil(computed_layers / 120)
+                                computed_layers = math.ceil(computed_layers / num_tables)
                             else:
-                                st.error("❌ Hệ thống chưa khởi tạo kết nối database. Vui lòng bấm F5 tải lại trang.")
-                        except Exception as db_err:
-                            st.error(f"Lỗi khi đẩy dữ liệu lên Supabase: {str(db_err)}")
-                    # --- KẾT XUẤT FILE EXCEL BÁO CÁO ---
-                    try:
-                        buffer = io.BytesIO()
-                        with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-                            header_data = {
-                                "THÔNG TIN ĐƠN HÀNG TÁC NGHIỆP BÀN CẮT": [
-                                    f"Mã hàng (Style Name): {style_id_input}", f"Số lượng đơn hàng (PO Qty): {po_qty_input} Pcs",
-                                    f"Sản lượng kế hoạch cắt (Planned Cut): {total_cut_pcs_sum} Pcs", f"Định mức tài liệu đề xuất: {consumption_input:.3f} Yds/Pcs",
-                                    f"Định mức tác nghiệp thực tế: {final_avg_yield:.3f} Yds/Pcs", f"Khổ vải đi sơ đồ (Inches): {cuttable_width_inch}\"",
-                                    f"Nhóm phân hệ Inseam: {detected_inseam}"
-                                ]
-                            }
-                            pd.DataFrame(header_data).to_excel(writer, sheet_name="BaoCao_TacNghiep", index=False, startrow=0)
-                            df_final_report.to_excel(writer, sheet_name="BaoCao_TacNghiep", index=False, startrow=10)
+                                num_tables = 1
+                                
+                            calculated_steps.append({
+                                "Sơ đồ / Trạng thái": marker_id,
+                                "Số lớp": computed_layers, "Số bàn": num_tables,
+                                "Dài sơ đồ": 0.0, "Số sp/SĐ": assigned_pcs, "Ratios": current_ratios
+                            })
                             
-                            worksheet = writer.sheets["BaoCao_TacNghiep"]
-                            from openpyxl.styles import PatternFill, Font
-                            yellow_fill = PatternFill(start_color="FEF08A", end_color="FEF08A", fill_type="solid")
-                            red_font = Font(color="991B1B", bold=True)
-                            
-                            for r_idx in range(12, worksheet.max_row + 1):
-                                if worksheet.cell(row=r_idx, column=1).value == "Balance":
-                                    for c_idx in range(1, worksheet.max_column + 1):
-                                        cell = worksheet.cell(row=r_idx, column=c_idx)
-                                        cell.fill = yellow_fill
-                                        cell.font = red_font
-                        
-                        st.download_button(
-                            label="📥 XUẤT FILE EXCEL TÁC NGHIỆP CHUẨN THƯƠNG MẠI", data=buffer.getvalue(),
-                            file_name=f"BÁO_CÁO_TÁC_NGHIỆP_BÀN_CẮT_{style_id_input}.xlsx",
-                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True
-                        )
-                    except Exception: pass
+                            for sz in active_sizes:
+                                total_cut = current_ratios[sz] * computed_layers * num_tables
+                                balance_tracker[sz] = max(0, balance_tracker[sz] - total_cut)
+                                
+                            calculated_steps.append({
+                                "Sơ đồ / Trạng thái": "Balance",
+                                "Số lớp": "", "Số bàn": "", "Dài sơ đồ": "", "Số sp/SĐ": "",
+                                "Ratios": {sz: balance_tracker[sz] for sz in active_sizes}
+                            })
+                            step_idx += 1
+                        st.session_state["auto_cutting_results"] = calculated_steps
 
-                    # 🎯 THUẬT TOÁN ĐIỀU CHỈNH THỨ TỰ VÀ ĐỊNH DẠNG TIÊU ĐỀ ĐA TẦNG CHUẨN XƯỞNG
-                    # Bước A: Tách chuỗi tên size gốc thành cấu trúc tạm thời để chuẩn bị phân nhóm
+                if trigger_consumption:
+                    st.session_state["consumption_activated"] = True
+                    st.rerun()
+                    # Sắp xếp và phân nhóm các cột Giàng & Size trần
                     parsed_size_columns = []
-                    tech_columns = []
-                    
                     for col_name in active_sizes:
                         col_str = str(col_name).strip()
                         if any(char in col_str.lower() for char in ["x", "-", "/"]):
                             parts = re.split(r'[\sXx\-\/]+', col_str)
                             if len(parts) >= 2:
-                                # Kỹ thuật may: parts[0] là Size, parts[1] là Giàng (Inseam)
-                                parsed_size_columns.append({
-                                    "original": col_name,
-                                    "size_num": parts[0],
-                                    "giang_num": parts[1]
-                                })
+                                parsed_size_columns.append({"original": col_name, "size_num": parts[0].strip(), "giang_num": parts[1].strip()})
                             else:
                                 parsed_size_columns.append({"original": col_name, "size_num": col_str, "giang_num": str(detected_inseam)})
                         else:
                             parsed_size_columns.append({"original": col_name, "size_num": col_str, "giang_num": str(detected_inseam)})
 
-                    # Bước B: Thực hiện SẮP XẾP ĐỘNG để đưa tất cả các size của cùng một GIÀNG đứng liền nhau
-                    # Sắp xếp ưu tiên theo số Giàng trước, sau đó sắp xếp theo số Size từ nhỏ đến lớn
                     try:
                         parsed_size_columns.sort(key=lambda x: (int(re.sub(r'\D', '', x['giang_num'])), int(re.sub(r'\D', '', x['size_num']))))
                     except Exception:
                         parsed_size_columns.sort(key=lambda x: (x['giang_num'], x['size_num']))
 
-                    # Bước C: Sắp xếp lại thứ tự cột trong DataFrame gốc theo mảng vừa phân nhóm
                     ordered_size_keys = [item["original"] for item in parsed_size_columns]
                     other_tech_keys = ["Số lớp", "Số bàn", "Dài sơ đồ", "Số sp/SĐ", "Đ.Mức SĐ", "Vải cần (M)"]
-                    
-                    # Tái cấu trúc bảng hoàn chỉnh: Cột SIZE -> Cột Kích cỡ đã sắp xếp -> Các cột thông số đuôi
                     df_final_report = df_final_report[["SIZE"] + ordered_size_keys + other_tech_keys]
 
-                    # Bước D: Dựng tuple MultiIndex sạch (Chỉ để lại Số, xóa chữ SIZE và GIÀNG thừa)
-                    multi_cols_tuples = []
-                    
-                    # Cột đầu tiên (SIZE)
-                    multi_cols_tuples.append(("", "SIZE"))
-                    
-                    # Các cột kích cỡ lồng nhóm
+                    # Dựng mảng MultiIndex cho tiêu đề
+                    multi_cols_tuples = [("", "SIZE")]
                     for item in parsed_size_columns:
-                        multi_cols_tuples.append((f"GIÀNG: {item['giang_num']}", item['size_num'])) # 🎯 CHỈ ĐỂ LẠI SỐ SIZE TRẦN
-                        
-                    # Các cột thông số tác nghiệp
+                        multi_cols_tuples.append((f"GIÀNG: {item['giang_num']}", item['size_num']))
                     for col_name in other_tech_keys:
                         multi_cols_tuples.append(("THÔNG SỐ TÁC NGHIỆP", col_name))
                     
                     df_final_report.columns = pd.MultiIndex.from_tuples(multi_cols_tuples)
-
-                    # 🎯 THUẬT TOÁN NHUỘM MÀU VÀNG FULL DÒNG BALANCE DỰA TRÊN TÊN CỘT MỚI
+                    # 🎯 THUẬT TOÁN NHUỘM MÀU VÀNG FULL BẢNG 100%: Quét màu dựa trên trục tọa độ Index thay vì cột tên
                     def style_full_balance_rows(row):
-                        if row.iloc == "Balance":
+                        if row.iloc[0] == "Balance":
                             return ['background-color: #FEF08A; color: #991B1B; font-weight: 700; border: 1px solid #FDE047;'] * len(row)
                         return [''] * len(row)
                     
