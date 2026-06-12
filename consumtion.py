@@ -1963,6 +1963,7 @@ elif menu_selection == "🛒 Purchase Consumption":
                     st.session_state["consumption_activated"] = True
                     st.rerun()
                                                # BƯỚC 3: LIÊN KẾT ĐỐI CHIẾU DỮ LIỆU Ô CAD, ĐẨY SUPABASE & KẾT XUẤT EXCEL
+                                # BƯỚC 3: LIÊN KẾT ĐỐI CHIẾU DỮ LIỆU Ô CAD, ĐẨY SUPABASE & KẾT XUẤT EXCEL
                 if st.session_state.get("auto_cutting_results") is not None:
                     import re
                     import io
@@ -1984,7 +1985,7 @@ elif menu_selection == "🛒 Purchase Consumption":
                     total_cut_pcs_sum = 0
                     
                     for item in st.session_state["auto_cutting_results"]:
-                        display_row = {"Sơ đồ / Trạng thái": item["Sơ đồ / Trạng thái"]}
+                        display_row = {"SIZE": item["Sơ đồ / Trạng thái"]} # Đã đổi tên cột đầu tiên từ Sơ đồ thành SIZE
                         for sz in active_sizes:
                             display_row[sz] = item["Ratios"].get(sz, 0)
                             
@@ -2073,38 +2074,60 @@ elif menu_selection == "🛒 Purchase Consumption":
                         )
                     except Exception: pass
 
-                    # 🎯 THUẬT TOÁN TẠO TIÊU ĐỀ ĐA TẦNG CHUẨN 100% THEO FILE MẪU CỦA BẠN
-                    # Tách chuỗi tên size để đưa thông tin GIÀNG lên hàng trên, SIZE xuống hàng dưới
-                    multi_cols_tuples = []
-                    for col_name in df_final_report.columns:
+                    # 🎯 THUẬT TOÁN ĐIỀU CHỈNH THỨ TỰ VÀ ĐỊNH DẠNG TIÊU ĐỀ ĐA TẦNG CHUẨN XƯỞNG
+                    # Bước A: Tách chuỗi tên size gốc thành cấu trúc tạm thời để chuẩn bị phân nhóm
+                    parsed_size_columns = []
+                    tech_columns = []
+                    
+                    for col_name in active_sizes:
                         col_str = str(col_name).strip()
-                        
-                        # Trường hợp 1: Nếu tên cột dạng phối hợp (Ví dụ: "26 x 30" hoặc "26-30")
-                        if col_name in active_sizes and any(char in col_str.lower() for char in ["x", "-", "/"]):
-                            # Phân tách tự động bằng các ký tự phân tách ngành may thông dụng
+                        if any(char in col_str.lower() for char in ["x", "-", "/"]):
                             parts = re.split(r'[\sXx\-\/]+', col_str)
                             if len(parts) >= 2:
-                                size_part = parts[0].strip()   # Số đứng trước là SIZE (ví dụ: 26)
-                                giang_part = parts[1].strip()  # Số đứng sau là GIÀNG / INSEAM (ví dụ: 30)
-                                multi_cols_tuples.append((f"GIÀNG: {giang_part}", f"SIZE: {size_part}"))
+                                # Kỹ thuật may: parts[0] là Size, parts[1] là Giàng (Inseam)
+                                parsed_size_columns.append({
+                                    "original": col_name,
+                                    "size_num": parts[0],
+                                    "giang_num": parts[1]
+                                })
                             else:
-                                multi_cols_tuples.append((f"GIÀNG: {detected_inseam}", f"SIZE: {col_str}"))
-                                
-                        # Trường hợp 2: Nếu file SBD chỉ trả về số size phẳng đơn thuần (Ví dụ: "26")
-                        elif col_name in active_sizes:
-                            multi_cols_tuples.append((f"GIÀNG: {detected_inseam}", f"SIZE: {col_str}"))
-                            
-                        # Trường hợp 3: Các cột thông số kỹ thuật tác nghiệp ở đuôi bảng (Số lớp, Số bàn, Dài sơ đồ...)
+                                parsed_size_columns.append({"original": col_name, "size_num": col_str, "giang_num": str(detected_inseam)})
                         else:
-                            multi_cols_tuples.append(("THÔNG SỐ TÁC NGHIỆP", col_name))
+                            parsed_size_columns.append({"original": col_name, "size_num": col_str, "giang_num": str(detected_inseam)})
+
+                    # Bước B: Thực hiện SẮP XẾP ĐỘNG để đưa tất cả các size của cùng một GIÀNG đứng liền nhau
+                    # Sắp xếp ưu tiên theo số Giàng trước, sau đó sắp xếp theo số Size từ nhỏ đến lớn
+                    try:
+                        parsed_size_columns.sort(key=lambda x: (int(re.sub(r'\D', '', x['giang_num'])), int(re.sub(r'\D', '', x['size_num']))))
+                    except Exception:
+                        parsed_size_columns.sort(key=lambda x: (x['giang_num'], x['size_num']))
+
+                    # Bước C: Sắp xếp lại thứ tự cột trong DataFrame gốc theo mảng vừa phân nhóm
+                    ordered_size_keys = [item["original"] for item in parsed_size_columns]
+                    other_tech_keys = ["Số lớp", "Số bàn", "Dài sơ đồ", "Số sp/SĐ", "Đ.Mức SĐ", "Vải cần (M)"]
                     
-                    # Đồng bộ ép cấu trúc tiêu đề lồng hai tầng vào DataFrame
+                    # Tái cấu trúc bảng hoàn chỉnh: Cột SIZE -> Cột Kích cỡ đã sắp xếp -> Các cột thông số đuôi
+                    df_final_report = df_final_report[["SIZE"] + ordered_size_keys + other_tech_keys]
+
+                    # Bước D: Dựng tuple MultiIndex sạch (Chỉ để lại Số, xóa chữ SIZE và GIÀNG thừa)
+                    multi_cols_tuples = []
+                    
+                    # Cột đầu tiên (SIZE)
+                    multi_cols_tuples.append(("", "SIZE"))
+                    
+                    # Các cột kích cỡ lồng nhóm
+                    for item in parsed_size_columns:
+                        multi_cols_tuples.append((f"GIÀNG: {item['giang_num']}", item['size_num'])) # 🎯 CHỈ ĐỂ LẠI SỐ SIZE TRẦN
+                        
+                    # Các cột thông số tác nghiệp
+                    for col_name in other_tech_keys:
+                        multi_cols_tuples.append(("THÔNG SỐ TÁC NGHIỆP", col_name))
+                    
                     df_final_report.columns = pd.MultiIndex.from_tuples(multi_cols_tuples)
 
-                    # 🎯 THUẬT TOÁN NHUỘM MÀU VÀNG FULL BẢNG AN TOÀN TUYỆT ĐỐI CHO MULTI-INDEX
-                    # Dò tìm chữ "Balance" bằng hàm định vị dòng .iloc[0] bất kể bảng có bao nhiêu cột lồng nhau
+                    # 🎯 THUẬT TOÁN NHUỘM MÀU VÀNG FULL DÒNG BALANCE DỰA TRÊN TÊN CỘT MỚI
                     def style_full_balance_rows(row):
-                        if row.iloc[0] == "Balance":
+                        if row.iloc == "Balance":
                             return ['background-color: #FEF08A; color: #991B1B; font-weight: 700; border: 1px solid #FDE047;'] * len(row)
                         return [''] * len(row)
                     
