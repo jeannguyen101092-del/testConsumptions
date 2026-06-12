@@ -1964,260 +1964,172 @@ elif menu_selection == "🛒 Purchase Consumption":
                 if trigger_consumption:
                     st.session_state["consumption_activated"] = True
                     st.rerun()
-import re
-import io
-import pandas as pd
-import streamlit as st
-from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
-from openpyxl.utils import get_column_letter
-
-def push_to_supabase_table(style_id, po_qty, planned_cut, avg_yield, total_fabric, cut_width):
-    try:
-        payload_db = {
-            "style_name": str(style_id).strip().upper(), "po_quantity": int(po_qty),
-            "planned_cut_pcs": int(planned_cut), "consumption_value": str(round(avg_yield, 3)),
-            "total_material_value": str(round(total_fabric, 2)), "cuttable_width_inch": float(cut_width)
-        }
-        sb_instance = globals().get("supabase", globals().get("supabase_client", st.session_state.get("supabase")))
-        if sb_instance:
-            sb_instance.table("tac_nghiep_ban_cat").insert(payload_db).execute()
-            st.success(f"🎉 Đã đồng bộ dữ liệu mã hàng {style_id} lên hệ thống Supabase thành công!")
-            return True
-        else:
-            st.error("❌ Không tìm thấy cổng kết nối database.")
-            return False
-    except Exception as db_err: 
-        st.error(f"Lỗi cơ sở dữ liệu: {str(db_err)}")
-        return False
-
-def generate_premium_excel_file(style_id, po_qty, planned_cut, consumption_input_val, avg_yield, cut_width, df_report, parsed_sizes, tech_keys, size_keys):
-    try:
-        buffer = io.BytesIO()
-        with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-            pd.DataFrame().to_excel(writer, sheet_name="BaoCao_TacNghiep", index=False)
-            workbook = writer.book
-            worksheet = writer.sheets["BaoCao_TacNghiep"]
-            worksheet.sheet_view.showGridLines = True
-            
-            font_title = Font(name="Segoe UI", size=14, bold=True, color="1F497D")
-            font_header = Font(name="Segoe UI", size=10, bold=True)
-            font_normal = Font(name="Segoe UI", size=10)
-            font_balance = Font(name="Segoe UI", size=10, color="FF0000")
-            
-            fill_header = PatternFill(start_color="F2F2F2", end_color="F2F2F2", fill_type="solid")
-            fill_yellow = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")
-            
-            thin_side = Side(style='thin', color='BFBFBF')
-            border_cell = Border(left=thin_side, right=thin_side, top=thin_side, bottom=thin_side)
-            
-            # 🎯 BẪY AN TOÀN TUYỆT ĐỐI: Ép kiểu an toàn, nếu rỗng tự động đưa về 0 để chống sập App trắng màn hình
-            try: valid_consumption = float(consumption_input_val)
-            except Exception: valid_consumption = 0.0
-
-            worksheet.cell(row=2, column=1, value="THÔNG TIN ĐƠN HÀNG TÁC NGHIỆP BÀN CẮT CHUẨN").font = font_title
-            headers_info = [
-                f"Mã hàng (Style Name): {style_id}", f"Số lượng đơn hàng (PO Qty): {po_qty} Pcs",
-                f"Sản lượng kế hoạch cắt (Planned Cut): {planned_cut} Pcs", 
-                f"Định mức tài liệu đề xuất: {valid_consumption:.3f} Yds/Pcs", # 🎯 FIXED: Đã dùng biến an toàn mới
-                f"Định mức tác nghiệp thực tế: {avg_yield:.3f} Yds/Pcs", f"Khổ cắt: {cut_width}\"", "Nhóm Inseam: None"
-            ]
-            for idx, text in enumerate(headers_info):
-                worksheet.cell(row=idx + 3, column=1, value=text).font = font_normal
-
-            worksheet.cell(row=11, column=1, value="").fill = fill_header
-            cell_sz = worksheet.cell(row=12, column=1, value="SIZE")
-            cell_sz.font = font_header; cell_sz.fill = fill_header; cell_sz.border = border_cell
-            cell_sz.alignment = Alignment(horizontal="center", vertical="center")
-            
-            col_idx = 2
-            for item in parsed_sizes:
-                worksheet.cell(row=11, column=col_idx, value=f"GIÀNG {item['giang_num']}").font = font_header
-                worksheet.cell(row=11, column=col_idx).fill = fill_header
-                worksheet.cell(row=11, column=col_idx).border = border_cell
-                worksheet.cell(row=11, column=col_idx).alignment = Alignment(horizontal="center", vertical="center")
-                
-                s_val = item['size_num']
-                export_label = int(s_val) if str(s_val).isdigit() else (float(s_val) if '.' in str(s_val) else s_val)
-                c_t2 = worksheet.cell(row=12, column=col_idx, value=export_label)
-                c_t2.font = font_header; c_t2.fill = fill_header; c_t2.border = border_cell
-                c_t2.alignment = Alignment(horizontal="center", vertical="center")
-                col_idx += 1
-                
-            for col_name in tech_keys:
-                worksheet.cell(row=11, column=col_idx, value="THÔNG SỐ TÁC NGHIỆP").font = font_header
-                worksheet.cell(row=11, column=col_idx).fill = fill_header
-                worksheet.cell(row=11, column=col_idx).border = border_cell
-                worksheet.cell(row=11, column=col_idx).alignment = Alignment(horizontal="center", vertical="center")
-                
-                c_t2 = worksheet.cell(row=12, column=col_idx, value=col_name)
-                c_t2.font = font_header; c_t2.fill = fill_header; c_t2.border = border_cell
-                c_t2.alignment = Alignment(horizontal="center", vertical="center")
-                col_idx += 1
-
-            row_excel_idx = 13
-            for _, row in df_report.iterrows():
-                is_balance = (str(row["SIZE"]).strip() == "Balance")
-                current_fill = None if is_balance else fill_yellow
-                current_font = font_balance if is_balance else font_normal
-                
-                c_size = worksheet.cell(row=row_excel_idx, column=1, value=row["SIZE"])
-                c_size.font = font_header if not is_balance else font_balance
-                c_size.border = border_cell
-                c_size.alignment = Alignment(horizontal="left", vertical="center")
-                if current_fill: c_size.fill = current_fill
-                
-                data_col_idx = 2
-                for sz_key in size_keys:
-                    val = row[sz_key]
-                    c_val = worksheet.cell(row=row_excel_idx, column=data_col_idx, value=int(val) if str(val).isdigit() else val)
-                    c_val.font = current_font; c_val.border = border_cell
-                    c_val.alignment = Alignment(horizontal="center", vertical="center")
-                    if current_fill: c_val.fill = current_fill
-                    if isinstance(c_val.value, (int, float)): c_val.number_format = '#,##0'
-                    data_col_idx += 1
-                
-                for tech_key in tech_keys:
-                    val = row[tech_key]
-                    try: val_numeric = float(val) if '.' in str(val) else int(val)
-                    except ValueError: val_numeric = val
-                    c_tech = worksheet.cell(row=row_excel_idx, column=data_col_idx, value=val_numeric if val != "" else None)
-                    c_tech.font = current_font; c_tech.border = border_cell
-                    c_tech.alignment = Alignment(horizontal="center", vertical="center")
-                    if current_fill: c_tech.fill = current_fill
+# BƯỚC 3: LIÊN KẾT ĐỐI CHIẾU DỮ LIỆU Ô CAD, ĐẨY SUPABASE & KẾT XUẤT EXCEL ĐÓNG KHUNG CHUẨN
+                if st.session_state.get("auto_cutting_results") is not None:
+                    import re
+                    import io
                     
-                    if isinstance(c_tech.value, float): c_tech.number_format = '#,##0.000'
-                    elif isinstance(c_tech.value, int): c_tech.number_format = '#,##0'
-                    data_col_idx += 1
-                row_excel_idx += 1
+                    cad_lengths_map = {}
+                    if cad_paste_zone.strip() and st.session_state["consumption_activated"]:
+                        cad_lines = cad_paste_zone.strip().split("\n")
+                        for line in cad_lines:
+                            if not line.strip(): continue
+                            match = re.search(r'(c\d{2})[\s\t]+([0-9]*\.?[0-9]+)', line.lower().strip())
+                            if match:
+                                suffix_key = match.group(1)
+                                try: cad_lengths_map[suffix_key] = float(match.group(2))
+                                except ValueError: pass
 
-            for col_idx in range(1, worksheet.max_column + 1):
-                max_len = 0
-                col_letter = get_column_letter(col_idx)
-                for row_idx in range(11, worksheet.max_row + 1):
-                    cell_val = worksheet.cell(row=row_idx, column=col_idx).value
-                    if cell_val is not None:
-                        max_len = max(max_len, len(str(cell_val)))
-                worksheet.column_dimensions[col_letter].width = max(max_len + 5, 12)
+                    final_rows_display = []
+                    total_fabric_m = 0.0
+                    total_cut_pcs_sum = 0
+                    
+                    for item in st.session_state["auto_cutting_results"]:
+                        display_row = {"SIZE": item["Sơ đồ / Trạng thái"]}
+                        for sz in active_sizes: display_row[sz] = item["Ratios"].get(sz, 0)
+                            
+                        if item["Sơ đồ / Trạng thái"] != "Balance":
+                            layers = item["Số lớp"]; tables = item["Số bàn"]; sp_sd = item["Số sp/SĐ"]
+                            current_marker_id = item["Sơ đồ / Trạng thái"].lower().strip()
+                            m_len = cad_lengths_map.get(current_marker_id, 0.0) if st.session_state["consumption_activated"] else 0.0
+                            vail_can_m = m_len * layers * tables
+                            total_fabric_m += vail_can_m
+                            total_ratios_sum = sum(item["Ratios"].values())
+                            pcs_cut = total_ratios_sum * layers * tables
+                            total_cut_pcs_sum += pcs_cut
+                            dm_sd = (vail_can_m * 1.09361) / pcs_cut if pcs_cut > 0 else 0.0
+                            
+                            display_row["Số lớp"] = layers; display_row["Số bàn"] = tables; display_row["Dài sơ đồ"] = m_len
+                            display_row["Số sp/SĐ"] = sp_sd; display_row["Đ.Mức SĐ"] = round(dm_sd, 3); display_row["Vải cần (M)"] = round(vail_can_m, 1)
+                        else:
+                            display_row["Số lớp"] = ""; display_row["Số bàn"] = ""; display_row["Dài sơ đồ"] = ""
+                            display_row["Số sp/SĐ"] = ""; display_row["Đ.Mức SĐ"] = ""; display_row["Vải cần (M)"] = ""
+                        final_rows_display.append(display_row)
+                        
+                    df_final_report = pd.DataFrame(final_rows_display)
+                    total_fabric_yds_final = total_fabric_m * 1.09361
+                    final_avg_yield = total_fabric_yds_final / (total_cut_pcs_sum if total_cut_pcs_sum > 0 else 1)
+                    
+                    # 💾 ĐẨY DỮ LIỆU ĐỒNG BỘ LÊN DATABSE SUPABASE (SỬA CHÍNH XÁC BIẾN KẾT NỐI TOÀN CỤC)
+                    if st.button("💾 ĐẨY DỮ LIỆU TÁC NGHIỆP LÊN DATABASE SUPABASE", type="secondary", use_container_width=True, key="sb_sync_btn_c2_v2"):
+                        try:
+                            payload_db = {
+                                "style_name": str(style_id_input).strip().upper(), "po_quantity": int(po_qty_input),
+                                "planned_cut_pcs": int(total_cut_pcs_sum), "consumption_value": str(round(final_avg_yield, 3)),
+                                "total_material_value": str(round(total_fabric_yds_final, 2)), "cuttable_width_inch": float(cuttable_width_inch)
+                            }
+                            # Cơ chế tự động dò tìm biến kết nối an toàn để thông tuyến lưu kho
+                            sb_instance = globals().get("supabase", globals().get("supabase_client", st.session_state.get("supabase")))
+                            if sb_instance:
+                                sb_instance.table("tac_nghiep_ban_cat").insert(payload_db).execute()
+                                st.success(f"🎉 Đã đồng bộ dữ liệu mã hàng {style_id_input} lên hệ thống Supabase thành công!")
+                            else:
+                                st.error("❌ Không tìm thấy cổng kết nối database. Vui lòng kiểm tra lại cấu hình.")
+                        except Exception as db_err: 
+                            st.error(f"Lỗi cơ sở dữ liệu: {str(db_err)}")
 
-        return buffer.getvalue()
-    except Exception as xl_err:
-        st.error(f"❌ Lỗi cấu trúc tạo Excel: {str(xl_err)}")
-        return None
+                    # Phân tích cú pháp bẻ chuỗi kích cỡ Inseam
+                    parsed_size_columns = []
+                    for col_name in active_sizes:
+                        col_str = str(col_name).strip()
+                        if any(char in col_str.lower() for char in ["x", "-", "/"]):
+                            parts = re.split(r'[\sXx\-\/]+', col_str)
+                            if len(parts) >= 2:
+                                parsed_size_columns.append({"original": col_name, "size_num": str(parts[0]).strip(), "giang_num": str(parts[1]).strip()})
+                            else:
+                                parsed_size_columns.append({"original": col_name, "size_num": col_str, "giang_num": str(detected_inseam)})
+                        else:
+                            parsed_size_columns.append({"original": col_name, "size_num": col_str, "giang_num": str(detected_inseam)})
 
+                    try:
+                        parsed_size_columns.sort(key=lambda x: (int(re.sub(r'\D', '', x['giang_num'])), int(re.sub(r'\D', '', x['size_num']))))
+                    except Exception:
+                        parsed_size_columns.sort(key=lambda x: (x['giang_num'], x['size_num']))
 
-if st.session_state.get("auto_cutting_results") is not None:
-    cad_lengths_map = {}
-    
-    # Kiểm tra an toàn sự tồn tại của biến cad_paste_zone
-    cad_zone_value = globals().get("cad_paste_zone", locals().get("cad_paste_zone", ""))
-    
-    if str(cad_zone_value).strip() and st.session_state.get("consumption_activated"):
-        cad_lines = str(cad_zone_value).strip().split("\n")
-        for line in cad_lines:
-            if not line.strip(): continue
-            match = re.search(r'(c\d{2})[\s\t]+([0-9]*\.?[0-9]+)', line.lower().strip())
-            if match:
-                suffix_key = match.group(1)
-                try: cad_lengths_map[suffix_key] = float(match.group(2))
-                except ValueError: pass
+                    ordered_size_keys = [item["original"] for item in parsed_size_columns]
+                    other_tech_keys = ["Số lớp", "Số bàn", "Dài sơ đồ", "Số sp/SĐ", "Đ.Mức SĐ", "Vải cần (M)"]
+                    df_final_report = df_final_report[["SIZE"] + ordered_size_keys + other_tech_keys]
+                # --- KHỐI KẾT XUẤT VÀ ĐÓNG KHUNG FILE EXCEL THƯƠNG MẠI (SỬA LỖI INDEX MULTIINDEX) ---
+                    try:
+                        buffer = io.BytesIO()
+                        with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+                            header_data = {
+                                "THÔNG TIN ĐƠN HÀNG TÁC NGHIỆP BÀN CẮT CHUẨN": [
+                                    f"Mã hàng (Style Name): {style_id_input}", f"Số lượng đơn hàng (PO Qty): {po_qty_input} Pcs",
+                                    f"Sản lượng kế hoạch cắt (Planned Cut): {total_cut_pcs_sum} Pcs", f"Định mức tài liệu đề xuất: {consumption_input:.3f} Yds/Pcs",
+                                    f"Định mức tác nghiệp thực tế: {final_avg_yield:.3f} Yds/Pcs", f"Khổ cắt: {cuttable_width_inch}\""
+                                ]
+                            }
+                            pd.DataFrame(header_data).to_excel(writer, sheet_name="BaoCao_TacNghiep", index=False, startrow=0)
+                            
+                            excel_multi_cols = [("", "SIZE")]
+                            for item in parsed_size_columns:
+                                s_val = item['size_num']
+                                try: export_size_label = int(s_val) if str(s_val).isdigit() else float(s_val)
+                                except ValueError: export_size_label = s_val
+                                excel_multi_cols.append((f"GIÀNG {item['giang_num']}", export_size_label))
+                                
+                            for col_name in other_tech_keys:
+                                excel_multi_cols.append(("THÔNG SỐ TÁC NGHIỆP", col_name))
+                                
+                            df_excel_export = df_final_report.copy()
+                            df_excel_export.columns = pd.MultiIndex.from_tuples(excel_multi_cols)
+                            
+                            # 🎯 ĐÃ SỬA: Ép buộc index=True khi xuất bảng đa tầng để triệt tiêu lỗi NotImplementedError
+                            df_excel_export.to_excel(writer, sheet_name="BaoCao_TacNghiep", index=True, startrow=10)
+                            
+                            worksheet = writer.sheets["BaoCao_TacNghiep"]
+                            from openpyxl.styles import PatternFill, Font, Border, Side
+                            
+                            yellow_fill = PatternFill(start_color="FEF08A", end_color="FEF08A", fill_type="solid")
+                            red_font = Font(color="991B1B", bold=True)
+                            thin_side = Side(border_style="thin", color="000000")
+                            factory_border = Border(left=thin_side, right=thin_side, top=thin_side, bottom=thin_side)
+                            
+                            for r_idx in range(11, worksheet.max_row + 1):
+                                # Kiểm tra từ cột thứ 2 (cột SIZE thực tế sau khi bật index=True)
+                                is_balance_row = (worksheet.cell(row=r_idx, column=2).value == "Balance")
+                                for c_idx in range(1, worksheet.max_column + 1):
+                                    cell = worksheet.cell(row=r_idx, column=c_idx)
+                                    cell.border = factory_border
+                                    if is_balance_row:
+                                        cell.fill = yellow_fill
+                                        cell.font = red_font
+                                        
+                        st.download_button(
+                            label="📥 XUẤT FILE EXCEL TÁC NGHIỆP CHUẨN THƯƠNG MẠI", data=buffer.getvalue(),
+                            file_name=f"BÁO_CÁO_TÁC_NGHIỆP_BÀN_CẮT_{style_id_input}.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True,
+                            key="excel_download_btn_final_v20"
+                        )
+                    except Exception as e:
+                        st.error(f"Lỗi trích xuất Excel: {str(e)}")
 
-    # Tự động khôi phục danh sách size từ dữ liệu để tránh lỗi NameError
-    local_active_sizes = globals().get("active_sizes", locals().get("active_sizes", None))
-    if local_active_sizes is None:
-        try:
-            first_item = st.session_state["auto_cutting_results"][0]
-            local_active_sizes = list(first_item["Ratios"].keys())
-        except Exception:
-            local_active_sizes = []
+                    # 🎯 GIẢI PHÁP WEB TRÁNH LỖI KEYERROR: Tạo cấu trúc tiêu đề MultiIndex lên lưới trước
+                    web_multi_cols = [("", "SIZE")]
+                    for item in parsed_size_columns:
+                        web_multi_cols.append((f"GIÀNG: {item['giang_num']}", item['size_num']))
+                    for col_name in other_tech_keys:
+                        web_multi_cols.append(("THÔNG SỐ TÁC NGHIỆP", col_name))
+                    df_final_report.columns = pd.MultiIndex.from_tuples(web_multi_cols)
 
-    final_rows_display = []
-    total_fabric_m = 0.0
-    total_cut_pcs_sum = 0
-    
-    for item in st.session_state["auto_cutting_results"]:
-        display_row = {"SIZE": item["Sơ đồ / Trạng thái"]}
-        for sz in local_active_sizes: display_row[sz] = item["Ratios"].get(sz, 0)
-            
-        if item["Sơ đồ / Trạng thái"] != "Balance":
-            layers = item["Số lớp"]; tables = item["Số bàn"]; sp_sd = item["Số sp/SĐ"]
-            current_marker_id = item["Sơ đồ / Trạng thái"].lower().strip()
-            m_len = cad_lengths_map.get(current_marker_id, 0.0) if st.session_state.get("consumption_activated") else 0.0
-            vail_can_m = m_len * layers * tables
-            total_fabric_m += vail_can_m
-            total_ratios_sum = sum(item["Ratios"].values())
-            pcs_cut = total_ratios_sum * layers * tables
-            total_cut_pcs_sum += pcs_cut
-            dm_sd = (vail_can_m * 1.09361) / pcs_cut if pcs_cut > 0 else 0.0
-            
-            display_row["Số lớp"] = layers; display_row["Số bàn"] = tables; display_row["Dài sơ đồ"] = m_len
-            display_row["Số sp/SĐ"] = sp_sd; display_row["Đ.Mức SĐ"] = round(dm_sd, 3); display_row["Vải cần (M)"] = round(vail_can_m, 1)
-        else:
-            display_row["Số lớp"] = ""; display_row["Số bàn"] = ""; display_row["Dài sơ đồ"] = ""
-            display_row["Số sp/SĐ"] = ""; display_row["Đ.Mức SĐ"] = ""; display_row["Vải cần (M)"] = ""
-        final_rows_display.append(display_row)
-        
-    df_final_report = pd.DataFrame(final_rows_display)
-    total_fabric_yds_final = total_fabric_m * 1.09361
-    final_avg_yield = total_fabric_yds_final / (total_cut_pcs_sum if total_cut_pcs_sum > 0 else 1)
+                    # Định dạng màu vàng kéo dài 100% full dòng dựa trên giá trị cột SIZE đa tầng (Tránh hoàn toàn KeyError)
+                    def style_full_balance_rows(row):
+                        if row[("", "SIZE")] == "Balance":
+                            return ['background-color: #FEF08A; color: #991B1B; font-weight: 700; border: 1px solid #FDE047;'] * len(row)
+                        return [''] * len(row)
+                    
+                    styled_df_report = df_final_report.style.apply(style_full_balance_rows, axis=1)
 
-    parsed_size_columns = []
-    for col_name in local_active_sizes:
-        col_str = str(col_name).strip()
-        if any(char in col_str.lower() for char in ["x", "-", "/"]):
-            parts = re.split(r'[\sXx\-\/]+', col_str)
-            if len(parts) >= 2:
-                parsed_size_columns.append({"original": col_name, "size_num": str(parts[0]).strip(), "giang_num": str(parts[1]).strip()})
-            else:
-                parsed_size_columns.append({"original": col_name, "size_num": col_str, "giang_num": str(globals().get("detected_inseam", "None"))})
-        else:
-            parsed_size_columns.append({"original": col_name, "size_num": col_str, "giang_num": str(globals().get("detected_inseam", "None"))})
-
-    try:
-        parsed_size_columns.sort(key=lambda x: (int(re.sub(r'\D', '', x['giang_num'])), int(re.sub(r'\D', '', x['size_num']))))
-    except Exception:
-        try: parsed_size_columns.sort(key=lambda x: (x['giang_num'], x['size_num']))
-        except Exception: pass
-
-    ordered_size_keys = [item["original"] for item in parsed_size_columns]
-    other_tech_keys = ["Số lớp", "Số bàn", "Dài sơ đồ", "Số sp/SĐ", "Đ.Mức SĐ", "Vải cần (M)"]
-    
-    existing_cols = [c for c in df_final_report.columns if c in ordered_size_keys]
-    df_final_report = df_final_report[["SIZE"] + existing_cols + other_tech_keys]
-
-    st.write("### 📊 BẢNG KẾT QUẢ TÁC NGHIỆP CHI TIẾT")
-    st.dataframe(df_final_report, use_container_width=True)
-
-    # 🎯 FIX KHẨN CẤP: Bẫy ép kiểu an toàn cho toàn bộ biến đầu vào, tránh lỗi ép kiểu rỗng gây sập app
-    style_id_val = globals().get("style_id_input", locals().get("style_id_input", "UNKNOWN"))
-    
-    try: po_qty_val = int(globals().get("po_qty_input", locals().get("po_qty_input", 0)))
-    except Exception: po_qty_val = 0
-        
-    try: consumption_val = float(globals().get("consumption_input", locals().get("consumption_input", 0.0)))
-    except Exception: consumption_val = 0.0
-        
-    try: width_val = float(globals().get("cuttable_width_inch", locals().get("cuttable_width_inch", 0.0)))
-    except Exception: width_val = 0.0
-
-    excel_file_data = generate_premium_excel_file(
-        style_id_val, po_qty_val, total_cut_pcs_sum, consumption_val, 
-        final_avg_yield, width_val, df_final_report, parsed_size_columns, other_tech_keys, existing_cols
-    )
-
-    st.write("---")
-    col1, col2 = st.columns(2)
-
-    with col1:
-        if st.button("💾 ĐẨY DỮ LIỆU TÁC NGHIỆP LÊN DATABASE SUPABASE", type="secondary", use_container_width=True, key="sb_sync_btn_v13"):
-            push_to_supabase_table(style_id_val, po_qty_val, total_cut_pcs_sum, final_avg_yield, total_fabric_yds_final, width_val)
-
-    with col2:
-        if excel_file_data:
-            st.download_button(
-                label="📥 KẾT XUẤT VÀ TẢI FILE EXCEL BÁO CÁO",
-                data=excel_file_data,
-                file_name=f"Bao_Cao_Tac_Nghiep_{str(style_id_val).strip()}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True,
-                key="download_excel_v13"
-            )
+                    st.markdown("<p style='font-weight:700; font-size:14px; color:#1E3A8A; margin-top:15px;'>📊 BẢNG THEO DÕI TÁC NGHIỆP & CÂN ĐỐI ĐƠN HÀNG MULTI-INSEAM</p>", unsafe_allow_html=True)
+                    st.dataframe(styled_df_report, use_container_width=True, hide_index=True)
+                    
+                    st.markdown("---")
+                    m_col1, m_col2, m_col3 = st.columns(3)
+                    with m_col1: st.metric("Tổng vải tiêu thụ tự động", f"{total_fabric_m:,.1f} Mét")
+                    with m_col2: st.metric("Định mức trung bình (Đ.Mức TB)", f"{final_avg_yield:.3f} Yds/Pcs" if st.session_state["consumption_activated"] else "0.000 Yds/Pcs")
+                    with m_col3:
+                        variance = final_avg_yield - consumption_input if total_fabric_m > 0 and st.session_state["consumption_activated"] else 0.0
+                        st.metric("Chênh lệch so với tài liệu", f"{variance:+.3f}" if st.session_state["consumption_activated"] else "0.000", delta_color="inverse" if variance > 0 else "normal")
+                else:
+                    st.info("💡 Quy trình: Bấm nút 1 để tính tác nghiệp sơ đồ -> Điền độ dài CAD -> Bấm nút 2 để kích hoạt nhảy số định mức.")
