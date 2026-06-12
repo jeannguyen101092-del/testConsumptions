@@ -2044,7 +2044,7 @@ elif menu_selection == "🛒 Purchase Consumption":
                     ordered_size_keys = [item["original"] for item in parsed_size_columns]
                     other_tech_keys = ["Số lớp", "Số bàn", "Dài sơ đồ", "Số sp/SĐ", "Đ.Mức SĐ", "Vải cần (M)"]
                     df_final_report = df_final_report[["SIZE"] + ordered_size_keys + other_tech_keys]
-                # --- KHỐI KẾT XUẤT VÀ ĐÓNG KHUNG FILE EXCEL THƯƠNG MẠI ---
+                 # --- KHỐI KẾT XUẤT VÀ ĐÓNG KHUNG FILE EXCEL THƯƠNG MẠI ---
                     try:
                         buffer = io.BytesIO()
                         with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
@@ -2093,7 +2093,7 @@ elif menu_selection == "🛒 Purchase Consumption":
                         )
                     except Exception: pass
 
-                    # 🎯 GIẢI PHÁP SỬA MÀU VÀNG: Ép cấu trúc mảng Styler bôi màu trên bảng phẳng trước
+                    # 🎯 GIẢI PHÁP SỬA MÀU VÀNG: Ép cấu trúc mảng Styler bôi màu trên bảng phẳng trước khi tạo MultiIndex
                     def style_full_balance_rows(row):
                         if row["SIZE"] == "Balance":
                             return ['background-color: #FEF08A; color: #991B1B; font-weight: 700; border: 1px solid #FDE047;'] * len(row)
@@ -2101,7 +2101,7 @@ elif menu_selection == "🛒 Purchase Consumption":
                     
                     styled_df_report = df_final_report.style.apply(style_full_balance_rows, axis=1)
 
-                    # Sau khi đối tượng Styler bắt cứng màu vàng full dòng, ta mới gán tiêu đề MultiIndex lên DataFrame gốc để Streamlit vẽ đồ họa
+                    # Sau khi đối tượng Styler bắt cứng màu vàng full dòng, ta mới gán tiêu đề MultiIndex lên DataFrame gốc để hiển thị
                     web_multi_cols = [("", "SIZE")]
                     for item in parsed_size_columns:
                         web_multi_cols.append((f"GIÀNG: {item['giang_num']}", item['size_num']))
