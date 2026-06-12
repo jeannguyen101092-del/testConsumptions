@@ -2010,10 +2010,15 @@ def generate_premium_excel_file(style_id, po_qty, planned_cut, consumption_input
             thin_side = Side(style='thin', color='BFBFBF')
             border_cell = Border(left=thin_side, right=thin_side, top=thin_side, bottom=thin_side)
             
+            # 🎯 BẪY AN TOÀN TUYỆT ĐỐI: Ép kiểu an toàn, nếu rỗng tự động đưa về 0 để chống sập App trắng màn hình
+            try: valid_consumption = float(consumption_input_val)
+            except Exception: valid_consumption = 0.0
+
             worksheet.cell(row=2, column=1, value="THÔNG TIN ĐƠN HÀNG TÁC NGHIỆP BÀN CẮT CHUẨN").font = font_title
             headers_info = [
                 f"Mã hàng (Style Name): {style_id}", f"Số lượng đơn hàng (PO Qty): {po_qty} Pcs",
-                f"Sản lượng kế hoạch cắt (Planned Cut): {planned_cut} Pcs", f"Định mức tài liệu đề xuất: {consumption_input_val:.3f} Yds/Pcs",
+                f"Sản lượng kế hoạch cắt (Planned Cut): {planned_cut} Pcs", 
+                f"Định mức tài liệu đề xuất: {valid_consumption:.3f} Yds/Pcs", # 🎯 FIXED: Đã dùng biến an toàn mới
                 f"Định mức tác nghiệp thực tế: {avg_yield:.3f} Yds/Pcs", f"Khổ cắt: {cut_width}\"", "Nhóm Inseam: None"
             ]
             for idx, text in enumerate(headers_info):
@@ -2085,7 +2090,6 @@ def generate_premium_excel_file(style_id, po_qty, planned_cut, consumption_input
                     data_col_idx += 1
                 row_excel_idx += 1
 
-            # 🎯 FIXED: Sửa lỗi lấy thuộc tính 'column' từ Tuple sang lấy đúng đối tượng ô Excel
             for col_idx in range(1, worksheet.max_column + 1):
                 max_len = 0
                 col_letter = get_column_letter(col_idx)
@@ -2099,6 +2103,7 @@ def generate_premium_excel_file(style_id, po_qty, planned_cut, consumption_input
     except Exception as xl_err:
         st.error(f"❌ Lỗi cấu trúc tạo Excel: {str(xl_err)}")
         return None
+
 
 if st.session_state.get("auto_cutting_results") is not None:
     cad_lengths_map = {}
