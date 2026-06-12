@@ -1762,11 +1762,11 @@ elif menu_selection == "🛒 Purchase Consumption":
 
 
 
-    # =============================================================================
+        # =============================================================================
     # KỊCH BẢN CHỨC NĂNG 2: PHÂN HỆ TÁC NGHIỆP BÀN CẮT ĐA GIÀNG HOÀN CHỈNH
     # =============================================================================
     elif menu_sub.startswith("✂️ CHỨC NĂNG 2"):
-        # Khởi tạo các biến trạng thái trong session_state nếu chưa có
+        # Khởi tạo các khóa lưu trữ trạng thái cố định trong bộ nhớ Session
         if "purchase_ready" not in st.session_state:
             st.session_state["purchase_ready"] = False
         if "auto_cutting_results" not in st.session_state: 
@@ -1774,9 +1774,7 @@ elif menu_selection == "🛒 Purchase Consumption":
         if "consumption_activated" not in st.session_state: 
             st.session_state["consumption_activated"] = False
 
-        # ---------------------------------------------------------------------
-        # KIỂM TRA ĐIỀU KIỆN 1: Nếu CHƯA bốc tách file SBD thành công
-        # ---------------------------------------------------------------------
+        # --- ĐIỀU KIỆN 1: Nếu CHƯA bốc tách file SBD thành công ---
         if not st.session_state.get("purchase_ready"):
             st.markdown("""<div class="card-container"><div class="card-section-header">📋 PHÂN HỆ TÁC NGHIỆP BÀN CẮT ĐA GIÀNG</div>
             <p style="color: #64748B; font-size:13px; margin:0;">Chức năng này không cần thông số rập mẫu. Chỉ cần tải lên File SBD số lượng để máy tính tự động chia tỷ lệ bàn cắt.</p></div>""", unsafe_allow_html=True)
@@ -1821,9 +1819,7 @@ elif menu_selection == "🛒 Purchase Consumption":
                         st.session_state["pur_tp_parsed_data"] = {"dummy_status": "skipped_not_needed"}
                         st.session_state["purchase_ready"] = True
                         st.rerun()
-        # ---------------------------------------------------------------------
-        # KIỂM TRA ĐIỀU KIỆN 2: Nếu ĐÃ số hóa xong file SBD -> Vào Form tác nghiệp
-        # ---------------------------------------------------------------------
+        # --- ĐIỀU KIỆN 2: Nếu ĐÃ số hóa xong file SBD -> Hiển thị Form Tác Nghiệp ---
         else:
             sbd_data_store = st.session_state.get("sbd_parsed_data", {})
             
@@ -1831,166 +1827,147 @@ elif menu_selection == "🛒 Purchase Consumption":
                 detected_style_id = sbd_data_store.get("style_id", "UNKNOWN_STYLE")
                 detected_total_po = sbd_data_store.get("total_quantity", 0)
                 size_breakdown_main = sbd_data_store.get("size_breakdown", {})
+                detected_inseam = sbd_data_store.get("inseam_group", "None")
 
                 if st.button("🔄 Tải lên File SBD Khác", type="secondary"):
                     st.session_state["purchase_ready"] = False
                     st.session_state["sbd_parsed_data"] = {}
                     st.session_state["auto_cutting_results"] = None
+                    st.session_state["consumption_activated"] = False
                     st.rerun()
 
                 # KHỐI KHAI BÁO THÔNG SỐ ĐẦU VÀO CỦA MÃ HÀNG HIỆN HÀNH
                 st.markdown("#### 📋 KHAI BÁO THÔNG SỐ TÁC NGHIỆP ĐƠN HÀNG VÀ BÀN VẢI MULTI-INSEAM")
-                input_col1, input_col2, input_col3 = st.columns(3)
-                with input_col1: 
-                    style_id_input = st.text_input("🏷️ Tên mã hàng (Style ID):", value=str(detected_style_id).strip().upper())
-                with input_col2: 
-                    po_qty_input = st.number_input("📦 Số lượng đơn hàng (PO Pcs):", value=int(detected_total_po), step=100)
-                with input_col3: 
-                    consumption_input = st.number_input("🎯 Định mức tài liệu đề xuất (Yds/Pcs):", value=1.140, step=0.001, format="%.3f")
+                
+                # Bọc toàn bộ các ô nhập liệu vào một form cố định để chống lỗi tự động mất dữ liệu khi gõ chữ
+                with st.form("cutting_parameter_form"):
+                    input_col1, input_col2, input_col3 = st.columns(3)
+                    with input_col1: 
+                        style_id_input = st.text_input("🏷️ Tên mã hàng (Style ID):", value=str(detected_style_id).strip().upper())
+                    with input_col2: 
+                        po_qty_input = st.number_input("📦 Số lượng đơn hàng (PO Pcs):", value=int(detected_total_po), step=100)
+                    with input_col3: 
+                        consumption_input = st.number_input("🎯 Định mức tài liệu đề xuất (Yds/Pcs):", value=1.140, step=0.001, format="%.3f")
 
-                input_col4, input_col6 = st.columns(2)
-                with input_col4: 
-                    max_table_length = st.number_input("📏 Chiều gia tối đa bàn vải (Meters):", value=12.00, step=1.0)
-                with input_col6: 
-                    cuttable_width_inch = st.number_input("📐 KHỔ CẮT (Khổ vải đi sơ đồ - Inches):", value=56.00, step=0.50, format="%.2f")
-                
-                st.markdown("<br>", unsafe_allow_html=True)
-                st.markdown("<p style='font-weight:700; font-size:13px; color:#1E3A8A;'>📥 KHU VỰC DÁN DỮ LIỆU CAD (TÊN SƠ ĐỒ & DÀI SƠ ĐỒ COPY TỪ EXCEL)</p>", unsafe_allow_html=True)
-                
-                cad_paste_zone = st.text_area(
-                    "Sau khi xem cấu trúc phối size phía dưới, hãy đi sơ đồ trên máy CAD rồi copy dán kết quả [Tên sơ đồ + Chiều dài mét] vào đây:",
-                    placeholder="Ví dụ dán bảng từ Excel CAD:\nc01 1.05\nc02 10.2", 
-                    height=90, 
-                    key="cad_bulk_paste_c2"
-                )
-                
-                st.markdown("<p style='font-weight:700; font-size:13px; color:#065F46;'>📊 MA TRẬN SẢN LƯỢNG ĐƠN HÀNG (SIZE BREAKDOWN TỪ SBD)</p>", unsafe_allow_html=True)
+                    input_col4, input_col6 = st.columns(2)
+                    with input_col4: 
+                        max_table_length = st.number_input("📏 Chiều gia tối đa bàn vải (Meters):", value=12.00, step=1.0)
+                    with input_col6: 
+                        cuttable_width_inch = st.number_input("📐 KHỔ CẮT (Khổ vải đi sơ đồ - Inches):", value=56.00, step=0.50, format="%.2f")
+                    
+                    st.markdown("<p style='font-weight:700; font-size:13px; color:#1E3A8A;'>📥 KHU VỰC DÁN DỮ LIỆU CAD (TÊN SƠ ĐỒ & DÀI SƠ ĐỒ COPY TỪ EXCEL)</p>", unsafe_allow_html=True)
+                    cad_paste_zone = st.text_area(
+                        "Sau khi xem cấu trúc phối size phía dưới, hãy đi sơ đồ trên máy CAD rồi copy dán kết quả [Tên sơ đồ + Chiều dài mét] vào đây:",
+                        placeholder="Ví dụ dán bảng từ Excel CAD:\nc01 1.05\nc02 10.2", 
+                        height=90, 
+                        key="cad_bulk_paste_c2"
+                    )
+                    
+                    # Nút submit bắt buộc của Form để xử lý kích hoạt thuật toán an toàn
+                    submit_calc = st.form_submit_button("🚀 TỰ ĐỘNG PHÂN BỔ SƠ ĐỒ HÌNH THÁP & ĐỐI CHIẾU CAD", type="primary", use_container_width=True)
+
+                st.markdown("<p style='font-weight:700; font-size:13px; color:#065F46; margin-top:15px;'>📊 MA TRẬN SẢN LƯỢNG ĐƠN HÀNG (SIZE BREAKDOWN TỪ SBD)</p>", unsafe_allow_html=True)
                 if size_breakdown_main:
                     df_size = pd.DataFrame([size_breakdown_main])
                     st.dataframe(df_size, use_container_width=True, hide_index=True)
                 
-                # --- ĐỒNG BỘ TRUY VẤN TÌM KIẾM SUPABASE ---
-                       # ---------------------------------------------------------------------
-        # KIỂM TRA ĐIỀU KIỆN 2: Nếu ĐÃ số hóa xong file SBD -> Vào Form tác nghiệp
-        # ---------------------------------------------------------------------
-        else:
-            sbd_data_store = st.session_state.get("sbd_parsed_data", {})
-            
-            if isinstance(sbd_data_store, dict) and sbd_data_store:
-                # Tạo biến chốt chặn để ép giữ màn hình không tự reset khi bấm nút
-                if "click_auto_cutting" not in st.session_state:
-                    st.session_state["click_auto_cutting"] = False
-
-                detected_style_id = sbd_data_store.get("style_id", "UNKNOWN_STYLE")
-                detected_total_po = sbd_data_store.get("total_quantity", 0)
-                size_breakdown_main = sbd_data_store.get("size_breakdown", {})
-
-                # Nút bấm xóa toàn bộ trạng thái để làm lại từ đầu với file khác
-                if st.button("🔄 Tải lên File SBD Khác", type="secondary"):
-                    st.session_state["purchase_ready"] = False
-                    st.session_state["sbd_parsed_data"] = {}
-                    st.session_state["auto_cutting_results"] = None
-                    st.session_state["click_auto_cutting"] = False
-                    st.session_state["consumption_activated"] = False
-                    st.rerun()
-                # CHỈ CHẠY LOGIC KHI ĐÃ ĐƯỢC ĐÁNH DẤU LÀ BẤM NÚT KÍCH HOẠT KẾT QUẢ
-                if st.session_state["click_auto_cutting"]:
-                    # Chỉ tính toán lại từ đầu nếu dữ liệu trong session đang trống rỗng
-                    if st.session_state["auto_cutting_results"] is None:
-                        with st.spinner("🚀 Hệ thống đang phân bổ sơ đồ hình tháp..."):
-                            import math
-                            cons_meters = consumption_input / 1.09361
-                            max_pcs_per_marker = math.floor(max_table_length / (cons_meters if cons_meters > 0 else 1.0))
-                            if max_pcs_per_marker <= 0: 
-                                max_pcs_per_marker = 6
+                active_sizes = [str(k) for k, v in size_breakdown_main.items() if int(v) > 0]
+                if not active_sizes: 
+                    active_sizes = ["S", "M", "L", "XL", "2XL", "3XL"]
+                # --- XỬ LÝ LOGIC KHI SUBMIT FORM ---
+                if submit_calc:
+                    st.session_state["consumption_activated"] = True if cad_paste_zone.strip() else False
+                    
+                    with st.spinner("🚀 Hệ thống đang xử lý phân bổ sơ đồ hình tháp..."):
+                        import math
+                        cons_meters = consumption_input / 1.09361
+                        max_pcs_per_marker = math.floor(max_table_length / (cons_meters if cons_meters > 0 else 1.0))
+                        if max_pcs_per_marker <= 0: 
+                            max_pcs_per_marker = 6
+                        
+                        balance_tracker = {str(sz): int(size_breakdown_main.get(sz, 0)) for sz in active_sizes}
+                        calculated_steps = []
+                        step_idx = 1
+                        max_loops = 25
+                        
+                        while sum(balance_tracker.values()) > 0 and step_idx <= max_loops:
+                            marker_id = f"c{step_idx:02d}"
+                            if step_idx == 1: target_layers = 150
+                            elif step_idx == 2: target_layers = 120
+                            elif step_idx == 3: target_layers = 90
+                            else: target_layers = 60
                             
-                            balance_tracker = {str(sz): int(size_breakdown_main.get(sz, 0)) for sz in active_sizes}
-                            calculated_steps = []
-                            step_idx = 1
-                            max_loops = 25
+                            sorted_sizes = sorted(balance_tracker.items(), key=lambda x: x[1], reverse=True)
+                            current_ratios = {str(sz): 0 for sz in active_sizes}
+                            assigned_pcs = 0
                             
-                            while sum(balance_tracker.values()) > 0 and step_idx <= max_loops:
-                                marker_id = f"c{step_idx:02d}"
-                                if step_idx == 1: target_layers = 150
-                                elif step_idx == 2: target_layers = 120
-                                elif step_idx == 3: target_layers = 90
-                                else: target_layers = 60
-                                
-                                sorted_sizes = sorted(balance_tracker.items(), key=lambda x: x, reverse=True)
-                                current_ratios = {str(sz): 0 for sz in active_sizes}
-                                assigned_pcs = 0
-                                
-                                max_remaining_bal = max(balance_tracker.values()) if balance_tracker.values() else 0
-                                effective_max_pcs = max_pcs_per_marker
-                                
-                                if max_remaining_bal < target_layers and max_remaining_bal > 0:
-                                    effective_max_pcs = min(2, max_pcs_per_marker)
-                                    target_layers = max_remaining_bal
-                                
+                            max_remaining_bal = max(balance_tracker.values()) if balance_tracker.values() else 0
+                            effective_max_pcs = max_pcs_per_marker
+                            
+                            if max_remaining_bal < target_layers and max_remaining_bal > 0:
+                                effective_max_pcs = min(2, max_pcs_per_marker)
+                                target_layers = max_remaining_bal
+                            
+                            for sz, bal in sorted_sizes:
+                                if bal <= 0 or assigned_pcs >= effective_max_pcs: 
+                                    continue
+                                needed_ratio = math.floor(bal / target_layers)
+                                if needed_ratio > 4: 
+                                    needed_ratio = 4
+                                if needed_ratio == 0 and bal > (target_layers / 2): 
+                                    needed_ratio = 1
+                                if assigned_pcs + needed_ratio > effective_max_pcs: 
+                                    needed_ratio = effective_max_pcs - assigned_pcs
+                                    
+                                current_ratios[sz] = needed_ratio
+                                assigned_pcs += needed_ratio
+                            
+                            if assigned_pcs == 0:
+                                effective_max_pcs = min(2, max_pcs_per_marker)
                                 for sz, bal in sorted_sizes:
-                                    if bal <= 0 or assigned_pcs >= effective_max_pcs: 
-                                        continue
-                                    needed_ratio = math.floor(bal / target_layers)
-                                    if needed_ratio > 4: 
-                                        needed_ratio = 4
-                                    if needed_ratio == 0 and bal > (target_layers / 2): 
-                                        needed_ratio = 1
-                                    if assigned_pcs + needed_ratio > effective_max_pcs: 
-                                        needed_ratio = effective_max_pcs - assigned_pcs
+                                    if bal > 0 and assigned_pcs < effective_max_pcs:
+                                        current_ratios[sz] = 1
+                                        assigned_pcs += 1
                                         
-                                    current_ratios[sz] = needed_ratio
-                                    assigned_pcs += needed_ratio
-                                
-                                if assigned_pcs == 0:
-                                    effective_max_pcs = min(2, max_pcs_per_marker)
-                                    for sz, bal in sorted_sizes:
-                                        if bal > 0 and assigned_pcs < effective_max_pcs:
-                                            current_ratios[sz] = 1
-                                            assigned_pcs += 1
-                                            
-                                layer_candidates = []
-                                for sz in active_sizes:
-                                    rat = current_ratios[sz]
-                                    if rat > 0: 
-                                        layer_candidates.append(math.ceil(balance_tracker[sz] / rat))
-                                
-                                computed_layers = min(layer_candidates) if layer_candidates else target_layers
-                                if computed_layers <= 0: 
-                                    computed_layers = 1
-                                
-                                if computed_layers > 150:
-                                    num_tables = math.ceil(computed_layers / 120)
-                                    computed_layers = math.ceil(computed_layers / num_tables)
-                                else: 
-                                    num_tables = 1
-                                    
-                                calculated_steps.append({
-                                    "Sơ đồ / Trạng thái": marker_id, "Số lớp": computed_layers, "Số bàn": num_tables,
-                                    "Dài sơ đồ": 0.0, "Số sp/SĐ": assigned_pcs, "Ratios": current_ratios.copy()
-                                })
-                                
-                                for sz in active_sizes:
-                                    total_cut = current_ratios[sz] * computed_layers * num_tables
-                                    balance_tracker[sz] = max(0, balance_tracker[sz] - total_cut)
-                                    
-                                calculated_steps.append({
-                                    "Sơ đồ / Trạng thái": "Balance", "Số lớp": "", "Số bàn": "", "Dài sơ đồ": "", "Số sp/SĐ": "",
-                                    "Ratios": balance_tracker.copy()
-                                })
-                                step_idx += 1
+                            layer_candidates = []
+                            for sz in active_sizes:
+                                rat = current_ratios[sz]
+                                if rat > 0: 
+                                    layer_candidates.append(math.ceil(balance_tracker[sz] / rat))
                             
-                            st.session_state["auto_cutting_results"] = calculated_steps
-                            st.rerun()
-
-                # ---------------------------------------------------------------------
-                # BƯỚC 3: LIÊN KẾT ĐỐI CHIẾU DỮ LIỆU Ô CAD & XỬ LÝ MA TRẬN REPORT
-                # ---------------------------------------------------------------------
+                            computed_layers = min(layer_candidates) if layer_candidates else target_layers
+                            if computed_layers <= 0: 
+                                computed_layers = 1
+                            
+                            if computed_layers > 150:
+                                num_tables = math.ceil(computed_layers / 120)
+                                computed_layers = math.ceil(computed_layers / num_tables)
+                            else: 
+                                num_tables = 1
+                                
+                            calculated_steps.append({
+                                "Sơ đồ / Trạng thái": marker_id, "Số lớp": computed_layers, "Số bàn": num_tables,
+                                "Dài sơ đồ": 0.0, "Số sp/SĐ": assigned_pcs, "Ratios": current_ratios.copy()
+                            })
+                            
+                            for sz in active_sizes:
+                                total_cut = current_ratios[sz] * computed_layers * num_tables
+                                balance_tracker[sz] = max(0, balance_tracker[sz] - total_cut)
+                                
+                            calculated_steps.append({
+                                "Sơ đồ / Trạng thái": "Balance", "Số lớp": "", "Số bàn": "", "Dài sơ đồ": "", "Số sp/SĐ": "",
+                                "Ratios": balance_tracker.copy()
+                            })
+                            step_idx += 1
+                        
+                        st.session_state["auto_cutting_results"] = calculated_steps
+                # --- HIỂN THỊ KẾT QUẢ TÁC NGHIỆP ---
                 if st.session_state.get("auto_cutting_results") is not None:
                     import re
                     import io
                     
                     cad_lengths_map = {}
-                    if cad_paste_zone.strip() and st.session_state["consumption_activated"]:
+                    if cad_paste_zone.strip() and st.session_state.get("consumption_activated"):
                         cad_lines = cad_paste_zone.strip().split("\n")
                         for line in cad_lines:
                             if not line.strip(): 
@@ -2017,7 +1994,7 @@ elif menu_selection == "🛒 Purchase Consumption":
                             tables = item["Số bàn"]
                             sp_sd = item["Số sp/SĐ"]
                             current_marker_id = item["Sơ đồ / Trạng thái"].lower().strip()
-                            m_len = cad_lengths_map.get(current_marker_id, 0.0) if st.session_state["consumption_activated"] else 0.0
+                            m_len = cad_lengths_map.get(current_marker_id, 0.0) if st.session_state.get("consumption_activated") else 0.0
                             vail_can_m = m_len * layers * tables
                             total_fabric_m += vail_can_m
                             total_ratios_sum = sum(item["Ratios"].values())
@@ -2044,7 +2021,6 @@ elif menu_selection == "🛒 Purchase Consumption":
                     total_fabric_yds_final = total_fabric_m * 1.09361
                     final_avg_yield = total_fabric_yds_final / (total_cut_pcs_sum if total_cut_pcs_sum > 0 else 1)
                     
-                    # Phân tích cú pháp bẻ chuỗi kích cỡ Inseam đa giàng
                     parsed_size_columns = []
                     for col_name in active_sizes:
                         col_str = str(col_name).strip()
@@ -2066,19 +2042,15 @@ elif menu_selection == "🛒 Purchase Consumption":
                     other_tech_keys = ["Số lớp", "Số bàn", "Dài sơ đồ", "Số sp/SĐ", "Đ.Mức SĐ", "Vải cần (M)"]
                     df_final_report = df_final_report[["SIZE"] + ordered_size_keys + other_tech_keys]
                     
-                    # Hiển thị trực quan bảng dữ liệu lên giao diện chính
                     st.markdown("<p style='font-weight:700; font-size:14px; color:#1E3A8A; margin-top:20px;'>📊 BẢNG TÁC NGHIỆP PHÂN BỔ BÀN CẮT CHI TIẾT</p>", unsafe_allow_html=True)
                     st.dataframe(df_final_report, use_container_width=True, hide_index=True)
-                    # 💾 ĐẨY DỮ LIỆU ĐỒNG BỘ LÊN DATABSE SUPABASE
+                    # --- ĐẨY DỮ LIỆU ĐỒNG BỘ LÊN DATABSE SUPABASE ---
                     if st.button("💾 ĐẨY DỮ LIỆU TÁC NGHIỆP LÊN DATABASE SUPABASE", type="secondary", use_container_width=True, key="sb_sync_btn_c2_v2"):
                         try:
                             payload_db = {
-                                "style_name": str(style_id_input).strip().upper(), 
-                                "po_quantity": int(po_qty_input),
-                                "planned_cut_pcs": int(total_cut_pcs_sum), 
-                                "consumption_value": str(round(final_avg_yield, 3)),
-                                "total_material_value": str(round(total_fabric_yds_final, 2)), 
-                                "cuttable_width_inch": float(cuttable_width_inch)
+                                "style_name": str(style_id_input).strip().upper(), "po_quantity": int(po_qty_input),
+                                "planned_cut_pcs": int(total_cut_pcs_sum), "consumption_value": str(round(final_avg_yield, 3)),
+                                "total_material_value": str(round(total_fabric_yds_final, 2)), "cuttable_width_inch": float(cuttable_width_inch)
                             }
                             sb_instance = globals().get("supabase", globals().get("supabase_client", st.session_state.get("supabase")))
                             if sb_instance:
@@ -2095,12 +2067,9 @@ elif menu_selection == "🛒 Purchase Consumption":
                         with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
                             header_data = {
                                 "THÔNG TIN ĐƠN HÀNG TÁC NGHIỆP BÀN CẮT CHUẨN": [
-                                    f"Mã hàng (Style Name): {style_id_input}", 
-                                    f"Số lượng đơn hàng (PO Qty): {po_qty_input} Pcs",
-                                    f"Sản lượng kế hoạch cắt (Planned Cut): {total_cut_pcs_sum} Pcs", 
-                                    f"Định mức tài liệu đề xuất: {consumption_input:.3f} Yds/Pcs",
-                                    f"Định mức tác nghiệp thực tế: {final_avg_yield:.3f} Yds/Pcs", 
-                                    f"Khổ cắt: {cuttable_width_inch}\""
+                                    f"Mã hàng (Style Name): {style_id_input}", f"Số lượng đơn hàng (PO Qty): {po_qty_input} Pcs",
+                                    f"Sản lượng kế hoạch cắt (Planned Cut): {total_cut_pcs_sum} Pcs", f"Định mức tài liệu đề xuất: {consumption_input:.3f} Yds/Pcs",
+                                    f"Định mức tác nghiệp thực tế: {final_avg_yield:.3f} Yds/Pcs", f"Khổ cắt: {cuttable_width_inch}\""
                                 ]
                             }
                             pd.DataFrame(header_data).to_excel(writer, sheet_name="BaoCao_TacNghiep", index=False, startrow=0)
@@ -2108,10 +2077,8 @@ elif menu_selection == "🛒 Purchase Consumption":
                             excel_multi_cols = [("", "SIZE")]
                             for item in parsed_size_columns:
                                 s_val = item['size_num']
-                                try: 
-                                    export_size_label = int(s_val) if str(s_val).isdigit() else float(s_val)
-                                except ValueError: 
-                                    export_size_label = s_val
+                                try: export_size_label = int(s_val) if str(s_val).isdigit() else float(s_val)
+                                except ValueError: export_size_label = s_val
                                 excel_multi_cols.append((f"GIÀNG {item['giang_num']}", export_size_label))
                                 
                             for col_name in other_tech_keys:
@@ -2120,7 +2087,7 @@ elif menu_selection == "🛒 Purchase Consumption":
                             df_excel_export = df_final_report.copy()
                             df_excel_export.columns = pd.MultiIndex.from_tuples(excel_multi_cols)
                             
-                            # 🎯 ĐÃ SỬA LỖI: index=True bắt buộc đối với MultiIndex tránh lỗi NotImplementedError
+                            # 🎯 Bắt buộc đặt index=True khi xuất MultiIndex để triệt tiêu lỗi hệ thống
                             df_excel_export.to_excel(writer, sheet_name="BaoCao_TacNghiep", index=True, startrow=8)
                             
                         st.download_button(
