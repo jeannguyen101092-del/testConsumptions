@@ -1870,79 +1870,7 @@ elif menu_selection == "🛒 Purchase Consumption":
                     except Exception:
                         pass
 
-              
-                detected_inseam = sbd_data_store.get("inseam_group", "None")
-                st.markdown(f"**📌 Nhóm Inseam hiện hành:** `{detected_inseam}`")
-                
-                                # =============================================================================
-                # ĐOẠN 1: TỐI ƯU HÓA PROMPT CHO GEMINI-2.5-FLASH CHẠY SIÊU TỐC TIẾT KIỆM CHI PHÍ
-                # =============================================================================
-                st.markdown("<br>", unsafe_allow_html=True)
-                
-                active_sizes = [str(k) for k, v in size_breakdown_main.items() if int(v) > 0]
-                if not active_sizes:
-                    active_sizes = ["S", "M", "L", "XL", "2XL", "3XL"]
-                
-                detected_inseam = sbd_data_store.get("inseam_group", "None")
-                st.markdown(f"**📌 Nhóm Inseam hiện hành:** `{detected_inseam}`")
-                
-                btn_col1, btn_col2 = st.columns(2)
-                with btn_col1:
-                    trigger_auto_cutting = st.button("⚡ 1. KÍCH HOẠT TÍNH TÁC NGHIỆP SƠ ĐỒ (AI ENGINE)", type="primary", use_container_width=True, key="c2_ai_engine_cut_btn")
-                with btn_col2:
-                    trigger_consumption = st.button("📊 2. KÍCH HOẠT TÍNH ĐỊNH MỨC (KHI ĐÃ CÓ CAD)", type="secondary", use_container_width=True, key="c2_ai_engine_cons_btn")
-
-                if "auto_cutting_results" not in st.session_state:
-                    st.session_state["auto_cutting_results"] = None
-                if "consumption_activated" not in st.session_state:
-                    st.session_state["consumption_activated"] = False
-
-                if trigger_auto_cutting:
-                    st.session_state["consumption_activated"] = False
-                    with st.spinner("🚀 AI Flash đang giải toán siêu tốc..."):
-                        if "get_secure_gemini_key" in globals(): 
-                            gemini_key = get_secure_gemini_key()
-                        else: 
-                            gemini_key = st.secrets.get("GEMINI_API_KEY", "").strip()
-                        
-                        client_ai = genai.Client(api_key=gemini_key)
-                        
-                        # 🎯 CẢI TIẾN: Thu gọn Prompt ngắn nhất có thể để Flash xử lý trong 1 giây
-                        ai_cutting_prompt = f"""
-                        Return a raw JSON list for a cutting plan based on this data: {json.dumps(size_breakdown_main)}.
-                        Rules:
-                        1. Use inverted pyramid. Max products per marker is {max_pcs_per_marker}.
-                        2. Long marker MUST have 100-150 layers. 
-                        3. If remaining quantity is small, shorten marker length to 1-2 products so layers stay thick (>=50 layers).
-                        4. Alternate each marker row with a "Balance" row.
-                        
-                        Format: [
-                          {{"Sơ đồ / Trạng thái": "c01", "Số lớp": 150, "Số bàn": 1, "Số sp/SĐ": 8, "Ratios": {{"size": 1}}}},
-                          {{"Sơ đồ / Trạng thái": "Balance", "Số lớp": "", "Số bàn": "", "Số sp/SĐ": "", "Ratios": {{"size": 0}}}}
-                        ]
-                        """
-                        try:
-                            res_ai = client_ai.models.generate_content(
-                                model='gemini-2.5-flash', # 💸 Giữ nguyên bản Flash để tiết kiệm tiền
-                                contents=[types.Part.from_text(text=ai_cutting_prompt)],
-                                config=types.GenerateContentConfig(response_mime_type="application/json")
-                            )
-                            st.session_state["auto_cutting_results"] = json.loads(res_ai.text.strip().replace("```json", "").replace("```", "").strip())
-                            st.success("🎉 Đã lập kế hoạch xong!")
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"❌ Sự cố: {str(e)}")
-
-                if trigger_consumption:
-                    st.session_state["consumption_activated"] = True
-                    st.rerun()
-
-
-
-
-
-
-                                             # BƯỚC 3: LIÊN KẾT ĐỐI CHIẾU DỮ LIỆU Ô CAD, ĐẨY SUPABASE & KẾT XUẤT EXCEL
+                              # BƯỚC 3: LIÊN KẾT ĐỐI CHIẾU DỮ LIỆU Ô CAD, ĐẨY SUPABASE & KẾT XUẤT EXCEL
                 if st.session_state.get("auto_cutting_results") is not None:
                     import re
                     import io
@@ -1969,17 +1897,16 @@ elif menu_selection == "🛒 Purchase Consumption":
                             display_row[sz] = item["Ratios"].get(sz, 0)
                             
                         if item["Sơ đồ / Trạng thái"] != "Balance":
-                            # Ép kiểu an toàn dữ liệu từ AI trả về
-                            layers = int(item["Số lớp"]) if str(item["Số lớp"]).isdigit() else 0
-                            tables = int(item["Số bàn"]) if str(item["Số bàn"]).isdigit() else 1
-                            sp_sd = int(item["Số sp/SĐ"]) if str(item["Số sp/SĐ"]).isdigit() else 0
+                            layers = item["Số lớp"]
+                            tables = item["Số bàn"]
+                            sp_sd = item["Số sp/SĐ"]
                             current_marker_id = item["Sơ đồ / Trạng thái"].lower().strip()
                             
                             m_len = cad_lengths_map.get(current_marker_id, 0.0) if st.session_state["consumption_activated"] else 0.0
                             vail_can_m = m_len * layers * tables
                             total_fabric_m += vail_can_m
                             
-                            total_ratios_sum = sum(int(v) for v in item["Ratios"].values() if str(v).isdigit())
+                            total_ratios_sum = sum(item["Ratios"].values())
                             pcs_cut = total_ratios_sum * layers * tables
                             total_cut_pcs_sum += pcs_cut
                             
@@ -1995,6 +1922,7 @@ elif menu_selection == "🛒 Purchase Consumption":
                             display_row["Số lớp"] = ""
                             display_row["Số bàn"] = ""
                             display_row["Dài sơ đồ"] = ""
+                            display_row["Phần trăm hụt"] = ""
                             display_row["Số sp/SĐ"] = ""
                             display_row["Đ.Mức SĐ"] = ""
                             display_row["Vải cần (M)"] = ""
@@ -2004,8 +1932,7 @@ elif menu_selection == "🛒 Purchase Consumption":
                     total_fabric_yds_final = total_fabric_m * 1.09361
                     final_avg_yield = total_fabric_yds_final / (total_cut_pcs_sum if total_cut_pcs_sum > 0 else 1)
                     
-                    # 💾 ĐẨY DỮ LIỆU ĐỒNG BỘ LÊN SUPABASE
-                    if st.button("💾 ĐẨY DỮ LIỆU TÁC NGHIỆP LÊN DATABASE SUPABASE", type="secondary", use_container_width=True, key="c2_supabase_sync_save_btn"):
+                    if st.button("💾 ĐẨY DỮ LIỆU TÁC NGHIỆP LÊN DATABASE SUPABASE", type="secondary", use_container_width=True):
                         try:
                             payload_db = {
                                 "style_name": str(style_id_input).strip().upper(), "po_quantity": int(po_qty_input),
@@ -2018,39 +1945,6 @@ elif menu_selection == "🛒 Purchase Consumption":
                                 st.success(f"🎉 Đã đồng bộ dữ liệu mã hàng {style_id_input} lên hệ thống Supabase thành công!")
                         except Exception as db_err:
                             st.error(f"Lỗi khi đẩy dữ liệu lên Supabase: {str(db_err)}")
-
-                    # Sắp xếp và phân nhóm các cột Giàng & Size trần
-                    parsed_size_columns = []
-                    for col_name in active_sizes:
-                        col_str = str(col_name).strip()
-                        if any(char in col_str.lower() for char in ["x", "-", "/"]):
-                            parts = re.split(r'[\sXx\-\/]+', col_str)
-                            if len(parts) >= 2:
-                                parsed_size_columns.append({"original": col_name, "size_num": parts.strip(), "giang_num": parts.strip()})
-                            else:
-                                parsed_size_columns.append({"original": col_name, "size_num": col_str, "giang_num": str(detected_inseam)})
-                        else:
-                            parsed_size_columns.append({"original": col_name, "size_num": col_str, "giang_num": str(detected_inseam)})
-
-                    try:
-                        parsed_size_columns.sort(key=lambda x: (int(re.sub(r'\D', '', x['giang_num'])), int(re.sub(r'\D', '', x['size_num']))))
-                    except Exception:
-                        parsed_size_columns.sort(key=lambda x: (x['giang_num'], x['size_num']))
-
-                    ordered_size_keys = [item["original"] for item in parsed_size_columns]
-                    other_tech_keys = ["Số lớp", "Số bàn", "Dài sơ đồ", "Số sp/SĐ", "Đ.Mức SĐ", "Vải cần (M)"]
-                    df_final_report = df_final_report[["SIZE"] + ordered_size_keys + other_tech_keys]
-
-                    # Dựng mảng MultiIndex cho tiêu đề lồng nhóm
-                    multi_cols_tuples = [("", "SIZE")]
-                    for item in parsed_size_columns:
-                        multi_cols_tuples.append((f"GIÀNG: {item['giang_num']}", item['size_num']))
-                    for col_name in other_tech_keys:
-                        multi_cols_tuples.append(("THÔNG SỐ TÁC NGHIỆP", col_name))
-                    
-                    df_final_report.columns = pd.MultiIndex.from_tuples(multi_cols_tuples)
-
-                    # Nhuộm màu vàng full bảng 100% bằng hàm dò dòng Index
                     def style_full_balance_rows(row):
                         if row.iloc == "Balance":
                             return ['background-color: #FEF08A; color: #991B1B; font-weight: 700; border: 1px solid #FDE047;'] * len(row)
@@ -2071,4 +1965,4 @@ elif menu_selection == "🛒 Purchase Consumption":
                         variance = final_avg_yield - consumption_input if total_fabric_m > 0 and st.session_state["consumption_activated"] else 0.0
                         st.metric("Chênh lệch so với tài liệu", f"{variance:+.3f}" if st.session_state["consumption_activated"] else "0.000", delta_color="inverse" if variance > 0 else "normal")
                 else:
-                    st.info("💡 Quy trình: Bấm nút 1 để AI chạy kế hoạch sơ đồ -> Điền độ dài CAD -> Bấm nút 2 để kích hoạt định mức thực tế.")
+                    st.info("💡 Quy trình: Bấm nút 1 để chạy kế hoạch sơ đồ -> Điền độ dài CAD -> Bấm nút 2 để kích hoạt định mức thực tế.")
