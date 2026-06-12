@@ -1872,3 +1872,61 @@ elif menu_selection == "🛒 Purchase Consumption":
                     height=90, 
                     key="cad_bulk_paste_c2"
                 )
+                # ---- ĐOẠN CODE VIẾT TIẾP NGAY DƯỚI CAD_PASTE_ZONE ----
+                
+                # 1. HIỂN THỊ MA TRẬN SẢN LƯỢNG SIZE ĐÃ BÓC TÁCH ĐỂ ĐI SƠ ĐỒ
+                st.markdown("<p style='font-weight:700; font-size:13px; color:#065F46;'>📊 MA TRẬN SẢN LƯỢNG ĐƠN HÀNG (SIZE BREAKDOWN TỪ SBD)</p>", unsafe_allow_html=True)
+                
+                if size_breakdown_main:
+                    # Chuyển đổi dict size thành DataFrame để hiển thị dạng bảng trực quan
+                    df_size = pd.DataFrame([size_breakdown_main])
+                    st.dataframe(df_size, use_container_width=True, hide_index=True)
+                    
+                    # Tính toán tổng kiểm tra so với số lượng input
+                    total_calculated_qty = sum(int(v) for v in size_breakdown_main.values() if str(v).isdigit())
+                    if total_calculated_qty != po_qty_input:
+                        st.warning(f"⚠️ Lưu ý: Tổng sản lượng cộng dồn theo các size ({total_calculated_qty} Pcs) đang lệch so với tổng lượng PO nhập ở trên ({po_qty_input} Pcs).")
+                else:
+                    st.info("💡 Không tìm thấy dữ liệu chia size chi tiết từ file SBD. Vui lòng nhập thủ công bên dưới nếu cần.")
+
+                # 2. XỬ LÝ DỮ LIỆU CAD KHI NGƯỜI DÙNG DÁN VÀO TRƯỜNG CAD_PASTE_ZONE
+                if cad_paste_zone.strip():
+                    st.markdown("#### ✂️ KẾT QUẢ ĐỒNG BỘ VÀ TÍNH TOÁN HIỆU SUẤT BÀN CẮT")
+                    
+                    cad_lines = cad_paste_zone.strip().split("\n")
+                    parsed_cad_data = []
+                    total_marker_length_meters = 0.0
+                    
+                    for line in cad_lines:
+                        parts = line.split()
+                        if len(parts) >= 2:
+                            marker_name = parts[0]
+                            try:
+                                # Lấy phần tử cuối cùng làm chiều dài sơ đồ (Meters)
+                                marker_len = float(parts[-1])
+                                parsed_cad_data.append({"Tên Sơ Đồ": marker_name, "Dài Sơ Đồ (Meters)": marker_len})
+                                total_marker_length_meters += marker_len
+                            except ValueError:
+                                pass
+                    
+                    if parsed_cad_data:
+                        # Hiển thị bảng dữ liệu CAD đã đồng bộ thành công
+                        df_cad = pd.DataFrame(parsed_cad_data)
+                        st.table(df_cad)
+                        
+                        # Tính toán các chỉ số tác nghiệp kinh doanh vải cơ bản
+                        total_marker_length_yards = total_marker_length_meters * 1.09361
+                        est_consumption = total_marker_length_yards / (po_qty_input if po_qty_input > 0 else 1)
+                        
+                        # Hiển thị thẻ báo cáo chỉ số nhanh (Key Metrics)
+                        m_col1, m_col2, m_col3 = st.columns(3)
+                        with m_col1:
+                            st.metric("Tổng chiều dài sơ đồ", f"{total_marker_length_meters:.2f} M")
+                        with m_col2:
+                            st.metric("Định mức thực tế (Yds/Pcs)", f"{est_consumption:.3f}")
+                        with m_col3:
+                            # Đo lường độ lệch so với định mức tài liệu đề xuất ban đầu
+                            variance = est_consumption - consumption_input
+                            st.metric("Chênh lệch định mức", f"{variance:+.3f}", delta_color="inverse" if variance > 0 else "normal")
+                    else:
+                        st.error("❌ Cú pháp dữ liệu CAD không hợp lệ. Vui lòng dán theo đúng định dạng cấu trúc: [Tên_sơ_đồ Chieu_dai_so_do]")
