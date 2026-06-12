@@ -1889,10 +1889,33 @@ elif menu_selection == "🛒 Purchase Consumption":
                 if "consumption_activated" not in st.session_state:
                     st.session_state["consumption_activated"] = False
 
-                # BƯỚC 1: CHẠY THUẬT TOÁN HÌNH THÁP NGƯỢC CHUẨN SỐ LỚP
+                                # =============================================================================
+                # ĐOẠN 1: THUẬT TOÁN HÌNH THÁP NGƯỢC ƯU TIÊN SỐ LỚP NHIỀU, TỶ LỆ THEO LỚP CHUẨN
+                # =============================================================================
+                st.markdown("<br>", unsafe_allow_html=True)
+                
+                active_sizes = [str(k) for k, v in size_breakdown_main.items() if int(v) > 0]
+                if not active_sizes:
+                    active_sizes = ["S", "M", "L", "XL", "2XL", "3XL"]
+                
+                detected_inseam = sbd_data_store.get("inseam_group", "None")
+                st.markdown(f"**📌 Nhóm Inseam hiện hành:** `{detected_inseam}`")
+                
+                # Bộ đôi hai nút bấm kích hoạt quy trình sản xuất độc lập
+                btn_col1, btn_col2 = st.columns(2)
+                with btn_col1:
+                    trigger_auto_cutting = st.button("⚡ 1. KÍCH HOẠT TÍNH TÁC NGHIỆP SƠ ĐỒ (HÌNH THÁP)", type="primary", use_container_width=True)
+                with btn_col2:
+                    trigger_consumption = st.button("📊 2. KÍCH HOẠT TÍNH ĐỊNH MỨC (KHI ĐÃ CÓ CAD)", type="secondary", use_container_width=True)
+
+                if "auto_cutting_results" not in st.session_state:
+                    st.session_state["auto_cutting_results"] = None
+                if "consumption_activated" not in st.session_state:
+                    st.session_state["consumption_activated"] = False
+
                 if trigger_auto_cutting:
                     st.session_state["consumption_activated"] = False
-                    with st.spinner("🔮 Hệ thống đang phân bổ sơ đồ hình tháp..."):
+                    with st.spinner("🔮 Hệ thống đang phân bổ sơ đồ hình tháp ngược ưu tiên số lớp nhiều..."):
                         import math
                         cons_meters = consumption_input / 1.09361
                         max_pcs_per_marker = math.floor(max_table_length / (cons_meters if cons_meters > 0 else 1.0))
@@ -1905,63 +1928,91 @@ elif menu_selection == "🛒 Purchase Consumption":
                         
                         while sum(balance_tracker.values()) > 0 and step_idx <= max_loops:
                             marker_id = f"c{step_idx:02d}"
-                            sorted_sizes = sorted(balance_tracker.items(), key=lambda x: x, reverse=True)
+                            
+                            # 🎯 BƯỚC A: Xác định SỐ LỚP VẢI trước (Ưu tiên số lớp nhiều để kinh tế bàn cắt)
+                            # Các sơ đồ đầu (đỉnh tháp) ép chạy lớp dày từ 100 - 150 lớp. Hạ dần ở sơ đồ đuôi.
+                            if step_idx == 1: target_layers = 150
+                            elif step_idx == 2: target_layers = 120
+                            elif step_idx == 3: target_layers = 90
+                            else: target_layers = 50
+                            
+                            # Lấy các size đang còn tồn sản lượng lớn nhất xếp từ cao xuống thấp
+                            sorted_sizes = sorted(balance_tracker.items(), key=lambda x: x[1], reverse=True)
+                            
                             current_ratios = {sz: 0 for sz in active_sizes}
                             assigned_pcs = 0
                             
+                            # 🎯 BƯỚC B: Phối tỷ lệ dựa trên SỐ LỚP mục tiêu
                             for sz, bal in sorted_sizes:
-                                if bal <= 0 or assigned_pcs >= max_pcs_per_marker: continue
-                                if step_idx == 1: ratio_to_give = min(4, math.ceil(bal / 120))
-                                elif step_idx == 2: ratio_to_give = min(3, math.ceil(bal / 80))
-                                elif step_idx == 3: ratio_to_give = min(2, math.ceil(bal / 50))
-                                else: ratio_to_give = 1
-                                    
-                                if assigned_pcs + ratio_to_give > max_pcs_per_marker:
-                                    ratio_to_give = max_pcs_per_marker - assigned_pcs
-                                current_ratios[sz] = ratio_to_give
-                                assigned_pcs += ratio_to_give
-                            
-                            if assigned_pcs == 0:
-                                current_ratios[sorted_sizes] = 1
-                                assigned_pcs = 1
+                                if bal <= 0 or assigned_pcs >= max_pcs_per_marker: 
+                                    continue
                                 
-                            base_layers_per_pc = 25 
-                            computed_layers = int(assigned_pcs * base_layers_per_pc)
+                                # Tính toán tỷ lệ cần đi trên sơ đồ để triệt tiêu mốc sản lượng với số lớp quy định
+                                needed_ratio = math.floor(bal / target_layers)
+                                
+                                # Khống chế biên độ tỷ lệ từ 1 đến tối đa 4 sản phẩm cho một size trên một sơ đồ
+                                if needed_ratio > 4: needed_ratio = 4
+                                if needed_ratio == 0 and bal > (target_layers / 2): 
+                                    # Nếu sản lượng còn lại vẫn đủ lớn hơn nửa bàn vải, ép đi tỷ lệ 1
+                                    needed_ratio = 1
+                                    
+                                # Khống chế không vượt quá giới hạn tổng sản phẩm của chiều dài bàn vải tối đa
+                                if assigned_pcs + needed_ratio > max_pcs_per_marker:
+                                    needed_ratio = max_pcs_per_marker - assigned_pcs
+                                    
+                                current_ratios[sz] = needed_ratio
+                                assigned_pcs += needed_ratio
                             
-                            for sz, rat in current_ratios.items():
+                            # Nếu tất cả đều bằng 0 do sản lượng còn lại quá ít, hốt nốt lượng hàng đuôi
+                            if assigned_pcs == 0:
+                                for sz, bal in sorted_sizes:
+                                    if bal > 0 and assigned_pcs < max_pcs_per_marker:
+                                        current_ratios[sz] = 1
+                                        assigned_pcs += 1
+                                        
+                            # 🎯 BƯỚC C: Tính lại Số lớp vải thực tế chuẩn xác tuyệt đối theo tỷ lệ phối
+                            layer_candidates = []
+                            for sz in active_sizes:
+                                rat = current_ratios[sz]
                                 if rat > 0:
-                                    max_allowable_layers = math.ceil(balance_tracker[sz] / rat)
-                                    if computed_layers > max_allowable_layers:
-                                        computed_layers = max_allowable_layers
-
+                                    layer_candidates.append(math.ceil(balance_tracker[sz] / rat))
+                            
+                            computed_layers = min(layer_candidates) if layer_candidates else target_layers
                             if computed_layers <= 0: computed_layers = 1
-                            if computed_layers > 120:
+                            
+                            # Quản lý số bàn cắt trải vải
+                            if computed_layers > 150:
                                 num_tables = math.ceil(computed_layers / 120)
                                 computed_layers = math.ceil(computed_layers / num_tables)
                             else:
                                 num_tables = 1
                                 
+                            # Lưu dòng dữ liệu sơ đồ hiện hành
                             calculated_steps.append({
                                 "Sơ đồ / Trạng thái": marker_id,
                                 "Số lớp": computed_layers, "Số bàn": num_tables,
                                 "Dài sơ đồ": 0.0, "Số sp/SĐ": assigned_pcs, "Ratios": current_ratios
                             })
                             
+                            # Triệt tiêu sản lượng thực tế đã xử lý ra khỏi quỹ đơn hàng
                             for sz in active_sizes:
                                 total_cut = current_ratios[sz] * computed_layers * num_tables
                                 balance_tracker[sz] = max(0, balance_tracker[sz] - total_cut)
                                 
+                            # Ghi nhận dòng Balance màu vàng kế tiếp
                             calculated_steps.append({
                                 "Sơ đồ / Trạng thái": "Balance",
                                 "Số lớp": "", "Số bàn": "", "Dài sơ đồ": "", "Số sp/SĐ": "",
                                 "Ratios": {sz: balance_tracker[sz] for sz in active_sizes}
                             })
                             step_idx += 1
+                            
                         st.session_state["auto_cutting_results"] = calculated_steps
 
                 if trigger_consumption:
                     st.session_state["consumption_activated"] = True
                     st.rerun()
+
                                # BƯỚC 3: LIÊN KẾT ĐỐI CHIẾU DỮ LIỆU Ô CAD, ĐẨY SUPABASE & KẾT XUẤT EXCEL
                 if st.session_state.get("auto_cutting_results") is not None:
                     import re
