@@ -1964,7 +1964,7 @@ elif menu_selection == "🛒 Purchase Consumption":
                 if trigger_consumption:
                     st.session_state["consumption_activated"] = True
                     st.rerun()
-                # BƯỚC 3: LIÊN KẾT ĐỐI CHIẾU DỮ LIỆU Ô CAD, ĐẨY SUPABASE & KẾT XUẤT EXCEL
+               # BƯỚC 3: LIÊN KẾT ĐỐI CHIẾU DỮ LIỆU Ô CAD, ĐẨY SUPABASE & KẾT XUẤT EXCEL
                 if st.session_state.get("auto_cutting_results") is not None:
                     import re
                     import io
@@ -2047,7 +2047,6 @@ elif menu_selection == "🛒 Purchase Consumption":
                         st.download_button(label="📥 XUẤT FILE EXCEL TÁC NGHIỆP CHUẨN THƯƠNG MẠI", data=buffer.getvalue(), file_name=f"BÁO_CÁO_TÁC_NGHIỆP_BÀN_CẮT_{style_id_input}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
                     except Exception: pass
 
-                    # Căn lề lùi 20 khoảng trắng chuẩn chỉ cho biến ma trận size
                     parsed_size_columns = []
                     for col_name in active_sizes:
                         col_str = str(col_name).strip()
@@ -2064,17 +2063,19 @@ elif menu_selection == "🛒 Purchase Consumption":
                     other_tech_keys = ["Số lớp", "Số bàn", "Dài sơ đồ", "Số sp/SĐ", "Đ.Mức SĐ", "Vải cần (M)"]
                     df_final_report = df_final_report[["SIZE"] + ordered_size_keys + other_tech_keys]
 
+                    # 🎯 SỬA CHÍNH XÁC: Ép cấu trúc tiêu đề MultiIndex lên DataFrame TRƯỚC
+                    multi_cols_tuples = [("", "SIZE")]
+                    for item in parsed_size_columns: multi_cols_tuples.append((f"GIÀNG: {item['giang_num']}", item['size_num']))
+                    for col_name in other_tech_keys: multi_cols_tuples.append(("THÔNG SỐ TÁC NGHIỆP", col_name))
+                    df_final_report.columns = pd.MultiIndex.from_tuples(multi_cols_tuples)
+
+                    # 🎯 SỬA CHÍNH XÁC: Quét Styler theo chỉ mục hàng (row.iloc[0]) sau khi bảng đã đổi cấu trúc để tránh lỗi KeyError
                     def style_full_balance_rows(row):
                         if row.iloc[0] == "Balance":
                             return ['background-color: #FEF08A; color: #991B1B; font-weight: 700; border: 1px solid #FDE047;'] * len(row)
                         return [''] * len(row)
                     
                     styled_df_report = df_final_report.style.apply(style_full_balance_rows, axis=1)
-
-                    multi_cols_tuples = [("", "SIZE")]
-                    for item in parsed_size_columns: multi_cols_tuples.append((f"GIÀNG: {item['giang_num']}", item['size_num']))
-                    for col_name in other_tech_keys: multi_cols_tuples.append(("THÔNG SỐ TÁC NGHIỆP", col_name))
-                    df_final_report.columns = pd.MultiIndex.from_tuples(multi_cols_tuples)
 
                     st.markdown("<p style='font-weight:700; font-size:14px; color:#1E3A8A; margin-top:15px;'>📊 BẢNG THEO DÕI TÁC NGHIỆP & CÂN ĐỐI ĐƠN HÀNG MULTI-INSEAM</p>", unsafe_allow_html=True)
                     st.dataframe(styled_df_report, use_container_width=True, hide_index=True)
