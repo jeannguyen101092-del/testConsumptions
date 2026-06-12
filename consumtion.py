@@ -2071,7 +2071,11 @@ elif menu_selection == "🛒 Purchase Consumption":
                     with m_col2:
                         st.metric("Định mức trung bình (Đ.Mức TB)", f"{final_avg_yield:.3f} Yds/Pcs" if st.session_state["consumption_activated"] else "0.000 Yds/Pcs")
                     with m_col3:
-                        variance = final_avg_yield - consumption_input if total_fabric_m > 0 and st.session_state["consumption_activated"] else 0.0
-                        st.metric("Chênh lệch so với tài liệu", f"{variance:+.3f}" if st.session_state["consumption_activated"] else "0.000", delta_color="inverse" if variance > 0 else "normal")
+                        # Đoạn metrics cuối bảng của bạn nằm ở đây
+                    variance = final_avg_yield - consumption_input if total_fabric_m > 0 and st.session_state["consumption_activated"] else 0.0
+                    st.metric("Chênh lệch so với tài liệu", f"{variance:+.3f}" if st.session_state["consumption_activated"] else "0.000", delta_color="inverse" if variance > 0 else "normal")
+                
+                # 🎯 ĐÃ SỬA: Đóng chính xác lề else cho quy trình chờ nhập CAD ban đầu
                 else:
                     st.info("💡 Quy trình: Bấm nút 1 để chạy kế hoạch sơ đồ -> Điền độ dài CAD -> Bấm nút 2 để kích hoạt định mức thực tế.")
+
