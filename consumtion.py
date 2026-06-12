@@ -1964,13 +1964,23 @@ elif menu_selection == "🛒 Purchase Consumption":
                 if trigger_consumption:
                     st.session_state["consumption_activated"] = True
                     st.rerun()
-               # # BƯỚC 3: LIÊN KẾT ĐỐI CHIẾU DỮ LIỆU Ô CAD, ĐẨY SUPABASE & KẾT XUẤT EXCEL ĐÓNG KHUNG CHUẨN
+# ==============================================================================
+# BƯỚC 3: LIÊN KẾT ĐỐI CHIẾU DỮ LIỆU Ô CAD, ĐẨY SUPABASE & KẾT XUẤT EXCEL
+# ==============================================================================
+
+# Kiểm tra xem dữ liệu tính toán đã sẵn sàng trong session chưa
 if st.session_state.get("auto_cutting_results") is not None:
     import re
     import io
-    
+    import pandas as pd
+
+    # Khởi tạo trạng thái render cố định nếu chưa có
+    if "render_final_report" not in st.session_state:
+        st.session_state["render_final_report"] = True
+
+    # 1. LOGIC XỬ LÝ DỮ LIỆU ĐẦU VÀO (Chỉ chạy tính toán nền)
     cad_lengths_map = {}
-    if cad_paste_zone.strip() and st.session_state["consumption_activated"]:
+    if cad_paste_zone.strip() and st.session_state.get("consumption_activated"):
         cad_lines = cad_paste_zone.strip().split("\n")
         for line in cad_lines:
             if not line.strip(): continue
@@ -1991,7 +2001,7 @@ if st.session_state.get("auto_cutting_results") is not None:
         if item["Sơ đồ / Trạng thái"] != "Balance":
             layers = item["Số lớp"]; tables = item["Số bàn"]; sp_sd = item["Số sp/SĐ"]
             current_marker_id = item["Sơ đồ / Trạng thái"].lower().strip()
-            m_len = cad_lengths_map.get(current_marker_id, 0.0) if st.session_state["consumption_activated"] else 0.0
+            m_len = cad_lengths_map.get(current_marker_id, 0.0) if st.session_state.get("consumption_activated") else 0.0
             vail_can_m = m_len * layers * tables
             total_fabric_m += vail_can_m
             total_ratios_sum = sum(item["Ratios"].values())
@@ -2009,28 +2019,8 @@ if st.session_state.get("auto_cutting_results") is not None:
     df_final_report = pd.DataFrame(final_rows_display)
     total_fabric_yds_final = total_fabric_m * 1.09361
     final_avg_yield = total_fabric_yds_final / (total_cut_pcs_sum if total_cut_pcs_sum > 0 else 1)
-    
-    # 💾 ĐẨY DỮ LIỆU ĐỒNG BỘ LÊN DATABSE SUPABASE (SỬA LẠI ĐỂ HOẠT ĐỘNG ÔN ĐỊNH)
-    if st.button("💾 ĐẨY DỮ LIỆU TÁC NGHIỆP LÊN DATABASE SUPABASE", type="primary", use_container_width=True, key="sb_sync_btn_c2_v2"):
-        try:
-            payload_db = {
-                "style_name": str(style_id_input).strip().upper(), 
-                "po_quantity": int(po_qty_input),
-                "planned_cut_pcs": int(total_cut_pcs_sum), 
-                "consumption_value": str(round(final_avg_yield, 3)),
-                "total_material_value": str(round(total_fabric_yds_final, 2)), 
-                "cuttable_width_inch": float(cuttable_width_inch)
-            }
-            sb_instance = globals().get("supabase", globals().get("supabase_client", st.session_state.get("supabase")))
-            if sb_instance:
-                sb_instance.table("tac_nghiep_ban_cat").insert(payload_db).execute()
-                st.success(f"🎉 Đã đồng bộ dữ liệu mã hàng {style_id_input} lên hệ thống Supabase thành công!")
-            else:
-                st.error("❌ Không tìm thấy cổng kết nối database. Vui lòng kiểm tra lại cấu hình.")
-        except Exception as db_err: 
-            st.error(f"Lỗi cơ sở dữ liệu: {str(db_err)}")
 
-    # Phân tích cú pháp bẻ chuỗi kích cỡ Inseam
+    # Xử lý bẻ chuỗi kích cỡ Inseam
     parsed_size_columns = []
     for col_name in active_sizes:
         col_str = str(col_name).strip()
@@ -2052,53 +2042,75 @@ if st.session_state.get("auto_cutting_results") is not None:
     other_tech_keys = ["Số lớp", "Số bàn", "Dài sơ đồ", "Số sp/SĐ", "Đ.Mức SĐ", "Vải cần (M)"]
     df_final_report = df_final_report[["SIZE"] + ordered_size_keys + other_tech_keys]
 
-    # --- KHỐI KẾT XUẤT VÀ ĐÓNG KHUNG FILE EXCEL THƯƠNG MẠI (ĐÃ SỬA HOÀN CHỈNH) ---
-    try:
-        buffer = io.BytesIO()
-        with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-            # 1. Ghi thông tin Header đơn hàng trước
-            header_data = {
-                "THÔNG TIN ĐƠN HÀNG TÁC NGHIỆP BÀN CẮT CHUẨN": [
-                    f"Mã hàng (Style Name): {style_id_input}", 
-                    f"Số lượng đơn hàng (PO Qty): {po_qty_input} Pcs",
-                    f"Sản lượng kế hoạch cắt (Planned Cut): {total_cut_pcs_sum} Pcs", 
-                    f"Định mức tài liệu đề xuất: {consumption_input:.3f} Yds/Pcs",
-                    f"Định mức tác nghiệp thực tế: {final_avg_yield:.3f} Yds/Pcs", 
-                    f"Khổ cắt: {cuttable_width_inch}\""
-                ]
-            }
-            pd.DataFrame(header_data).to_excel(writer, sheet_name="BaoCao_TacNghiep", index=False, startrow=0)
-            
-                       # 2. Xây dựng cấu trúc cột MultiIndex cho bảng báo cáo dữ liệu
-            excel_multi_cols = [("", "SIZE")]
-            for item in parsed_size_columns:
-                s_val = item['size_num']
-                try: export_size_label = int(s_val) if str(s_val).isdigit() else float(s_val)
-                except ValueError: export_size_label = s_val
-                excel_multi_cols.append((f"GIÀNG {item['giang_num']}", export_size_label))
-                
-            for col_name in other_tech_keys:
-                excel_multi_cols.append(("THÔNG SỐ TÁC NGHIỆP", col_name))
-                
-            df_excel_export = df_final_report.copy()
-            df_excel_export.columns = pd.MultiIndex.from_tuples(excel_multi_cols)
-            
-            # 🎯 SỬA LỖI TẠI ĐÂY: Phải đặt index=True khi xuất bảng có MultiIndex Columns
-            # Bắt đầu ghi từ dòng số 8 để tránh đè lên phần Header đơn hàng ở trên
-            df_excel_export.to_excel(writer, sheet_name="BaoCao_TacNghiep", startrow=8, index=True)
-        
-        # Lấy dữ liệu nhị phân từ bộ nhớ đệm
-        excel_data = buffer.getvalue()
-        
-        # Tạo nút tải file Excel ra giao diện Streamlit
-        st.download_button(
-            label="📥 KẾT XUẤT VÀ TẢI FILE EXCEL BÁO CÁO TÁC NGHIỆP",
-            data=excel_data,
-            file_name=f"Bao_Cao_Tac_Nghiep_{style_id_input}.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            use_container_width=True,
-            key="download_excel_commercial_v3"
-        )
 
-    except Exception as xl_err:
-        st.error(f"❌ Lỗi khi khởi tạo cấu trúc xuất Excel: {str(xl_err)}")
+    # 2. TẦNG HIỂN THỊ GIAO DIỆN (Luôn hiển thị khi cờ hiệu kích hoạt)
+    if st.session_state.get("render_final_report"):
+        
+        st.write("### 📊 BẢNG KẾT QUẢ TÁC NGHIỆP CHI TIẾT")
+        st.dataframe(df_final_report, use_container_width=True)
+
+        # 💾 ĐẨY DỮ LIỆU ĐỒNG BỘ LÊN DATABSE SUPABASE
+        if st.button("💾 ĐẨY DỮ LIỆU TÁC NGHIỆP LÊN DATABASE SUPABASE", type="primary", use_container_width=True, key="sb_sync_btn_c2_v2"):
+            try:
+                payload_db = {
+                    "style_name": str(style_id_input).strip().upper(), 
+                    "po_quantity": int(po_qty_input),
+                    "planned_cut_pcs": int(total_cut_pcs_sum), 
+                    "consumption_value": str(round(final_avg_yield, 3)),
+                    "total_material_value": str(round(total_fabric_yds_final, 2)), 
+                    "cuttable_width_inch": float(cuttable_width_inch)
+                }
+                sb_instance = globals().get("supabase", globals().get("supabase_client", st.session_state.get("supabase")))
+                if sb_instance:
+                    sb_instance.table("tac_nghiep_ban_cat").insert(payload_db).execute()
+                    st.success(f"🎉 Đã đồng bộ dữ liệu mã hàng {style_id_input} lên hệ thống Supabase thành công!")
+                else:
+                    st.error("❌ Không tìm thấy cổng kết nối database. Vui lòng kiểm tra lại cấu hình.")
+            except Exception as db_err: 
+                st.error(f"Lỗi cơ sở dữ liệu: {str(db_err)}")
+
+        # --- KHỐI KẾT XUẤT FILE EXCEL THƯƠNG MẠI ---
+        try:
+            buffer = io.BytesIO()
+            with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+                header_data = {
+                    "THÔNG TIN ĐƠN HÀNG TÁC NGHIỆP BÀN CẮT CHUẨN": [
+                        f"Mã hàng (Style Name): {style_id_input}", 
+                        f"Số lượng đơn hàng (PO Qty): {po_qty_input} Pcs",
+                        f"Sản lượng kế hoạch cắt (Planned Cut): {total_cut_pcs_sum} Pcs", 
+                        f"Định mức tài liệu đề xuất: {consumption_input:.3f} Yds/Pcs",
+                        f"Định mức tác nghiệp thực tế: {final_avg_yield:.3f} Yds/Pcs", 
+                        f"Khổ cắt: {cuttable_width_inch}\""
+                    ]
+                }
+                pd.DataFrame(header_data).to_excel(writer, sheet_name="BaoCao_TacNghiep", index=False, startrow=0)
+                
+                excel_multi_cols = [("", "SIZE")]
+                for item in parsed_size_columns:
+                    s_val = item['size_num']
+                    try: export_size_label = int(s_val) if str(s_val).isdigit() else float(s_val)
+                    except ValueError: export_size_label = s_val
+                    excel_multi_cols.append((f"GIÀNG {item['giang_num']}", export_size_label))
+                    
+                for col_name in other_tech_keys:
+                    excel_multi_cols.append(("THÔNG SỐ TÁC NGHIỆP", col_name))
+                    
+                df_excel_export = df_final_report.copy()
+                df_excel_export.columns = pd.MultiIndex.from_tuples(excel_multi_cols)
+                
+                # Bật index=True để sửa triệt để lỗi ghi MultiIndex của Pandas
+                df_excel_export.to_excel(writer, sheet_name="BaoCao_TacNghiep", startrow=8, index=True)
+            
+            excel_data = buffer.getvalue()
+            
+            st.download_button(
+                label="📥 KẾT XUẤT VÀ TẢI FILE EXCEL BÁO CÁO TÁC NGHIỆP",
+                data=excel_data,
+                file_name=f"Bao_Cao_Tac_Nghiep_{style_id_input}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True,
+                key="download_excel_fixed_v4"
+            )
+
+        except Exception as xl_err:
+            st.error(f"❌ Lỗi khi khởi tạo cấu trúc xuất Excel: {str(xl_err)}")
