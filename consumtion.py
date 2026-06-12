@@ -1882,65 +1882,57 @@ elif menu_selection == "🛒 Purchase Consumption":
                     st.info("💡 Không tìm thấy dữ liệu chia size chi tiết từ file SBD. Vui lòng nhập thủ công bên dưới nếu cần.")
                               # =============================================================================
                 # ĐOẠN 1: NÚT BẤM KÍCH HOẠT & THUẬT TOÁN TỰ ĐỘNG GIẢI TOÁN HÌNH THÁP NGƯỢC
-                #                # =============================================================================
-                # ĐOẠN 1: NÚT BẤM KÍCH HOẠT & THUẬT TOÁN TỰ ĐỘNG GIẢI TOÁN HÌNH THÁP NGƯỢC
+                                # =============================================================================
+                # ĐOẠN 1: HAI NÚT BẤM KÍCH HOẠT ĐỘC LẬP (TÁC NGHIỆP -> NHẬP CAD -> TÍNH ĐỊNH MỨC)
                 # =============================================================================
+                import math
                 st.markdown("<br>", unsafe_allow_html=True)
-                trigger_auto_cutting = st.button("⚡ KÍCH HOẠT TÍNH TÁC NGHIỆP BÀN CẮT TỰ ĐỘNG (HÌNH THÁP NGƯỢC)", type="primary", use_container_width=True)
-
+                
                 active_sizes = [str(k) for k, v in size_breakdown_main.items() if int(v) > 0]
                 if not active_sizes:
                     active_sizes = ["S", "M", "L", "XL", "2XL", "3XL"]
+                
+                detected_inseam = sbd_data_store.get("inseam_group", "None")
+                st.markdown(f"**📌 Nhóm Inseam hiện hành:** `{detected_inseam}`")
+                
+                # Tạo 2 cột chứa 2 nút bấm kích hoạt theo quy trình 2 bước
+                btn_col1, btn_col2 = st.columns(2)
+                with btn_col1:
+                    trigger_auto_cutting = st.button("⚡ 1. KÍCH HOẠT TÍNH TÁC NGHIỆP SƠ ĐỒ", type="primary", use_container_width=True)
+                with btn_col2:
+                    trigger_consumption = st.button("📊 2. KÍCH HOẠT TÍNH ĐỊNH MỨC (KHI ĐÃ CÓ CAD)", type="secondary", use_container_width=True)
 
-                # Khởi tạo trạng thái lưu trữ kết quả tính toán
                 if "auto_cutting_results" not in st.session_state:
                     st.session_state["auto_cutting_results"] = None
+                if "consumption_activated" not in st.session_state:
+                    st.session_state["consumption_activated"] = False
 
+                # BƯỚC 1: BẤM NÚT TÁC NGHIỆP SƠ ĐỒ
                 if trigger_auto_cutting:
-                    with st.spinner("🔮 Hệ thống đang lập kế hoạch cắt hình tháp ngược tối ưu..."):
-                        
-                        # 📥 THÊM DÒNG NÀY VÀO ĐÂY ĐỂ VÁ LỖI NAMEERROR:
-                        import math
-                        
-                        # 1. Tính số sản phẩm tối đa trên một sơ đồ dựa trên chiều dài bàn và định mức tạm
-                        cons_meters = consumption_input / 1.09361 # Quy đổi định mức yds sang mét
+                    st.session_state["consumption_activated"] = False # Reset trạng thái tính định mức
+                    with st.spinner("🔮 Máy tính đang lập cấu trúc bàn cắt hình tháp ngược..."):
+                        cons_meters = consumption_input / 1.09361
                         max_pcs_per_marker = math.floor(max_table_length / (cons_meters if cons_meters > 0 else 1.0))
-
-                        if max_pcs_per_marker <= 0: 
-                            max_pcs_per_marker = 4
+                        if max_pcs_per_marker <= 0: max_pcs_per_marker = 4
                         
-                        # 2. Khởi tạo mảng sản lượng mục tiêu để trừ lùi triệt tiêu dần
                         balance_tracker = {sz: int(size_breakdown_main.get(sz, 0)) for sz in active_sizes}
-                        
                         calculated_steps = []
                         step_idx = 1
-                        max_loops = 15 # Giới hạn vòng lặp an toàn tránh treo máy
+                        max_loops = 20
                         
                         while sum(balance_tracker.values()) > 0 and step_idx <= max_loops:
-                            marker_name = f"c{step_idx:02d}"
-                            
-                            # Thuật toán phân bổ tỷ lệ: Ưu tiên các size có sản lượng còn lại cao nhất
+                            marker_id = f"c{step_idx:02d}"
                             sorted_sizes = sorted(balance_tracker.items(), key=lambda x: x[1], reverse=True)
                             
                             current_ratios = {sz: 0 for sz in active_sizes}
                             assigned_pcs = 0
                             
-                            # Đi tỷ lệ hình tháp ngược: Phân bổ từ cao xuống thấp
                             for sz, bal in sorted_sizes:
-                                if bal <= 0: 
-                                    continue
-                                if assigned_pcs >= max_pcs_per_marker: 
-                                    break
+                                if bal <= 0 or assigned_pcs >= max_pcs_per_marker: continue
+                                if step_idx == 1: ratio_to_give = min(4, math.ceil(bal / 100))
+                                elif step_idx == 2: ratio_to_give = min(2, math.ceil(bal / 50))
+                                else: ratio_to_give = 1
                                     
-                                # Xác định mức tỷ lệ (Sơ đồ đầu đi tỷ lệ cao 3-4, các sơ đồ sau giảm dần về 1)
-                                if step_idx == 1:
-                                    ratio_to_give = min(4, math.ceil(bal / 100))
-                                elif step_idx == 2:
-                                    ratio_to_give = min(2, math.ceil(bal / 50))
-                                else:
-                                    ratio_to_give = 1
-                                    
-                                # Khống chế không vượt quá giới hạn sản phẩm của chiều dài bàn vải
                                 if assigned_pcs + ratio_to_give > max_pcs_per_marker:
                                     ratio_to_give = max_pcs_per_marker - assigned_pcs
                                     
@@ -1948,24 +1940,16 @@ elif menu_selection == "🛒 Purchase Consumption":
                                 assigned_pcs += ratio_to_give
                             
                             if assigned_pcs == 0:
-                                # Phòng hờ nếu còn sót sản lượng rất nhỏ, đi nốt tỷ lệ 1 cho size lớn nhất
-                                highest_sz = sorted_sizes[0][0]
-                                current_ratios[highest_sz] = 1
+                                current_ratios[sorted_sizes[0][0]] = 1
                                 assigned_pcs = 1
                                 
-                            # 3. Tính toán Số lớp và Số bàn cắt tối ưu để triệt tiêu
-                            # Lấy size có tỷ lệ > 0 để làm căn cứ tính số lớp tối đa có thể trải
                             layer_candidates = []
                             for sz in active_sizes:
                                 rat = current_ratios[sz]
-                                if rat > 0:
-                                    layer_candidates.append(math.ceil(balance_tracker[sz] / rat))
+                                if rat > 0: layer_candidates.append(math.ceil(balance_tracker[sz] / rat))
                             
-                            raw_layers = min(layer_candidates) if layer_candidates else 0
-                            if raw_layers == 0: 
-                                raw_layers = 1
-                                
-                            # Cân đối cấu trúc bàn cắt: Nếu số lớp quá lớn, tự động chia làm nhiều bàn cắt (mỗi bàn tối đa 120 lớp)
+                            raw_layers = min(layer_candidates) if layer_candidates else 1
+                            
                             if raw_layers > 120:
                                 num_tables = math.ceil(raw_layers / 120)
                                 computed_layers = math.ceil(raw_layers / num_tables)
@@ -1973,40 +1957,47 @@ elif menu_selection == "🛒 Purchase Consumption":
                                 num_tables = 1
                                 computed_layers = raw_layers
                                 
-                            # Tính chiều dài sơ đồ thực tế tự động
-                            auto_marker_len = round(assigned_pcs * cons_meters, 2)
-                            
-                            # Lưu trữ thông tin sơ đồ sản xuất
-                            marker_data = {
-                                "Sơ đồ / Trạng thái": marker_name,
-                                "Số lớp": computed_layers,
-                                "Số bàn": num_tables,
-                                "Dài sơ đồ": auto_marker_len,
-                                "Số sp/SĐ": assigned_pcs,
+                            # Lúc này chưa tính định mức nên mặc định chiều dài bằng 0.0
+                            calculated_steps.append({
+                                "Sơ đồ / Trạng thái": marker_id,
+                                "Số lớp": computed_layers, "Số bàn": num_tables,
+                                "Dài sơ đồ": 0.0, "Số sp/SĐ": assigned_pcs,
                                 "Ratios": current_ratios
-                            }
-                            calculated_steps.append(marker_data)
+                            })
                             
-                            # 4. Thực hiện TRIỆT TIÊU sản lượng trong Balance Tracker
                             for sz in active_sizes:
                                 total_cut = current_ratios[sz] * computed_layers * num_tables
                                 balance_tracker[sz] = max(0, balance_tracker[sz] - total_cut)
                                 
-                            # Lưu lại dòng Balance trạng thái sau khi triệt tiêu
-                            balance_data = {
+                            calculated_steps.append({
                                 "Sơ đồ / Trạng thái": "Balance",
                                 "Số lớp": "", "Số bàn": "", "Dài sơ đồ": "", "Số sp/SĐ": "",
                                 "Ratios": {sz: balance_tracker[sz] for sz in active_sizes}
-                            }
-                            calculated_steps.append(balance_data)
+                            })
                             step_idx += 1
                             
                         st.session_state["auto_cutting_results"] = calculated_steps
-                        st.success("🎉 Đã tính toán xong bảng tác nghiệp hình tháp ngược!")
+
+                # BƯỚC 2: BẤM NÚT KÍCH HOẠT ĐỊNH MỨC (ĐỌC Ô CAD ĐỂ NHẢY SỐ)
+                if trigger_consumption:
+                    st.session_state["consumption_activated"] = True
+                    st.rerun()
                 # =============================================================================
-                # ĐOẠN 2: TÁI CẤU TRÚC ĐỔ DỮ LIỆU LÊN BẢNG HIỂN THỊ BALANCE MATRIX & METRICS
+                # ĐOẠN 2: LIÊN KẾT Ô CAD, TÍNH TOÁN TIÊU HAO VÀ ĐỔ MÀU MA TRẬN VÀNG
                 # =============================================================================
                 if st.session_state.get("auto_cutting_results") is not None:
+                    # Đọc và bóc tách ô dán dữ liệu CAD
+                    cad_lengths_map = {}
+                    if cad_paste_zone.strip() and st.session_state["consumption_activated"]:
+                        for line in cad_paste_zone.strip().split("\n"):
+                            if not line.strip(): continue
+                            parts = line.split()
+                            if len(parts) >= 2:
+                                m_name = " ".join(parts[:-1]).strip().lower()
+                                try:
+                                    cad_lengths_map[m_name] = float(parts[-1])
+                                except ValueError: pass
+
                     final_rows_display = []
                     total_fabric_m = 0.0
                     total_cut_pcs_sum = 0
@@ -2014,27 +2005,25 @@ elif menu_selection == "🛒 Purchase Consumption":
                     for item in st.session_state["auto_cutting_results"]:
                         display_row = {"Sơ đồ / Trạng thái": item["Sơ đồ / Trạng thái"]}
                         
-                        # Map mảng số lượng size / tỷ lệ size vào các cột kích cỡ
                         for sz in active_sizes:
                             display_row[sz] = item["Ratios"].get(sz, 0)
                             
                         if item["Sơ đồ / Trạng thái"] != "Balance":
-                            # Tính toán các cột thông số tác nghiệp kỹ thuật cho dòng sơ đồ
                             layers = item["Số lớp"]
                             tables = item["Số bàn"]
-                            m_len = item["Dài sơ đồ"]
                             sp_sd = item["Số sp/SĐ"]
                             
-                            # Nhu cầu vải = Chiều dài * Số lớp * Số bàn
+                            # 🎯 CHỈ NHẢY SỐ MÉT NẾU ĐÃ BẤM NÚT KÍCH HOẠT ĐỊNH MỨC
+                            m_name_lower = item["Sơ đồ / Trạng thái"].lower()
+                            m_len = cad_lengths_map.get(m_name_lower, 0.0) if st.session_state["consumption_activated"] else 0.0
+                            
                             vail_can_m = m_len * layers * tables
                             total_fabric_m += vail_can_m
                             
-                            # Sản lượng sơ đồ
                             total_ratios_sum = sum(item["Ratios"].values())
                             pcs_cut = total_ratios_sum * layers * tables
                             total_cut_pcs_sum += pcs_cut
                             
-                            # Định mức riêng của sơ đồ (Yds/Pcs)
                             dm_sd = (vail_can_m * 1.09361) / pcs_cut if pcs_cut > 0 else 0.0
                             
                             display_row["Số lớp"] = layers
@@ -2044,7 +2033,6 @@ elif menu_selection == "🛒 Purchase Consumption":
                             display_row["Đ.Mức SĐ"] = round(dm_sd, 3)
                             display_row["Vải cần (M)"] = round(vail_can_m, 1)
                         else:
-                            # Để trống các cột thông số đối với dòng Balance giống hệt Excel mẫu
                             display_row["Số lớp"] = ""
                             display_row["Số bàn"] = ""
                             display_row["Dài sơ đồ"] = ""
@@ -2054,35 +2042,44 @@ elif menu_selection == "🛒 Purchase Consumption":
                             
                         final_rows_display.append(display_row)
                         
-                    # Chuyển đổi sang DataFrame hoàn chỉnh
                     df_final_report = pd.DataFrame(final_rows_display)
-                    columns_layout = ["Sơ đồ / Trạng thái"] + active_sizes + ["Số lớp", "Số bàn", "Dài sơ đồ", "Số sp/SĐ", "Đ.Mức SĐ", "Vải cần (M)"]
-                    df_final_report = df_final_report[columns_layout]
                     
-                    st.markdown("<p style='font-weight:700; font-size:14px; color:#065F46; margin-top:20px;'>📊 BẢNG THEO DÕI TÁC NGHIỆP & CÂN ĐỐI ĐƠN HÀNG HÌNH THÁP NGƯỢC</p>", unsafe_allow_html=True)
+                    # Xây dựng cấu trúc tiêu đề 2 hàng (Inseam trên, Size dưới)
+                    multi_cols = []
+                    for col in df_final_report.columns:
+                        if col in active_sizes:
+                            multi_cols.append((f"Nhóm: {detected_inseam}", col))
+                        else:
+                            multi_cols.append(("", col))
+                    df_final_report.columns = pd.MultiIndex.from_tuples(multi_cols)
                     
-                    # Hàm tô màu xám dòng Balance và phân biệt chữ
-                    def style_balance_rows(val):
-                        return 'background-color: #F1F5F9; color: #DC2626; font-weight: 600;' if val == "Balance" else ''
+                    st.markdown("<p style='font-weight:700; font-size:14px; color:#1E3A8A; margin-top:20px;'>📊 BẢNG THEO DÕI TÁC NGHIỆP & CÂN ĐỐI ĐƠN HÀNG MULTI-INSEAM</p>", unsafe_allow_html=True)
+                    
+                    # Hàm tô màu vàng sáng cho dòng Balance chuẩn mẫu Excel
+                    def style_excel_matrix(row):
+                        status_val = row.iloc[0]
+                        if status_val == "Balance":
+                            return ['background-color: #FEF08A; color: #991B1B; font-weight: 700; border: 1px solid #FDE047;'] * len(row)
+                        return [''] * len(row)
                         
                     st.dataframe(
-                        df_final_report.style.map(style_balance_rows, subset=["Sơ đồ / Trạng thái"]),
+                        df_final_report.style.apply(style_excel_matrix, axis=1),
                         use_container_width=True,
                         hide_index=True
                     )
                     
-                    # 5. HIỂN THỊ KẾT LUẬN ĐỊNH MỨC VÀ TIÊU HAO VẢI TOÀN CỤC
-                    st.markdown("---")
+                    # Báo cáo tổng hợp tiêu thụ vải (Chỉ hiển thị giá trị thực khi nút định mức được bấm)
                     total_fabric_yds_final = total_fabric_m * 1.09361
                     final_avg_yield = total_fabric_yds_final / (total_cut_pcs_sum if total_cut_pcs_sum > 0 else 1)
                     
+                    st.markdown("---")
                     m_col1, m_col2, m_col3 = st.columns(3)
                     with m_col1:
                         st.metric("Tổng vải tiêu thụ tự động", f"{total_fabric_m:,.1f} Mét")
                     with m_col2:
-                        st.metric("Định mức trung bình (Đ.Mức TB)", f"{final_avg_yield:.3f} Yds/Pcs")
+                        st.metric("Định mức trung bình (Đ.Mức TB)", f"{final_avg_yield:.3f} Yds/Pcs" if st.session_state["consumption_activated"] else "0.000 Yds/Pcs")
                     with m_col3:
-                        variance = final_avg_yield - consumption_input if total_fabric_m > 0 else 0.0
-                        st.metric("Chênh lệch so với tài liệu", f"{variance:+.3f}", delta_color="inverse" if variance > 0 else "normal")
+                        variance = final_avg_yield - consumption_input if total_fabric_m > 0 and st.session_state["consumption_activated"] else 0.0
+                        st.metric("Chênh lệch so với tài liệu", f"{variance:+.3f}" if st.session_state["consumption_activated"] else "0.000", delta_color="inverse" if variance > 0 else "normal")
                 else:
-                    st.info("💡 Hệ thống đã sẵn sàng. Hãy bấm nút màu xanh ở trên để máy tự động chạy tác nghiệp triệt tiêu đơn hàng.")
+                    st.info("💡 Quy trình: Bấm nút 1 để tính tác nghiệp sơ đồ -> Điền độ dài CAD -> Bấm nút 2 để kích hoạt nhảy số định mức.")
