@@ -1599,17 +1599,18 @@ elif menu_selection == "🛒 Purchase Consumption":
                                 st.error(f"Lỗi cổng kết nối AI: {str(chat_err)}")
 
        # =============================================================================
-    # 🧠 CHỨC NĂNG 1: KHU VỰC TIẾP NHẬN FILE (CHỈ HIỂN THỊ KHI CHƯA BẤM KÍCH HOẠT)
+        # =============================================================================
+    # 🧠 CHỨC NĂNG 1: KHU VỰC TIẾP NHẬN FILE (MÃ KEY ĐỘC BẢN CHỐNG TRÙNG LẶP)
     # =============================================================================
     if menu_sub.startswith("🧠 CHỨC NĂNG 1") and not st.session_state.get("purchase_ready"):
         col_left, col_right = st.columns(2)
         with col_left: 
-            file_sbd = st.file_uploader("📋 Chọn File SBD Số Lượng (Excel/PDF)", type=["xlsx", "xls", "pdf"], key="purchase_sbd_c1")
+            file_sbd = st.file_uploader("📋 Chọn File SBD Số Lượng (Excel/PDF)", type=["xlsx", "xls", "pdf"], key="purchase_sbd_c1_ultimate")
         with col_right: 
-            file_tp = st.file_uploader("📐 Chọn File Techpack Thông Số (PDF)", type=["pdf"], key="purchase_tp_c1")
+            file_tp = st.file_uploader("📐 Chọn File Techpack Thông Số (PDF)", type=["pdf"], key="purchase_tp_c1_ultimate")
         
         if file_sbd and file_tp:
-            trigger_btn = st.button("⚡ KÍCH HOẠT SỐ HÓA ĐA LUỒNG SONG SONG", type="primary", use_container_width=True, key="activate_parallel_ingest_c1")
+            trigger_btn = st.button("⚡ KÍCH HOẠT SỐ HÓA ĐA LUỒNG SONG SONG", type="primary", use_container_width=True, key="activate_parallel_ingest_c1_ultimate")
             if trigger_btn:
                 with st.spinner("🚀 AI đang bóc tách ma trận dữ liệu tổng thể..."):
                     if "get_secure_gemini_key" in globals(): gemini_key = get_secure_gemini_key()
@@ -1659,6 +1660,7 @@ elif menu_selection == "🛒 Purchase Consumption":
                     st.session_state["pur_tp_parsed_data"] = res_tp["data"] if res_tp.get("success") else {}
                     st.session_state["purchase_ready"] = True
                     st.rerun()
+
     # =============================================================================
     # ✂️ CHỨC NĂNG 2: KỊCH BẢN CHỈ HIỂN THỊ Ô TẢI FILE SBD (ẨN KHI ĐÃ SỐ HÓA XONG)
     # =============================================================================
