@@ -1689,7 +1689,7 @@ elif menu_selection == "🛒 Purchase Consumption":
                     st.session_state["pur_tp_parsed_data"] = {"dummy_status": "skipped_not_needed"} # Gán biến mồi để mở cửa luồng xử lý
                     st.session_state["purchase_ready"] = True
                     st.rerun()
-    # -----------------------------------------------------------------------------
+        # -----------------------------------------------------------------------------
     # ✂️ CHỨC NĂNG 2 - PHẦN 1: ĐÃ SỬA TRIỆT ĐỂ LỖI BÓC MẢNG - ĐỘNG LỰC TỰ ĐỘNG NHẢY SỐ CAD
     # -----------------------------------------------------------------------------
     elif st.session_state.get("purchase_ready") is True and menu_sub.startswith("✂️ CHỨC NĂNG 2"):
@@ -1715,7 +1715,7 @@ elif menu_selection == "🛒 Purchase Consumption":
             with input_col6: 
                 cuttable_width_inch = st.number_input("📐 KHỔ CẮT (Khổ vải đi sơ đồ - Inches):", value=56.00, step=0.50, format="%.2f")
             
-            # ĐƯA MA TRẬN PHẲNG MỚI LÊN MÀN HÌNH CHỨC NĂNG 2 ĐỂ KHÔNG BỊ EMPTY
+            # ĐƯA MA TRẬN PHẲNG MỚI LÊN MÀN HÌNH CHỨC NĂNG 2 ĐỂ KHÔNG BÌ EMPTY
             if "breakdown_details" in sbd_data_store and sbd_data_store["breakdown_details"]:
                 rows = []
                 for detail in sbd_data_store["breakdown_details"]:
@@ -1780,4 +1780,9 @@ elif menu_selection == "🛒 Purchase Consumption":
                 st.session_state["bulk_cad_data_store"] = []
                 if cad_length_meters_list:
                     for idx_c in range(len(cad_length_meters_list)):
+                        # ĐÃ VÁ LỖI NGOẶC: Đóng đầy đủ dữ liệu mảng CAD Dictionary
                         st.session_state["bulk_cad_data_store"].append({
+                            "marker_id": cad_names_list[idx_c],
+                            "length_meters": cad_length_meters_list[idx_c]
+                        })
+                    st.success(f"🎯 Đã nạp thành công {len(cad_length_meters_list)} sơ đồ CAD để sẵn sàng quy đổi hình học thực tế!")
