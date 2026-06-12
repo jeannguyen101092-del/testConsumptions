@@ -1962,7 +1962,7 @@ elif menu_selection == "🛒 Purchase Consumption":
                 if trigger_consumption:
                     st.session_state["consumption_activated"] = True
                     st.rerun()
-                                # BƯỚC 3: LIÊN KẾT ĐỐI CHIẾU DỮ LIỆU Ô CAD, ĐẨY SUPABASE & KẾT XUẤT EXCEL
+                              # BƯỚC 3: LIÊN KẾT ĐỐI CHIẾU DỮ LIỆU Ô CAD, ĐẨY SUPABASE & KẾT XUẤT EXCEL
                 if st.session_state.get("auto_cutting_results") is not None:
                     import re
                     import io
@@ -2023,6 +2023,7 @@ elif menu_selection == "🛒 Purchase Consumption":
                     total_fabric_yds_final = total_fabric_m * 1.09361
                     final_avg_yield = total_fabric_yds_final / (total_cut_pcs_sum if total_cut_pcs_sum > 0 else 1)
                     
+                    # 💾 ĐẨY DỮ LIỆU ĐỒNG BỘ LÊN SUPABASE (Đã sửa gọi biến trực tiếp để sửa lỗi AttributeError)
                     if st.button("💾 ĐẨY DỮ LIỆU TÁC NGHIỆP LÊN DATABASE SUPABASE", type="secondary", use_container_width=True):
                         try:
                             payload_db = {
@@ -2030,8 +2031,21 @@ elif menu_selection == "🛒 Purchase Consumption":
                                 "planned_cut_pcs": int(total_cut_pcs_sum), "consumption_value": str(round(final_avg_yield, 3)),
                                 "total_material_value": str(round(total_fabric_yds_final, 2)), "cuttable_width_inch": float(cuttable_width_inch)
                             }
-                            st.session_state.supabase.table("tac_nghiep_ban_cat").insert(payload_db).execute()
-                            st.success(f"🎉 Đã đồng bộ dữ liệu mã hàng {style_id_input} lên hệ thống Supabase thành công!")
+                            # Gọi qua biến toàn cục globals() hoặc gọi trực tiếp đối tượng supabase sẵn có trong file của bạn
+                            if "supabase" in globals():
+                                globals()["supabase"].table("tac_nghiep_ban_cat").insert(payload_db).execute()
+                                st.success(f"🎉 Đã đồng bộ dữ liệu mã hàng {style_id_input} lên hệ thống Supabase thành công!")
+                            elif "supabase_client" in globals():
+                                globals()["supabase_client"].table("tac_nghiep_ban_cat").insert(payload_db).execute()
+                                st.success(f"🎉 Đã đồng bộ dữ liệu mã hàng {style_id_input} lên hệ thống Supabase thành công!")
+                            else:
+                                # Dự phòng nếu hệ thống bọc trong biến st.session_state khác
+                                sb_client = st.session_state.get("supabase_client", st.session_state.get("supabase"))
+                                if sb_client:
+                                    sb_client.table("tac_nghiep_ban_cat").insert(payload_db).execute()
+                                    st.success(f"🎉 Đã đồng bộ dữ liệu mã hàng {style_id_input} lên hệ thống Supabase thành công!")
+                                else:
+                                    st.error("❌ Không tìm thấy biến kết nối Supabase được định nghĩa trong file. Vui lòng kiểm tra lại tên biến ở đầu file.")
                         except Exception as db_err:
                             st.error(f"Lỗi khi đẩy dữ liệu lên Supabase: {str(db_err)}")
 
@@ -2068,13 +2082,11 @@ elif menu_selection == "🛒 Purchase Consumption":
                         )
                     except Exception: pass
 
-                    # 1. Thực hiện nhuộm màu vàng trực tiếp bằng hàm .map() cho chuẩn phiên bản mới
                     def style_balance_rows(val):
                         return 'background-color: #FEF08A; color: #991B1B; font-weight: 700;' if val == "Balance" else ''
                     
                     styled_df_report = df_final_report.style.map(style_balance_rows, subset=["Sơ đồ / Trạng thái"])
 
-                    # 2. Hiển thị nhãn nhóm Inseam bằng thẻ tiêu đề phụ trực quan
                     st.markdown(f"<div style='padding:4px; background-color:#1E3A8A; color:white; font-weight:700; text-align:center; font-size:12px; border-radius:4px 4px 0 0;'>NHÓM INSEAM: {str(detected_inseam).upper()}</div>", unsafe_allow_html=True)
                     st.dataframe(styled_df_report, use_container_width=True, hide_index=True)
                     
