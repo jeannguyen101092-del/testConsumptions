@@ -1898,14 +1898,14 @@ elif menu_selection == "🛒 Purchase Consumption":
                 # =============================================================================
                 st.markdown("<br>", unsafe_allow_html=True)
                 
+                               # Định nghĩa cấu trúc mảng kích cỡ và nhóm Inseam
                 active_sizes = [str(k) for k, v in size_breakdown_main.items() if int(v) > 0]
                 if not active_sizes:
                     active_sizes = ["S", "M", "L", "XL", "2XL", "3XL"]
-                
                 detected_inseam = sbd_data_store.get("inseam_group", "None")
                 st.markdown(f"**📌 Nhóm Inseam hiện hành:** `{detected_inseam}`")
                 
-                # Khai báo nút bấm với key độc nhất để triệt tiêu dứt điểm lỗi trùng ID
+                # CHỈ GIỮ LẠI DUY NHẤT 1 KHỐI NÚT BẤM AI ENGINE (ĐÃ BỎ Ô THỪA PHÍA TRÊN)
                 btn_col1, btn_col2 = st.columns(2)
                 with btn_col1:
                     trigger_auto_cutting = st.button("⚡ 1. KÍCH HOẠT TÍNH TÁC NGHIỆP SƠ ĐỒ (AI ENGINE)", type="primary", use_container_width=True, key="c2_ai_engine_cut_btn")
@@ -1917,7 +1917,7 @@ elif menu_selection == "🛒 Purchase Consumption":
                 if "consumption_activated" not in st.session_state:
                     st.session_state["consumption_activated"] = False
 
-                # KÍCH HOẠT SỨC MẠNH AI GIẢI TOÁN BÀN CẮT DỆT MAY
+                # SỨC MẠNH AI GIẢI TOÁN BÀN CẮT DỆT MAY
                 if trigger_auto_cutting:
                     st.session_state["consumption_activated"] = False
                     with st.spinner("🔮 AI Gemini đang giải toán phối sơ đồ và tối ưu số lớp..."):
@@ -1928,7 +1928,6 @@ elif menu_selection == "🛒 Purchase Consumption":
                         
                         client_ai = genai.Client(api_key=gemini_key)
                         
-                        # Truyền đề bài sản lượng, chiều dài bàn và định mức tài liệu cho AI
                         ai_cutting_prompt = f"""
                         You are an expert production planner in a garment factory. 
                         Task: Create an optimized cutting plan based on the following size breakdown matrix: {json.dumps(size_breakdown_main)}.
@@ -1936,7 +1935,7 @@ elif menu_selection == "🛒 Purchase Consumption":
                         1. Use the inverted pyramid method (Hình tháp ngược) to triệt tiêu total quantities.
                         2. Max products per marker (Số sp/SĐ) based on max table length ({max_table_length}m) and consumption ({consumption_input}).
                         3. CRITICAL RULE: Marker with high total ratios MUST have high layers (100 - 150 layers). 
-                        4. NEVER create a long marker (e.g., 11 products) with very thin layers (e.g., 5 layers). If remaining quantities are small, automatically shorten the marker length (1 - 3 products per marker) so that layers remain thick and economical for a 12m table.
+                        4. NEVER create a long marker (e.g., 11 products) with very thin layers (e.g., 5 layers). If remaining quantities are small, automatically shorten the marker length (1 - 3 products per marker) so that layers remain thick (at least 50-80 layers) and economical for a 12m table.
                         5. Alternate each marker row with a "Balance" row showing the remaining quantities to be cut.
                         
                         Return a raw JSON list matching this structure exactly:
@@ -1960,6 +1959,7 @@ elif menu_selection == "🛒 Purchase Consumption":
                 if trigger_consumption:
                     st.session_state["consumption_activated"] = True
                     st.rerun()
+
 
 
 
