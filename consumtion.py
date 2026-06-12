@@ -1870,124 +1870,118 @@ elif menu_selection == "🛒 Purchase Consumption":
                     st.dataframe(df_size, use_container_width=True, hide_index=True)
                 
                 # --- ĐỒNG BỘ TRUY VẤN TÌM KIẾM SUPABASE ---
-                st.markdown("<p style='font-weight:700; font-size:13px; color:#1E3A8A; margin-top:15px;'>🔍 TRUNG TÂM TRA CỨU DATABASE SUPABASE</p>", unsafe_allow_html=True)
-                db_search_query = st.text_input("Tìm kiếm mã hàng đã tác nghiệp trên hệ thống Supabase:", placeholder="Nhập Style Name để gọi lại thông số cũ...", key="subapat_db_search")
-                if db_search_query.strip():
-                    try:
-                        search_res = st.session_state.supabase.table("tac_nghiep_ban_cat").select("*").eq("style_name", db_search_query.strip().upper()).execute()
-                        if search_res.data:
-                            st.success(f"📌 Tìm thấy dữ liệu lịch sử của mã hàng {db_search_query.strip().upper()} trên Supabase!")
-                            matched_row = search_res.data if isinstance(search_res.data, dict) else search_res.data
-                            st.info(f"Sản lượng cũ: {matched_row.get('po_quantity')} Pcs | Định mức cũ: {matched_row.get('consumption_value')} Yds")
-                    except Exception:
-                        pass
+                       # ---------------------------------------------------------------------
+        # KIỂM TRA ĐIỀU KIỆN 2: Nếu ĐÃ số hóa xong file SBD -> Vào Form tác nghiệp
+        # ---------------------------------------------------------------------
+        else:
+            sbd_data_store = st.session_state.get("sbd_parsed_data", {})
+            
+            if isinstance(sbd_data_store, dict) and sbd_data_store:
+                # Tạo biến chốt chặn để ép giữ màn hình không tự reset khi bấm nút
+                if "click_auto_cutting" not in st.session_state:
+                    st.session_state["click_auto_cutting"] = False
 
-                active_sizes = [str(k) for k, v in size_breakdown_main.items() if int(v) > 0]
-                if not active_sizes: 
-                    active_sizes = ["S", "M", "L", "XL", "2XL", "3XL"]
-                detected_inseam = sbd_data_store.get("inseam_group", "None")
-                
-                # Thiết lập bộ nút kích hoạt thuật toán
-                st.markdown("<br>", unsafe_allow_html=True)
-                btn_col1, btn_col2 = st.columns(2)
-                with btn_col1:
-                    trigger_auto_cutting = st.button("🚀 TỰ ĐỘNG PHÂN BỔ SƠ ĐỒ HÌNH THÁP", type="primary", use_container_width=True)
-                with btn_col2:
-                    trigger_consumption = st.button("🧮 KÍCH HOẠT ĐỐI CHIẾU CHIỀU DÀI CAD", type="secondary", use_container_width=True)
-                # ---------------------------------------------------------------------
-                # THUẬT TOÁN THUẦN TỰ ĐỘNG BẺ NGẮN SƠ ĐỒ ĐỂ TĂNG SỐ LỚP VẢI
-                # ---------------------------------------------------------------------
-                if trigger_auto_cutting:
+                detected_style_id = sbd_data_store.get("style_id", "UNKNOWN_STYLE")
+                detected_total_po = sbd_data_store.get("total_quantity", 0)
+                size_breakdown_main = sbd_data_store.get("size_breakdown", {})
+
+                # Nút bấm xóa toàn bộ trạng thái để làm lại từ đầu với file khác
+                if st.button("🔄 Tải lên File SBD Khác", type="secondary"):
+                    st.session_state["purchase_ready"] = False
+                    st.session_state["sbd_parsed_data"] = {}
+                    st.session_state["auto_cutting_results"] = None
+                    st.session_state["click_auto_cutting"] = False
                     st.session_state["consumption_activated"] = False
-                    with st.spinner("🚀 Hệ thống đang phân bổ sơ đồ hình tháp..."):
-                        import math
-                        cons_meters = consumption_input / 1.09361
-                        max_pcs_per_marker = math.floor(max_table_length / (cons_meters if cons_meters > 0 else 1.0))
-                        if max_pcs_per_marker <= 0: 
-                            max_pcs_per_marker = 6
-                        
-                        balance_tracker = {str(sz): int(size_breakdown_main.get(sz, 0)) for sz in active_sizes}
-                        calculated_steps = []
-                        step_idx = 1
-                        max_loops = 25
-                        
-                        while sum(balance_tracker.values()) > 0 and step_idx <= max_loops:
-                            marker_id = f"c{step_idx:02d}"
-                            if step_idx == 1: target_layers = 150
-                            elif step_idx == 2: target_layers = 120
-                            elif step_idx == 3: target_layers = 90
-                            else: target_layers = 60
-                            
-                            sorted_sizes = sorted(balance_tracker.items(), key=lambda x: x, reverse=True)
-                            current_ratios = {str(sz): 0 for sz in active_sizes}
-                            assigned_pcs = 0
-                            
-                            max_remaining_bal = max(balance_tracker.values()) if balance_tracker.values() else 0
-                            effective_max_pcs = max_pcs_per_marker
-                            
-                            if max_remaining_bal < target_layers and max_remaining_bal > 0:
-                                effective_max_pcs = min(2, max_pcs_per_marker)
-                                target_layers = max_remaining_bal
-                            
-                            for sz, bal in sorted_sizes:
-                                if bal <= 0 or assigned_pcs >= effective_max_pcs: 
-                                    continue
-                                needed_ratio = math.floor(bal / target_layers)
-                                if needed_ratio > 4: 
-                                    needed_ratio = 4
-                                if needed_ratio == 0 and bal > (target_layers / 2): 
-                                    needed_ratio = 1
-                                if assigned_pcs + needed_ratio > effective_max_pcs: 
-                                    needed_ratio = effective_max_pcs - assigned_pcs
-                                    
-                                current_ratios[sz] = needed_ratio
-                                assigned_pcs += needed_ratio
-                            
-                            if assigned_pcs == 0:
-                                effective_max_pcs = min(2, max_pcs_per_marker)
-                                for sz, bal in sorted_sizes:
-                                    if bal > 0 and assigned_pcs < effective_max_pcs:
-                                        current_ratios[sz] = 1
-                                        assigned_pcs += 1
-                                        
-                            layer_candidates = []
-                            for sz in active_sizes:
-                                rat = current_ratios[sz]
-                                if rat > 0: 
-                                    layer_candidates.append(math.ceil(balance_tracker[sz] / rat))
-                            
-                            computed_layers = min(layer_candidates) if layer_candidates else target_layers
-                            if computed_layers <= 0: 
-                                computed_layers = 1
-                            
-                            if computed_layers > 150:
-                                num_tables = math.ceil(computed_layers / 120)
-                                computed_layers = math.ceil(computed_layers / num_tables)
-                            else: 
-                                num_tables = 1
-                                
-                            calculated_steps.append({
-                                "Sơ đồ / Trạng thái": marker_id, "Số lớp": computed_layers, "Số bàn": num_tables,
-                                "Dài sơ đồ": 0.0, "Số sp/SĐ": assigned_pcs, "Ratios": current_ratios.copy()
-                            })
-                            
-                            for sz in active_sizes:
-                                total_cut = current_ratios[sz] * computed_layers * num_tables
-                                balance_tracker[sz] = max(0, balance_tracker[sz] - total_cut)
-                                
-                            calculated_steps.append({
-                                "Sơ đồ / Trạng thái": "Balance", "Số lớp": "", "Số bàn": "", "Dài sơ đồ": "", "Số sp/SĐ": "",
-                                "Ratios": balance_tracker.copy()
-                            })
-                            step_idx += 1
-                        
-                        st.session_state["auto_cutting_results"] = calculated_steps
-                        st.success("🎉 Khởi tạo cấu trúc phân bổ sơ đồ thành công!")
-                        st.rerun()
-
-                if trigger_consumption:
-                    st.session_state["consumption_activated"] = True
                     st.rerun()
+                # CHỈ CHẠY LOGIC KHI ĐÃ ĐƯỢC ĐÁNH DẤU LÀ BẤM NÚT KÍCH HOẠT KẾT QUẢ
+                if st.session_state["click_auto_cutting"]:
+                    # Chỉ tính toán lại từ đầu nếu dữ liệu trong session đang trống rỗng
+                    if st.session_state["auto_cutting_results"] is None:
+                        with st.spinner("🚀 Hệ thống đang phân bổ sơ đồ hình tháp..."):
+                            import math
+                            cons_meters = consumption_input / 1.09361
+                            max_pcs_per_marker = math.floor(max_table_length / (cons_meters if cons_meters > 0 else 1.0))
+                            if max_pcs_per_marker <= 0: 
+                                max_pcs_per_marker = 6
+                            
+                            balance_tracker = {str(sz): int(size_breakdown_main.get(sz, 0)) for sz in active_sizes}
+                            calculated_steps = []
+                            step_idx = 1
+                            max_loops = 25
+                            
+                            while sum(balance_tracker.values()) > 0 and step_idx <= max_loops:
+                                marker_id = f"c{step_idx:02d}"
+                                if step_idx == 1: target_layers = 150
+                                elif step_idx == 2: target_layers = 120
+                                elif step_idx == 3: target_layers = 90
+                                else: target_layers = 60
+                                
+                                sorted_sizes = sorted(balance_tracker.items(), key=lambda x: x, reverse=True)
+                                current_ratios = {str(sz): 0 for sz in active_sizes}
+                                assigned_pcs = 0
+                                
+                                max_remaining_bal = max(balance_tracker.values()) if balance_tracker.values() else 0
+                                effective_max_pcs = max_pcs_per_marker
+                                
+                                if max_remaining_bal < target_layers and max_remaining_bal > 0:
+                                    effective_max_pcs = min(2, max_pcs_per_marker)
+                                    target_layers = max_remaining_bal
+                                
+                                for sz, bal in sorted_sizes:
+                                    if bal <= 0 or assigned_pcs >= effective_max_pcs: 
+                                        continue
+                                    needed_ratio = math.floor(bal / target_layers)
+                                    if needed_ratio > 4: 
+                                        needed_ratio = 4
+                                    if needed_ratio == 0 and bal > (target_layers / 2): 
+                                        needed_ratio = 1
+                                    if assigned_pcs + needed_ratio > effective_max_pcs: 
+                                        needed_ratio = effective_max_pcs - assigned_pcs
+                                        
+                                    current_ratios[sz] = needed_ratio
+                                    assigned_pcs += needed_ratio
+                                
+                                if assigned_pcs == 0:
+                                    effective_max_pcs = min(2, max_pcs_per_marker)
+                                    for sz, bal in sorted_sizes:
+                                        if bal > 0 and assigned_pcs < effective_max_pcs:
+                                            current_ratios[sz] = 1
+                                            assigned_pcs += 1
+                                            
+                                layer_candidates = []
+                                for sz in active_sizes:
+                                    rat = current_ratios[sz]
+                                    if rat > 0: 
+                                        layer_candidates.append(math.ceil(balance_tracker[sz] / rat))
+                                
+                                computed_layers = min(layer_candidates) if layer_candidates else target_layers
+                                if computed_layers <= 0: 
+                                    computed_layers = 1
+                                
+                                if computed_layers > 150:
+                                    num_tables = math.ceil(computed_layers / 120)
+                                    computed_layers = math.ceil(computed_layers / num_tables)
+                                else: 
+                                    num_tables = 1
+                                    
+                                calculated_steps.append({
+                                    "Sơ đồ / Trạng thái": marker_id, "Số lớp": computed_layers, "Số bàn": num_tables,
+                                    "Dài sơ đồ": 0.0, "Số sp/SĐ": assigned_pcs, "Ratios": current_ratios.copy()
+                                })
+                                
+                                for sz in active_sizes:
+                                    total_cut = current_ratios[sz] * computed_layers * num_tables
+                                    balance_tracker[sz] = max(0, balance_tracker[sz] - total_cut)
+                                    
+                                calculated_steps.append({
+                                    "Sơ đồ / Trạng thái": "Balance", "Số lớp": "", "Số bàn": "", "Dài sơ đồ": "", "Số sp/SĐ": "",
+                                    "Ratios": balance_tracker.copy()
+                                })
+                                step_idx += 1
+                            
+                            st.session_state["auto_cutting_results"] = calculated_steps
+                            st.rerun()
+
                 # ---------------------------------------------------------------------
                 # BƯỚC 3: LIÊN KẾT ĐỐI CHIẾU DỮ LIỆU Ô CAD & XỬ LÝ MA TRẬN REPORT
                 # ---------------------------------------------------------------------
