@@ -1309,7 +1309,7 @@ elif menu_selection == "🛒 Purchase Consumption":
     if "step2_computation_active" not in st.session_state: st.session_state["step2_computation_active"] = False
     if "bulk_cad_data_store" not in st.session_state: st.session_state["bulk_cad_data_store"] = []
 
-    # 💡 DI CHUYỂN LÊN ĐẦU TRANG TUYỆT ĐỐI: Nút chọn phân hệ luôn xuất hiện trực quan
+    # Nút chọn phân hệ công đoạn
     menu_sub = st.radio(
         "💡 CHỌN CÔNG ĐOẠN TÁC NGHIỆP THỰC HIỆN:",
         ["🧠 CHỨC NĂNG 1: TRỢ LÝ AI TÍNH ĐỊNH MỨC TRUNG BÌNH (CẦN SBD + TECHPACK)", 
@@ -1320,7 +1320,7 @@ elif menu_selection == "🛒 Purchase Consumption":
     st.markdown("---")
 
     # =============================================================================
-    # ⚡ VÁ LỖI HIỂN THỊ: ĐƯA Ô TRA CỨU RA NGOÀI CÙNG - MỞ LÀ THẤY NGAY KHÔNG CẦN CHỜ FILE
+    # ✂️ CHỨC NĂNG 2: TRA CỨU LỊCH SỬ KHO (GIỮ NGUYÊN)
     # =============================================================================
     if menu_sub.startswith("✂️ CHỨC NĂNG 2"):
         st.markdown("<p style='font-weight:700; font-size:14px; color:#1E3A8A; margin-bottom:2px;'>🔎 TRA CỨU LỊCH SỬ TÁC NGHIỆP TRÊN KHO ĐỘC LẬP</p>", unsafe_allow_html=True)
@@ -1354,7 +1354,9 @@ elif menu_selection == "🛒 Purchase Consumption":
                     
         st.markdown("<hr style='border:0.5px dashed #CBD5E1;'>", unsafe_allow_html=True)
 
-    # KHU VỰC TIẾP NHẬN FILE CHO TỪNG PHÂN HỆ
+    # =============================================================================
+    # 🧠 CHỨC NĂNG 1: KHU VỰC TIẾP NHẬN FILE VÀ KÍCH HOẠT AI
+    # =============================================================================
     if menu_sub.startswith("🧠 CHỨC NĂNG 1"):
         col_left, col_right = st.columns(2)
         with col_left: 
@@ -1366,7 +1368,6 @@ elif menu_selection == "🛒 Purchase Consumption":
             trigger_btn = st.button("⚡ KÍCH HOẠT SỐ HÓA ĐA LUỒNG SONG SONG", type="primary", use_container_width=True, key="activate_parallel_ingest_c1")
             if trigger_btn:
                 with st.spinner("🚀 AI đang bóc tách ma trận dữ liệu tổng thể..."):
-                    # 1. Khởi tạo API Key và Client AI
                     if "get_secure_gemini_key" in globals(): 
                         gemini_key = get_secure_gemini_key()
                     else: 
@@ -1380,7 +1381,6 @@ elif menu_selection == "🛒 Purchase Consumption":
                     sbd_bytes = file_sbd.getvalue()
                     sbd_parts_payload = []
 
-                    # 2. Đính kèm File vào Payload dưới dạng nhị phân (Giữ nguyên cấu trúc ma trận trực quan)
                     if file_sbd.name.lower().endswith(('.xlsx', '.xls')):
                         sbd_parts_payload.append(
                             types.Part.from_bytes(
@@ -1393,7 +1393,6 @@ elif menu_selection == "🛒 Purchase Consumption":
                             types.Part.from_bytes(data=sbd_bytes, mime_type="application/pdf")
                         )
 
-                    # 3. Siêu Prompt chuyên dụng cho tất cả các loại ma trận SBD ngành may
                     sbd_prompt = (
                         "You are an expert Garment ERP Data Extractor. Analyze the attached purchase order / size breakdown (SBD) sheet.\n"
                         "Your task is to parse the quantity matrix. Note that garment size headers can be single (S, M, L, 32), "
@@ -1422,7 +1421,6 @@ elif menu_selection == "🛒 Purchase Consumption":
                     )
                     sbd_parts_payload.append(types.Part.from_text(text=sbd_prompt))
 
-                    # 4. Thực thi gọi Gemini và xử lý chuỗi an toàn
                     try:
                         res_sbd = client_ai.models.generate_content(
                             model='gemini-2.5-flash', 
@@ -1441,12 +1439,55 @@ elif menu_selection == "🛒 Purchase Consumption":
                         st.error(f"❌ Lỗi AI bóc tách ma trận SBD: {str(e)}")
                         st.session_state["sbd_parsed_data"] = {}
 
-                    # 5. Xử lý song song file Techpack tiếp theo
                     res_tp = process_single_pdf_batch(file_tp.getvalue(), file_tp.name)
                     st.session_state["pur_tp_parsed_data"] = res_tp["data"] if res_tp.get("success") else {}
                     
                     st.session_state["purchase_ready"] = True
                     st.rerun()
+        # GIAO DIỆN HIỂN THỊ KẾT QUẢ KHI AI ĐÃ QUÉT XONG
+        if st.session_state.get("purchase_ready"):
+            st.success("🎉 Số hóa dữ liệu phục vụ AI hoàn tất! Bạn có thể bắt đầu hỏi đáp.")
+            
+            sbd_data = st.session_state.get("sbd_parsed_data", {})
+            detected_style = sbd_data.get("style_id", "Không rõ")
+            detected_total = sbd_data.get("total_quantity", 0)
+            
+            st.markdown(f"**Mã hàng phát hiện:** `{detected_style}` | **Tổng sản lượng PO:** `{detected_total:,} Pcs`")
+            
+            tab_sbd, tab_tp = st.tabs(["📊 Ma Trận Đơn Hàng (SBD)", "📐 Ma Trận Thông Số Bản Vẽ (Techpack)"])
+            
+            with tab_sbd:
+                if "breakdown_details" in sbd_data and sbd_data["breakdown_details"]:
+                    rows = []
+                    # Chuyển đổi dữ liệu danh sách phức tạp của AI về bảng phẳng
+                    for detail in sbd_data["breakdown_details"]:
+                        color = detail.get("color", "Default")
+                        color_code = detail.get("color_code", "")
+                        for size_info in detail.get("sizes", []):
+                            rows.append({
+                                "Màu sắc (Color)": f"{color_code} - {color}".strip(" - "),
+                                "Kích thước (Size)": size_info.get("size_name"),
+                                "Số lượng (PO Qty)": size_info.get("quantity", 0)
+                            })
+                    
+                    if rows:
+                        df_sbd_display = pd.DataFrame(rows)
+                        # Dựng bảng xoay ngang (Pivot Table) cho trực quan như Excel gốc
+                        try:
+                            df_pivot = df_sbd_display.pivot(
+                                index="Màu sắc (Color)", 
+                                columns="Kích thước (Size)", 
+                                values="Số lượng (PO Qty)"
+                            ).fillna(0).astype(int)
+                            df_pivot["Tổng số lượng"] = df_pivot.sum(axis=1)
+                            st.dataframe(df_pivot, use_container_width=True)
+                        except Exception:
+                            st.dataframe(df_sbd_display, use_container_width=True, hide_index=True)
+                    else:
+                        st.info("💡 Không bóc tách được dòng chi tiết size nào.")
+                else:
+                    st.info("💡 Chưa có dữ liệu ma trận size để hiển thị.")
+
 
 
 
