@@ -2085,18 +2085,21 @@ def generate_premium_excel_file(style_id, po_qty, planned_cut, consumption_input
                     data_col_idx += 1
                 row_excel_idx += 1
 
-            for col in worksheet.columns:
+            # 🎯 FIXED: Sửa lỗi lấy thuộc tính 'column' từ Tuple sang lấy đúng đối tượng ô Excel
+            for col_idx in range(1, worksheet.max_column + 1):
                 max_len = 0
-                col_letter = get_column_letter(col.column)
-                for cell in col:
-                    if cell.row > 10 and cell.value is not None:
-                        max_len = max(max_len, len(str(cell.value)))
+                col_letter = get_column_letter(col_idx)
+                for row_idx in range(11, worksheet.max_row + 1):
+                    cell_val = worksheet.cell(row=row_idx, column=col_idx).value
+                    if cell_val is not None:
+                        max_len = max(max_len, len(str(cell_val)))
                 worksheet.column_dimensions[col_letter].width = max(max_len + 5, 12)
 
         return buffer.getvalue()
     except Exception as xl_err:
         st.error(f"❌ Lỗi cấu trúc tạo Excel: {str(xl_err)}")
         return None
+
 if st.session_state.get("auto_cutting_results") is not None:
     cad_lengths_map = {}
     if cad_paste_zone.strip() and st.session_state.get("consumption_activated"):
