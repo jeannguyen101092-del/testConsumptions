@@ -1971,71 +1971,54 @@ import streamlit as st
 from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
-# ==============================================================================
-# HÀM NHỎ 1: XỬ LÝ ĐẨY DỮ LIỆU LÊN DATABASE SUPABASE
-# ==============================================================================
 def push_to_supabase_table(style_id, po_qty, planned_cut, avg_yield, total_fabric, cut_width):
     try:
         payload_db = {
-            "style_name": str(style_id).strip().upper(), 
-            "po_quantity": int(po_qty),
-            "planned_cut_pcs": int(planned_cut), 
-            "consumption_value": str(round(avg_yield, 3)),
-            "total_material_value": str(round(total_fabric, 2)), 
-            "cuttable_width_inch": float(cut_width)
+            "style_name": str(style_id).strip().upper(), "po_quantity": int(po_qty),
+            "planned_cut_pcs": int(planned_cut), "consumption_value": str(round(avg_yield, 3)),
+            "total_material_value": str(round(total_fabric, 2)), "cuttable_width_inch": float(cut_width)
         }
-        
-        # Gọi lại chính xác cơ chế dò tìm biến kết nối toàn cục ban đầu của bạn
         sb_instance = globals().get("supabase", globals().get("supabase_client", st.session_state.get("supabase")))
-        
         if sb_instance:
             sb_instance.table("tac_nghiep_ban_cat").insert(payload_db).execute()
             st.success(f"🎉 Đã đồng bộ dữ liệu mã hàng {style_id} lên hệ thống Supabase thành công!")
             return True
         else:
-            st.error("❌ Không tìm thấy cổng kết nối database. Vui lòng kiểm tra lại cấu hình.")
+            st.error("❌ Không tìm thấy cổng kết nối database.")
             return False
     except Exception as db_err: 
         st.error(f"Lỗi cơ sở dữ liệu: {str(db_err)}")
         return False
 
-
-# ==============================================================================
-# HÀM NHỎ 2: KHỞI TẠO VÀ ĐÓNG KHUNG MỸ THUẬT FILE EXCEL THƯƠNG MẠI
-# ==============================================================================
-def generate_premium_excel_file(style_id, po_qty, planned_cut, consumption_in, avg_yield, cut_width, df_report, parsed_sizes, tech_keys, size_keys):
+def generate_premium_excel_file(style_id, po_qty, planned_cut, consumption_input_val, avg_yield, cut_width, df_report, parsed_sizes, tech_keys, size_keys):
     try:
         buffer = io.BytesIO()
         with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-            # Tạo sheet trống để vẽ ma trận tay, chống lỗi gộp ô gốc của Pandas
             pd.DataFrame().to_excel(writer, sheet_name="BaoCao_TacNghiep", index=False)
             workbook = writer.book
             worksheet = writer.sheets["BaoCao_TacNghiep"]
-            worksheet.views.sheetView.showGridLines = True # Hiện lưới Excel chuyên nghiệp
+            worksheet.sheet_view.showGridLines = True
             
-            # Định nghĩa bảng Font chữ và Màu sắc thương mại cao cấp
             font_title = Font(name="Segoe UI", size=14, bold=True, color="1F497D")
             font_header = Font(name="Segoe UI", size=10, bold=True)
             font_normal = Font(name="Segoe UI", size=10)
-            font_balance = Font(name="Segoe UI", size=10, color="FF0000") # Chữ đỏ hàng Balance
+            font_balance = Font(name="Segoe UI", size=10, color="FF0000")
             
             fill_header = PatternFill(start_color="F2F2F2", end_color="F2F2F2", fill_type="solid")
-            fill_yellow = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid") # Vàng nhạt Pastel dịu mắt
+            fill_yellow = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")
             
             thin_side = Side(style='thin', color='BFBFBF')
             border_cell = Border(left=thin_side, right=thin_side, top=thin_side, bottom=thin_side)
             
-            # 1. Vẽ khối thông tin đơn hàng ở góc trên
             worksheet.cell(row=2, column=1, value="THÔNG TIN ĐƠN HÀNG TÁC NGHIỆP BÀN CẮT CHUẨN").font = font_title
             headers_info = [
                 f"Mã hàng (Style Name): {style_id}", f"Số lượng đơn hàng (PO Qty): {po_qty} Pcs",
-                f"Sản lượng kế hoạch cắt (Planned Cut): {planned_cut} Pcs", f"Định mức tài liệu đề xuất: {consumption_input:.3f} Yds/Pcs",
+                f"Sản lượng kế hoạch cắt (Planned Cut): {planned_cut} Pcs", f"Định mức tài liệu đề xuất: {consumption_input_val:.3f} Yds/Pcs",
                 f"Định mức tác nghiệp thực tế: {avg_yield:.3f} Yds/Pcs", f"Khổ cắt: {cut_width}\"", "Nhóm Inseam: None"
             ]
             for idx, text in enumerate(headers_info):
                 worksheet.cell(row=idx + 3, column=1, value=text).font = font_normal
 
-            # 2. Vẽ tiêu đề cột 2 tầng (MultiIndex)
             worksheet.cell(row=11, column=1, value="").fill = fill_header
             cell_sz = worksheet.cell(row=12, column=1, value="SIZE")
             cell_sz.font = font_header; cell_sz.fill = fill_header; cell_sz.border = border_cell
@@ -2066,7 +2049,6 @@ def generate_premium_excel_file(style_id, po_qty, planned_cut, consumption_in, a
                 c_t2.alignment = Alignment(horizontal="center", vertical="center")
                 col_idx += 1
 
-            # 3. Đổ dữ liệu ma trận số lượng & Tự động quét dòng tô màu vàng
             row_excel_idx = 13
             for _, row in df_report.iterrows():
                 is_balance = (str(row["SIZE"]).strip() == "Balance")
@@ -2103,7 +2085,6 @@ def generate_premium_excel_file(style_id, po_qty, planned_cut, consumption_in, a
                     data_col_idx += 1
                 row_excel_idx += 1
 
-            # 4. Tự động giãn cột Auto-fit
             for col in worksheet.columns:
                 max_len = 0
                 col_letter = get_column_letter(col.column)
@@ -2116,7 +2097,6 @@ def generate_premium_excel_file(style_id, po_qty, planned_cut, consumption_in, a
     except Exception as xl_err:
         st.error(f"❌ Lỗi cấu trúc tạo Excel: {str(xl_err)}")
         return None
-# # BƯỚC 3: LIÊN KẾT ĐỐI CHIẾU DỮ LIỆU Ô CAD, ĐẨY SUPABASE & KẾT XUẤT EXCEL ĐÓNG KHUNG CHUẨN
 if st.session_state.get("auto_cutting_results") is not None:
     cad_lengths_map = {}
     if cad_paste_zone.strip() and st.session_state.get("consumption_activated"):
@@ -2159,7 +2139,6 @@ if st.session_state.get("auto_cutting_results") is not None:
     total_fabric_yds_final = total_fabric_m * 1.09361
     final_avg_yield = total_fabric_yds_final / (total_cut_pcs_sum if total_cut_pcs_sum > 0 else 1)
 
-    # Phân tích cú pháp bẻ chuỗi kích cỡ Inseam
     parsed_size_columns = []
     for col_name in active_sizes:
         col_str = str(col_name).strip()
@@ -2181,23 +2160,22 @@ if st.session_state.get("auto_cutting_results") is not None:
     other_tech_keys = ["Số lớp", "Số bàn", "Dài sơ đồ", "Số sp/SĐ", "Đ.Mức SĐ", "Vải cần (M)"]
     df_final_report = df_final_report[["SIZE"] + ordered_size_keys + other_tech_keys]
 
-    # Gọi hàm tạo tệp Excel nền chất lượng cao
+    st.write("### 📊 BẢNG KẾT QUẢ TÁC NGHIỆP CHI TIẾT")
+    st.dataframe(df_final_report, use_container_width=True)
+
     excel_file_data = generate_premium_excel_file(
         style_id_input, po_qty_input, total_cut_pcs_sum, consumption_input, 
         final_avg_yield, cuttable_width_inch, df_final_report, parsed_size_columns, other_tech_keys, ordered_size_keys
     )
 
-    # 🎯 CHIA GIAO DIỆN NÚT BẤM THÀNH 2 ĐOẠN (2 CỘT SONG SONG)
     st.write("---")
     col1, col2 = st.columns(2)
 
     with col1:
-        # Gọi hàm nhỏ 1 khi bấm nút lưu kho
-        if st.button("💾 ĐẨY DỮ LIỆU TÁC NGHIỆP LÊN DATABASE SUPABASE", type="secondary", use_container_width=True, key="sb_sync_btn_v10"):
+        if st.button("💾 ĐẨY DỮ LIỆU TÁC NGHIỆP LÊN DATABASE SUPABASE", type="secondary", use_container_width=True, key="sb_sync_btn_v12"):
             push_to_supabase_table(style_id_input, po_qty_input, total_cut_pcs_sum, final_avg_yield, total_fabric_yds_final, cuttable_width_inch)
 
     with col2:
-        # Gọi nút tải file Excel đẹp chuẩn từ hàm nhỏ 2
         if excel_file_data:
             st.download_button(
                 label="📥 KẾT XUẤT VÀ TẢI FILE EXCEL BÁO CÁO",
@@ -2205,5 +2183,5 @@ if st.session_state.get("auto_cutting_results") is not None:
                 file_name=f"Bao_Cao_Tac_Nghiep_{str(style_id_input).strip()}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 use_container_width=True,
-                key="download_excel_v10"
+                key="download_excel_v12"
             )
