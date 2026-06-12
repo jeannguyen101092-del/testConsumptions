@@ -2102,8 +2102,12 @@ def generate_premium_excel_file(style_id, po_qty, planned_cut, consumption_input
 
 if st.session_state.get("auto_cutting_results") is not None:
     cad_lengths_map = {}
-    if cad_paste_zone.strip() and st.session_state.get("consumption_activated"):
-        cad_lines = cad_paste_zone.strip().split("\n")
+    
+    # 🎯 FIX CỐT LÕI: Kiểm tra an toàn sự tồn tại của biến cad_paste_zone để chống sập giao diện
+    cad_zone_value = globals().get("cad_paste_zone", locals().get("cad_paste_zone", ""))
+    
+    if str(cad_zone_value).strip() and st.session_state.get("consumption_activated"):
+        cad_lines = str(cad_zone_value).strip().split("\n")
         for line in cad_lines:
             if not line.strip(): continue
             match = re.search(r'(c\d{2})[\s\t]+([0-9]*\.?[0-9]+)', line.lower().strip())
