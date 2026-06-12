@@ -1889,112 +1889,146 @@ elif menu_selection == "🛒 Purchase Consumption":
                 else:
                     st.info("💡 Không tìm thấy dữ liệu chia size chi tiết từ file SBD. Vui lòng nhập thủ công bên dưới nếu cần.")
 
-                                                          # 2. KHU VỰC TÁC NGHIỆP BÀN CẮT ĐỘNG (DỰA TRÊN DỮ LIỆU CAD DÁN VÀO)
+                                # =============================================================================
+                # 2. KHU VỰC TÁC NGHIỆP BÀN CẮT ĐỘNG (LUÔN HIỆN SẴN KHUNG TÍNH TOÁN)
+                # =============================================================================
                 st.markdown("### ✂️ BẢNG TÁC NGHIỆP BÀN CẮT TỰ ĐỘNG")
                 
-                # Khai báo danh sách các cột kích cỡ đang có trong đơn hàng để tạo tiêu đề cột
-                active_sizes = [str(k) for k in size_breakdown_main.keys()]
-                
-                parsed_rows = []
-                total_fabric_req_yds = 0.0
-                total_cut_pcs = 0
-                
-                # BẮT ĐẦU XỬ LÝ CHUỖI DỮ LIỆU DÁN TỪ CAD
+                # Lấy danh sách kích cỡ có sản lượng lớn hơn 0
+                active_sizes = [str(k) for k, v in size_breakdown_main.items() if int(v) > 0]
+                if not active_sizes:
+                    active_sizes = ["S", "M", "L", "XL"]
+
+                parsed_cad_data = []
+
+                # Bước A: Đọc và phân tích chuỗi dữ liệu dán từ ô CAD (nếu có)
                 if cad_paste_zone.strip():
                     cad_lines = cad_paste_zone.strip().split("\n")
-                    
-                    for idx, line in enumerate(cad_lines):
+                    for line in cad_lines:
                         if not line.strip():
                             continue
                         parts = line.split()
-                        if len(parts) < 2:
-                            continue
-                            
-                        # Tách tự động tên sơ đồ và chiều dài mét ở cuối dòng
-                        marker_name = parts[0]
-                        try:
-                            marker_len_m = float(parts[-1])
-                        except ValueError:
-                            marker_len_m = 0.0
-                            
-                        # Đọc cấu trúc phối tỷ lệ size (Ví dụ tên sơ đồ đặt dạng: 1S-2M-1L hoặc lấy mặc định)
-                        # Trích xuất tỷ lệ size từ tên sơ đồ hoặc tạo form nhập liệu động cho từng sơ đồ nếu cần
-                        ratio_dict = {}
-                        total_ratio = 0
-                        
-                        # Thao tác tách thông minh: Thử tìm cụm tỷ lệ trong tên sơ đồ (Ví dụ: C01-1-2-1)
-                        # Để đơn giản và trực quan nhất cho tổ trưởng, ta tạo các ô nhập tỷ lệ nhanh hoặc bóc từ tên
-                        st.markdown(f"**⚙️ Cấu hình tỷ lệ phối size cho Sơ đồ: `{marker_name}` (Dài: {marker_len_m} M)**")
-                        ratio_cols = st.columns(len(active_sizes) + 1)
-                        
-                        for s_idx, sz in enumerate(active_sizes):
-                            with ratio_cols[s_idx]:
-                                # Tạo ô nhập tỷ lệ trực tiếp cho từng size của sơ đồ đó
-                                r_val = st.number_input(f"Tỷ lệ {sz}", min_value=0, max_value=20, value=0, key=f"r_{marker_name}_{sz}_{idx}")
-                                ratio_dict[sz] = r_val
-                                total_ratio += r_val
-                        
-                        # Tính Số lớp vải tự động dựa trên sản lượng cần cắt cao nhất của cấu trúc size đó
-                        # Công thức: Số lớp = Max (Sản lượng size / Tỷ lệ size) để đảm bảo không bị thiếu hàng
-                        needed_layers = 0
-                        for sz, rat in ratio_dict.items():
-                            if rat > 0:
-                                target_sz_qty = int(size_breakdown_main.get(sz, 0))
-                                # Tính toán sơ bộ số lớp cần để phủ hết sản lượng size này
-                                approx_layers = math.ceil(target_sz_qty / rat)
-                                if approx_layers > needed_layers:
-                                    needed_layers = approx_layers
-                        
-                        # Tính Nhu cầu vải (Yards) = Số lớp * Chiều dài sơ đồ (Meters) * 1.09361 (quy đổi sang Yards)
-                        marker_len_yds = marker_len_m * 1.09361
-                        fabric_demand_yds = needed_layers * marker_len_yds
-                        
-                        # Tổng số sản phẩm trong 1 sơ đồ đi được
-                        pcs_per_layer = total_ratio
-                        total_pcs_marker = needed_layers * pcs_per_layer
-                        total_cut_pcs += total_pcs_marker
-                        
-                        # Định mức thực tế của sơ đồ (Yds/Pcs) = Nhu cầu vải / Tổng số sản phẩm cắt được
-                        marker_consumption = fabric_demand_yds / total_pcs_marker if total_pcs_marker > 0 else 0.0
-                        total_fabric_req_yds += fabric_demand_yds
-                        
-                        # Đóng gói dữ liệu hàng để đưa lên bảng
-                        row_data = {
-                            "Tên Sơ Đồ": marker_name,
-                            "Tổng Tỷ Lệ": total_ratio,
-                            "Số Lớp Vải": needed_layers,
-                            "Dài Sơ Đồ (M)": marker_len_m,
-                            "Nhu Cầu Vải (Yds)": round(fabric_demand_yds, 2),
-                            "Định Mức (Yds/Pcs)": round(marker_consumption, 3)
-                        }
-                        # Ghép các cột tỷ lệ size vào giữa bảng
-                        for sz in active_sizes:
-                            row_data[f"Tỷ lệ {sz}"] = ratio_dict[sz]
-                            
-                        parsed_rows.append(row_data)
+                        if len(parts) >= 2:
+                            marker_name = " ".join(parts[:-1])
+                            try:
+                                marker_len_m = float(parts[-1])
+                            except ValueError:
+                                marker_len_m = 0.0
+                            parsed_cad_data.append({"Tên Sơ Đồ": marker_name, "Dài Sơ Đồ (M)": marker_len_m})
 
-                # HIỂN THỊ KẾT QUẢ DẠNG BẢNG HOÀN CHỈNH
-                if parsed_rows:
-                    df_result = pd.DataFrame(parsed_rows)
-                    
-                    # Sắp xếp lại thứ tự cột cho đẹp mắt: Tên -> Các cột Size -> Tổng tỷ lệ -> Số lớp -> Dài sơ đồ -> Nhu cầu -> Định mức
-                    ordered_cols = ["Tên Sơ Đồ"] + [f"Tỷ lệ {sz}" for sz in active_sizes] + ["Tổng Tỷ Lệ", "Số Lớp Vải", "Dài Sơ Đồ (M)", "Nhu Cầu Vải (Yds)", "Định Mức (Yds/Pcs)"]
-                    df_result = df_result[ordered_cols]
-                    
-                    st.markdown("<p style='font-weight:700; font-size:14px; color:#1E3A8A;'>📋 BẢNG TỔNG HỢP PHÂN PHỐI TÁC NGHIỆP VÀ TIÊU HAO VẢI</p>", unsafe_allow_html=True)
-                    st.dataframe(df_result, use_container_width=True, hide_index=True)
-                    
-                    # ĐẦU RA ĐỊNH MỨC TRUNG BÌNH TOÀN BỘ ĐƠN HÀNG
-                    final_avg_consumption = total_fabric_req_yds / total_cut_pcs if total_cut_pcs > 0 else 0.0
-                    
-                    st.markdown("---")
-                    c_metrics1, c_metrics2, c_metrics3 = st.columns(3)
-                    with c_metrics1:
-                        st.metric("Tổng nhu cầu vải sản xuất", f"{total_fabric_req_yds:,.2f} Yds")
-                    with c_metrics2:
-                        st.metric("Tổng định mức tác nghiệp", f"{final_avg_consumption:.3f} Yds/Pcs")
-                    with c_metrics3:
-                        variance = final_avg_consumption - consumption_input
-                        st.metric("Chênh lệch định mức mua", f"{variance:+.3f}", delta_color="inverse" if variance > 0 else "normal")
+                # Bước B: Nếu ô dán trống, tự động dựng sẵn 5 dòng sơ đồ mặc định (c01 -> c05) để chạy thô
+                if not parsed_cad_data:
+                    for i in range(1, 6):
+                        parsed_cad_data.append({"Tên Sơ Đồ": f"c{i:02d}", "Dài Sơ Đồ (M)": 0.0})
+
+                # Bước C: Khởi tạo dữ liệu nền cho bảng chỉnh sửa Data Editor
+                if "cutting_table_state" not in st.session_state:
+                    default_rows = []
+                    for item in parsed_cad_data:
+                        row = {"Tên Sơ Đồ": item["Tên Sơ Đồ"], "Dài Sơ Đồ (M)": item["Dài Sơ Đồ (M)"]}
+                        for sz in active_sizes:
+                            row[f"TL {sz}"] = 0
+                        default_rows.append(row)
+                    st.session_state["cutting_table_state"] = pd.DataFrame(default_rows)
                 else:
-                    st.info("💡 Vui lòng dán dữ liệu sơ đồ và chiều dài từ máy CAD vào ô dữ liệu phía trên để hệ thống tự động lập bảng tác nghiệp.")
+                    # Nếu người dùng thay đổi dữ liệu dán ở ô CAD, cập nhật lại tên và số mét tương ứng
+                    current_df = st.session_state["cutting_table_state"]
+                    for idx, item in enumerate(parsed_cad_data):
+                        if idx < len(current_df):
+                            current_df.at[idx, "Tên Sơ Đồ"] = item["Tên Sơ Đồ"]
+                            current_df.at[idx, "Dài Sơ Đồ (M)"] = item["Dài Sơ Đồ (M)"]
+                        else:
+                            new_row = {"Tên Sơ Đồ": item["Tên Sơ Đồ"], "Dài Sơ Đồ (M)": item["Dài Sơ Đồ (M)"]}
+                            for sz in active_sizes:
+                                new_row[f"TL {sz}"] = 0
+                            current_df = pd.concat([current_df, pd.DataFrame([new_row])], ignore_index=True)
+                    st.session_state["cutting_table_state"] = current_df
+
+                # Cấu hình các cột hiển thị trong bảng tác nghiệp tính toán
+                column_config = {
+                    "Tên Sơ Đồ": st.column_config.TextColumn("Tên Sơ Đồ", width="medium", required=True),
+                    "Dài Sơ Đồ (M)": st.column_config.NumberColumn("Dài Sơ Đồ (M)", min_value=0.0, format="%.2f", step=0.1, width="small"),
+                }
+                for sz in active_sizes:
+                    column_config[f"TL {sz}"] = st.column_config.NumberColumn(f"TL {sz}", min_value=0, max_value=20, step=1, width="small")
+
+                # HIỂN THỊ Ô EDITOR CHO PHÉP GÕ TỶ LỆ VÀ SỬA ĐỔI SỐ MÉT TRỰC TIẾP
+                edited_df = st.data_editor(
+                    st.session_state["cutting_table_state"],
+                    column_config=column_config,
+                    num_rows="dynamic",
+                    use_container_width=True,
+                    key="cutting_table_editor"
+                )
+                st.session_state["cutting_table_state"] = edited_df
+
+                # =============================================================================
+                # THUẬT TOÁN TỰ ĐỘNG TÍNH TOÁN KẾT QUẢ TÁC NGHIỆP TRÊN TỪNG DÒNG
+                # =============================================================================
+                calculated_rows = []
+                total_fabric_req_yds = 0.0
+                total_cut_pcs = 0
+                
+                # Mảng theo dõi sản lượng mục tiêu lấy từ file SBD để giải toán số lớp
+                target_qtys = {sz: int(size_breakdown_main.get(sz, 0)) for sz in active_sizes}
+
+                for idx, row in edited_df.iterrows():
+                    res_row = row.to_dict()
+                    
+                    # 1. Tính Tổng tỷ lệ phối size trên sơ đồ này
+                    total_ratio = sum(int(row.get(f"TL {sz}", 0)) for sz in active_sizes)
+                    res_row["Tổng Tỷ Lệ"] = total_ratio
+                    
+                    # 2. Tự động tính toán Số lớp vải tối ưu dựa trên sản lượng đơn hàng
+                    needed_layers = 0
+                    layers_candidates = []
+                    for sz in active_sizes:
+                        ratio = int(row.get(f"TL {sz}", 0))
+                        if ratio > 0 and target_qtys[sz] > 0:
+                            layers_candidates.append(math.ceil(target_qtys[sz] / ratio))
+                    
+                    if layers_candidates:
+                        needed_layers = min(layers_candidates)
+                    res_row["Số Lớp Vải"] = needed_layers
+                    
+                    # Trừ bớt số lượng đã giải quyết để tính toán cho sơ đồ tiếp theo
+                    for sz in active_sizes:
+                        ratio = int(row.get(f"TL {sz}", 0))
+                        target_qtys[sz] = max(0, target_qtys[sz] - (ratio * needed_layers))
+                    
+                    # 3. Tính Sản lượng (Pcs) cắt được trên sơ đồ này
+                    marker_pcs = total_ratio * needed_layers
+                    res_row["Sản Lượng (Pcs)"] = marker_pcs
+                    total_cut_pcs += marker_pcs
+                    
+                    # 4. Tự động tính Nhu cầu vải (Yards) = Dài (M) * Số lớp * 1.09361
+                    marker_len_m = float(row.get("Dài Sơ Đồ (M)", 0.0))
+                    fabric_demand_yds = needed_layers * marker_len_m * 1.09361
+                    res_row["Nhu Cầu Vải (Yds)"] = round(fabric_demand_yds, 2)
+                    total_fabric_req_yds += fabric_demand_yds
+                    
+                    # 5. Định mức thực tế của sơ đồ
+                    res_row["Định Mức (Yds/Pcs)"] = round(fabric_demand_yds / marker_pcs, 3) if marker_pcs > 0 else 0.0
+                    
+                    calculated_rows.append(res_row)
+
+                # HIỂN THỊ BẢNG KẾT QUẢ TÁC NGHIỆP SAU KHI ĐÃ TỰ ĐỘNG CHẠY THUẬT TOÁN
+                df_result = pd.DataFrame(calculated_rows)
+                ordered_cols = ["Tên Sơ Đồ"] + [f"TL {sz}" for sz in active_sizes] + ["Tổng Tỷ Lệ", "Số Lớp Vải", "Sản Lượng (Pcs)", "Dài Sơ Đồ (M)", "Nhu Cầu Vải (Yds)", "Định Mức (Yds/Pcs)"]
+                df_result = df_result[ordered_cols]
+                
+                st.markdown("<p style='font-weight:700; font-size:13px; color:#065F46;'>📊 KẾT QUẢ ĐỒNG BỘ TÁC NGHIỆP & TIÊU HAO VẢI</p>", unsafe_allow_html=True)
+                st.dataframe(df_result, use_container_width=True, hide_index=True)
+                
+                # BÁO CÁO ĐỊNH MỨC TOÀN ĐƠN HÀNG
+                final_avg_consumption = total_fabric_req_yds / total_cut_pcs if total_cut_pcs > 0 else 0.0
+                
+                st.markdown("---")
+                c_metrics1, c_metrics2, c_metrics3 = st.columns(3)
+                with c_metrics1:
+                    st.metric("Tổng nhu cầu vải sản xuất", f"{total_fabric_req_yds:,.2f} Yds")
+                with c_metrics2:
+                    st.metric("Tổng định mức tác nghiệp", f"{final_avg_consumption:.3f} Yds/Pcs")
+                with c_metrics3:
+                    variance = final_avg_consumption - consumption_input if total_fabric_req_yds > 0 else 0.0
+                    st.metric("Chênh lệch định mức mua", f"{variance:+.3f}", delta_color="inverse" if variance > 0 else "normal")
