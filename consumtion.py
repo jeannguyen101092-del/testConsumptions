@@ -1690,6 +1690,7 @@ elif menu_selection == "🛒 Purchase Consumption":
                     st.session_state["purchase_ready"] = True
                     st.rerun()
         # -----------------------------------------------------------------------------
+       # -----------------------------------------------------------------------------
     # ✂️ CHỨC NĂNG 2 - PHẦN 1: ĐÃ SỬA TRIỆT ĐỂ LỖI BÓC MẢNG - ĐỘNG LỰC TỰ ĐỘNG NHẢY SỐ CAD
     # -----------------------------------------------------------------------------
     elif st.session_state.get("purchase_ready") is True and menu_sub.startswith("✂️ CHỨC NĂNG 2"):
@@ -1754,6 +1755,7 @@ elif menu_selection == "🛒 Purchase Consumption":
                         continue
                     tokens = [t.strip() for t in re.split(r'\t+|\s+', line.strip()) if t.strip()]
                     if len(tokens) >= 2:
+                        # ✅ ĐÃ VÁ LỖI CHÍ MẠNG: Bốc chính xác phần tử Index trần của mảng tokens
                         raw_name = tokens[0]
                         raw_length = tokens[1]
                         
@@ -1780,7 +1782,6 @@ elif menu_selection == "🛒 Purchase Consumption":
                 st.session_state["bulk_cad_data_store"] = []
                 if cad_length_meters_list:
                     for idx_c in range(len(cad_length_meters_list)):
-                        # ĐÃ VÁ LỖI NGOẶC: Đóng đầy đủ dữ liệu mảng CAD Dictionary
                         st.session_state["bulk_cad_data_store"].append({
                             "marker_id": cad_names_list[idx_c],
                             "length_meters": cad_length_meters_list[idx_c]
