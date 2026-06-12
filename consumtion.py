@@ -1522,7 +1522,7 @@ elif menu_selection == "🛒 Purchase Consumption":
                     st.session_state["purchase_ready"] = True
                     st.rerun()
 
- # -----------------------------------------------------------------------------
+     # -----------------------------------------------------------------------------
     # 🧠 PHẦN HIỂN THỊ CHỨC NĂNG 1: TRỢ LÝ AI PHÂN TÍCH ĐỊNH MỨC TRUNG BÌNH
     # -----------------------------------------------------------------------------
     if st.session_state.get("purchase_ready") is True and menu_sub.startswith("🧠 CHỨC NĂNG 1"):
@@ -1532,19 +1532,49 @@ elif menu_selection == "🛒 Purchase Consumption":
         if isinstance(sbd_data, dict) and isinstance(tp_data, dict) and sbd_data and tp_data:
             detected_style_id = sbd_data.get("style_id", "UNKNOWN_STYLE")
             detected_total_po = sbd_data.get("total_quantity", 0)
-            size_breakdown_dict = sbd_data.get("size_breakdown", {})
             
             st.success("🎉 Số hóa dữ liệu phục vụ AI hoàn tất! Bạn có thể bắt đầu hỏi đáp.")
             tab_input_sbd, tab_input_tp = st.tabs(["📋 Ma Trận Đơn Hàng (SBD)", "📐 Ma Trận Thông Số Bản Vẽ (Techpack)"])
             
             with tab_input_sbd:
                 st.markdown(f"**Mã hàng phát hiện:** `{detected_style_id}` | **Tổng sản lượng PO:** `{detected_total_po:,}` Pcs")
-                st.dataframe(pd.DataFrame(list(size_breakdown_dict.items()), columns=["Size", "PO Qty"]), use_container_width=True, hide_index=True)
+                
+                # SỬA LỖI BẢNG EMPTY: Bóc tách cấu trúc breakdown_details mới đưa lên bảng giao diện
+                if "breakdown_details" in sbd_data and sbd_data["breakdown_details"]:
+                    rows = []
+                    for detail in sbd_data["breakdown_details"]:
+                        color = detail.get("color", "Default")
+                        color_code = detail.get("color_code", "")
+                        for size_info in detail.get("sizes", []):
+                            rows.append({
+                                "Màu sắc (Color)": f"{color_code} - {color}".strip(" - "),
+                                "Kích thước (Size)": size_info.get("size_name"),
+                                "Số lượng (PO Qty)": size_info.get("quantity", 0)
+                            })
+                    
+                    if rows:
+                        df_sbd_display = pd.DataFrame(rows)
+                        try:
+                            df_pivot = df_sbd_display.pivot(
+                                index="Màu sắc (Color)", 
+                                columns="Kích thước (Size)", 
+                                values="Số lượng (PO Qty)"
+                            ).fillna(0).astype(int)
+                            df_pivot["Tổng số lượng"] = df_pivot.sum(axis=1)
+                            st.dataframe(df_pivot, use_container_width=True)
+                        except Exception:
+                            st.dataframe(df_sbd_display, use_container_width=True, hide_index=True)
+                    else:
+                        st.info("💡 Không bóc tách được dòng chi tiết size nào.")
+                else:
+                    st.info("💡 Chưa có dữ liệu ma trận size để hiển thị.")
             
             with tab_input_tp:
                 matrix_data = tp_data.get("full_size_matrix", {}) or tp_data.get("measurements", {})
                 if matrix_data: 
                     st.dataframe(pd.DataFrame(matrix_data), use_container_width=True)
+                else:
+                    st.info("💡 Chưa có dữ liệu ma trận thông số Techpack.")
                     
             st.markdown("<br><hr style='border:0.5px solid #CBD5E1;'>", unsafe_allow_html=True)
             chat_col1, chat_col2 = st.columns([3.2, 0.8])
@@ -1554,6 +1584,7 @@ elif menu_selection == "🛒 Purchase Consumption":
                 if st.button("🗑️ XÓA CHAT AI", key="clear_pur_chat_btn", use_container_width=True):
                     st.session_state["purchase_chat_history"] = []
                     st.toast("♻️ Đã xóa sạch lịch sử chat!")
+                    st.rerun()
                     
             pur_chat_container = st.container()
             with pur_chat_container:
@@ -1572,7 +1603,7 @@ elif menu_selection == "🛒 Purchase Consumption":
                             YOUR MISSION:
                             1. Compare the detailed measurement data across ALL sizes against the base size.
                             2. Dynamically calculate the geometric layout area delta (Thống kê chênh lệch số đo chiều dài/rộng mảnh rập) to allocate specific consumption values for EACH size.
-                            3. Take these size-specific consumptions, multiply them by their respective SBD quantities from {json.dumps(size_breakdown_dict)}, and compute the final Weighted Average Consumption (Định mức trung bình gia quyền) for the entire PO order.
+                            3. Take these size-specific consumptions, multiply them by their respective SBD quantities from {json.dumps(sbd_data.get('breakdown_details', []))}, and compute the final Weighted Average Consumption (Định mức trung bình gia quyền) for the entire PO order.
                             4. Output the final average consumption first in YARDS (Yds), followed by short mathematical bullet points for each size. Respond directly in Vietnamese.
                             """
                             payload_contents = [
@@ -1589,11 +1620,14 @@ elif menu_selection == "🛒 Purchase Consumption":
                                 client_ai_c1 = genai.Client(api_key=gemini_key_c1)
                                 response = client_ai_c1.models.generate_content(model='gemini-2.5-flash', contents=payload_contents)
                                 ai_reply = response.text if response.text else "Không thể phân tích dữ liệu."
+                                
+                                if "purchase_chat_history" not in st.session_state:
+                                    st.session_state["purchase_chat_history"] = []
                                 st.session_state["purchase_chat_history"].append({"user": user_query, "ai": ai_reply})
                                 st.rerun()
                             except Exception as chat_err: 
                                 st.error(f"Lỗi cổng kết nối AI: {str(chat_err)}")
-       # -----------------------------------------------------------------------------
+
     # =============================================================================
     # KỊCH BẢN CHỨC NĂNG 2: CHỈ HIỂN THỊ 1 Ô TẢI FILE SBD SỐ LƯỢNG, ẨN FILE TECHPACK
     # =============================================================================
