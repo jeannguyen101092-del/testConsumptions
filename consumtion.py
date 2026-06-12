@@ -1568,127 +1568,153 @@ elif menu_selection == "🛒 Purchase Consumption":
                                 st.rerun()
                             except Exception as chat_err: 
                                 st.error(f"Lỗi cổng kết nối AI: {str(chat_err)}")
-   # =============================================================================
-    # GIAO DIỆN KHAI BÁO TÁC NGHIỆP BÀN CẮT & HÀM TOÁN TÍNH ĐỊNH MỨC THỰC TẾ
-    # =============================================================================
-    elif st.session_state.get("purchase_ready") is True and menu_sub.startswith("✂️ CHỨC NĂNG 2"):
-        sbd_data_store = st.session_state.get("sbd_parsed_data", {})
-        
-        if isinstance(sbd_data_store, dict) and sbd_data_store:
-            detected_style_id = sbd_data_store.get("style_id", "UNKNOWN_STYLE")
-            detected_total_po = sbd_data_store.get("total_quantity", 0)
+   # --- CHỨC NĂNG 2 - PHẦN 2.1: THUẬT TOÁN HÌNH THÁP VUỐT THOẢI TUẦN TỰ VỀ 1 QUẦN (CHẮC CHẮN) ---
+            if st.session_state["step1_marker_ready"]:
+                # Tổng hợp map phẳng dữ liệu size để nạp vào thuật toán từ sbd_data_store
+                size_breakdown_main = {}
+                if "breakdown_details" in sbd_data_store and sbd_data_store["breakdown_details"]:
+                    for detail in sbd_data_store["breakdown_details"]:
+                        for size_info in detail.get("sizes", []):
+                            sz_name = str(size_info.get("size_name", "")).strip().upper()
+                            if sz_name:
+                                size_breakdown_main[sz_name] = size_breakdown_main.get(sz_name, 0) + int(size_info.get("quantity", 0))
 
-            st.markdown("#### 📋 KHAI BÁO THÔNG SỐ TÁC NGHIỆP ĐƠN HÀNG VÀ BÀN VẢI MULTI-INSEAM")
-            input_col1, input_col2, input_col3 = st.columns(3)
-            with input_col1: style_id_input = st.text_input("🏷️ Tên mã hàng (Style ID):", value=str(detected_style_id).strip().upper())
-            with input_col2: po_qty_input = st.number_input("📦 Số lượng đơn hàng (PO Pcs):", value=int(detected_total_po), step=100)
-            with input_col3: consumption_input = st.number_input("🎯 Định mức tài liệu đề xuất (Yds/Pcs):", value=1.140, step=0.001, format="%.3f")
-
-            input_col4, input_col6 = st.columns(2)
-            with input_col4: max_table_length = st.number_input("📏 Chiều gia tối đa bàn vải (Meters):", value=12.00, step=1.0)
-            with input_col6: cuttable_width_inch = st.number_input("📐 KHỔ CẮT (Khổ vải đi sơ đồ - Inches):", value=56.00, step=0.50, format="%.2f")
-            
-            if "breakdown_details" in sbd_data_store and sbd_data_store["breakdown_details"]:
-                rows = []
-                for detail in sbd_data_store["breakdown_details"]:
-                    color = detail.get("color", "Default")
-                    color_code = detail.get("color_code", "")
-                    for size_info in detail.get("sizes", []):
-                        rows.append({
-                            "Màu sắc (Color)": f"{color_code} - {color}".strip(" - "),
-                            "Kích thước (Size)": size_info.get("size_name"),
-                            "Số lượng (PO Qty)": size_info.get("quantity", 0)
-                        })
-                if rows:
-                    df_sbd_c2 = pd.DataFrame(rows)
-                    try:
-                        df_pivot_c2 = df_sbd_c2.pivot(index="Màu sắc (Color)", columns="Kích thước (Size)", values="Số lượng (PO Qty)").fillna(0).astype(int)
-                        df_pivot_c2["Tổng số lượng"] = df_pivot_c2.sum(axis=1)
-                        st.dataframe(df_pivot_c2, use_container_width=True)
-                    except Exception:
-                        st.dataframe(df_sbd_c2, use_container_width=True, hide_index=True)
-
-            st.markdown("<br>", unsafe_allow_html=True)
-            st.markdown("<p style='font-weight:700; font-size:13px; color:#1E3A8A;'>📥 KHU VỰC DÁN DỮ LIỆU CAD (TÊN SƠ ĐỒ & DÀI SƠ ĐỒ COPY TỪ EXCEL)</p>", unsafe_allow_html=True)
-            cad_paste_zone = st.text_area(
-                "Sau khi xem cấu trúc phối size phía dưới, hãy đi sơ đồ trên máy CAD rồi copy dán kết quả [Tên sơ đồ + Chiều dài mét] vào đây:",
-                placeholder="Ví dụ dán bảng từ Excel CAD:\n5765-c01 10.5\n5765-c02 11.3", height=90, key="cad_bulk_paste_input"
-            )
-
-            cad_length_meters_list = []
-            cad_names_list = []
-            
-            if cad_paste_zone.strip():
-                import re
-                lines = cad_paste_zone.strip().split("\n")
-                for line in lines:
-                    if not line.strip(): continue
-                    tokens = [t.strip() for t in re.split(r'\t+|\s+', line.strip()) if t.strip()]
-                    if len(tokens) >= 2:
-                        raw_name = tokens[0]    # SỬA LỖI INDEX: Lấy chính xác phần tử index 0 (Tên sơ đồ)
-                        raw_length = tokens[1]  # SỬA LỖI INDEX: Lấy chính xác phần tử index 1 (Chiều dài)
-                        
-                        if "-" in raw_name: clean_name = str(raw_name.split("-")[-1]).upper()
-                        else: clean_name = str(raw_name[-3:]).upper()
-                            
-                        try:
-                            meters_val = float(raw_length)
-                            cad_length_meters_list.append(meters_val)
-                            cad_names_list.append(clean_name)
-                        except Exception: continue
-
-            st.markdown("<br>", unsafe_allow_html=True)
-            btn_calc = st.button("⚡ TÍNH TOÁN LẬP SƠ ĐỒ", type="secondary", use_container_width=True, key="run_setup_marker_structure_c2_unique")
-            if btn_calc: st.session_state["step1_marker_ready"] = True# --- THUẬT TOÁN QUY ĐỔI HÌNH HỌC & TÍNH ĐỊNH MỨC GIA QUYỀN THỰC TẾ ---
-            btn_final_execute = st.button("⚡ KÍCH HOẠT QUY ĐỔI & TÍNH ĐỊNH MỨC THỰC TẾ", type="primary", use_container_width=True, key="run_final_yds_calculation_c2_unique")
-            if btn_final_execute:
-                if not cad_length_meters_list:
-                    st.error("❌ Không thể tính toán! Ô dán dữ liệu sơ đồ CAD đang bị trống hoặc sai cú pháp.")
+                if not size_breakdown_main:
+                    st.warning("⚠️ Không tìm thấy dữ liệu phân bổ sản lượng size phẳng. Vui lòng tải lại file SBD số lượng ở đầu trang.")
                 else:
-                    st.session_state["step2_computation_active"] = True
-                    st.session_state["bulk_cad_data_store"] = []
+                    st.markdown("##### ✂️ LỊCH TRÌNH GỘP SIZE - CHIA TỶ LỆ PHỐI SƠ ĐỒ ĐA GIÀNG DỰ KIẾN")
                     
-                    total_meters = 0.0
-                    for idx_c in range(len(cad_length_meters_list)):
-                        m_id = cad_names_list[idx_c]
-                        l_meters = cad_length_meters_list[idx_c]
-                        l_yards = round(l_meters * 1.09361, 3) # 1 mét = 1.09361 Yards
-                        total_meters += l_meters
+                    MAX_LAYERS_PER_TABLE = 100   # Chặn trên số lớp vải tối đa trên một bàn cắt
+                    max_table_length_yds = max_table_length * 1.09361
+                    max_pcs_per_marker_limit = max(1, int(max_table_length_yds / consumption_input))
+                    
+                    # Nhân đôi ma trận nạp gốc từ bộ nhớ tạm an toàn chống mất biến
+                    cutting_sizes_pool = {str(sz).strip().upper(): int(qty) for sz, qty in size_breakdown_main.items()}
+                    
+                    # Tính tổng sản lượng ban đầu của toàn bộ đơn hàng PO nạp vào
+                    initial_total_po_pcs = sum(cutting_sizes_pool.values())
+                    
+                    marker_tables_report = []
+                    table_counter = 1
+                    total_calculated_fabric_yds = 0.0
+                    total_planned_cut_pcs = 0
+                    cad_pool = st.session_state.get("bulk_cad_data_store", [])
+                    is_calc_active = st.session_state["step2_computation_active"]while any(v > 0 for v in cutting_sizes_pool.values()):
+                        active_items = [k for k, v in cutting_sizes_pool.items() if v > 0]
+                        if not active_items: 
+                            break
                         
-                        st.session_state["bulk_cad_data_store"].append({
-                            "marker_id": m_id,
-                            "length_meters": l_meters,
-                            "length_yards": l_yards
+                        # ⚡ ĐỘNG LỰC HÌNH THÁP ĐO ĐẾM: Đo lượng sản lượng còn tồn lại trong kho pool để ép hạ bậc tháp thoai thoải
+                        current_remaining_pcs = sum(cutting_sizes_pool.values())
+                        remaining_ratio = current_remaining_pcs / initial_total_po_pcs
+                        
+                        if remaining_ratio > 0.65:
+                            max_allowed_pcs_on_marker = min(6, max_pcs_per_marker_limit)  # 6 Quần (Đỉnh tháp)
+                        elif remaining_ratio > 0.40:
+                            max_allowed_pcs_on_marker = min(5, max_pcs_per_marker_limit)  # Hạ xuống 5 Quần
+                        elif remaining_ratio > 0.20:
+                            max_allowed_pcs_on_marker = min(4, max_pcs_per_marker_limit)  # Hạ xuống 4 Quần
+                        elif remaining_ratio > 0.10:
+                            max_allowed_pcs_on_marker = min(3, max_pcs_per_marker_limit)  # Hạ xuống 3 Quần
+                        elif remaining_ratio > 0.03:
+                            max_allowed_pcs_on_marker = min(2, max_pcs_per_marker_limit)  # Hạ xuống 2 Quần
+                        else:
+                            max_allowed_pcs_on_marker = 1                                  # Đáy tháp: Ép cứng về Sơ đồ đơn 1 quần
+                            
+                        # Sắp xếp danh sách size theo sản lượng tồn giảm dần
+                        active_batch = sorted(active_items, key=lambda x: cutting_sizes_pool[x], reverse=True)
+                        
+                        current_combination = []
+                        ratio_display = []
+                        actual_table_output = 0
+                        current_marker_total_pcs = 0
+                        
+                        # Định mốc số lớp vải tối ưu dựa trên lượng hàng tồn của size lớn nhất
+                        raw_max_layers = cutting_sizes_pool[active_batch[0]]
+                        
+                        # Điều chỉnh số lớp giật lùi dần theo bậc tháp
+                        if max_allowed_pcs_on_marker == 1:
+                            planned_layers = raw_max_layers  # Vét sạch lượng tồn lẻ ở đáy tháp
+                        else:
+                            planned_layers = min(raw_max_layers, MAX_LAYERS_PER_TABLE)
+                            
+                        if planned_layers <= 0:
+                            planned_layers = 1
+                            
+                        # Vòng lặp phân bổ tỷ lệ đặt rập khống chế nghiêm ngặt theo mốc hình tháp
+                        for sz in active_batch:
+                            if current_marker_total_pcs >= max_allowed_pcs_on_marker:
+                                break
+                                
+                            ratio_val = round(cutting_sizes_pool[sz] / planned_layers)
+                            ratio_val = min(max(1, ratio_val), 2)
+                            
+                            # Ép chặn cứng không cho phép vượt qua bậc tháp hiện tại
+                            if (current_marker_total_pcs + ratio_val) > max_allowed_pcs_on_marker:
+                                ratio_val = 1  # Thử hạ tỷ lệ xuống 1 rập đơn để nhét vừa khung tháp
+                                if (current_marker_total_pcs + ratio_val) > max_allowed_pcs_on_marker:
+                                    continue
+                                    
+                            pcs_to_cut = planned_layers * ratio_val
+                            if pcs_to_cut > cutting_sizes_pool[sz]:
+                                pcs_to_cut = cutting_sizes_pool[sz]
+                                ratio_val = max(1, round(pcs_to_cut / planned_layers))
+                                
+                            current_combination.append(sz)
+                            ratio_display.append(str(ratio_val))
+                            current_marker_total_pcs += ratio_val
+                            actual_table_output += pcs_to_cut
+                            
+                        # Khóa phòng vệ bốc vét size lớn nhất nếu kịch bản bị trống dòng
+                        if not current_combination and active_batch:
+                            sz_bak = active_batch[0]
+                            ratio_val = 1
+                            current_combination.append(sz_bak)
+                            ratio_display.append(str(ratio_val))
+                            actual_table_output = min(planned_layers * ratio_val, cutting_sizes_pool[sz_bak])
+                            
+                        # Thực hiện khấu trừ sản lượng thực tế đã phát lệnh ra khỏi pool ma trận SBD
+                        for idx_sub, sz in enumerate(current_combination):
+                            pcs_sub = planned_layers * int(ratio_display[idx_sub])
+                            if pcs_sub > cutting_sizes_pool[sz]:
+                                pcs_sub = cutting_sizes_pool[sz]
+                            cutting_sizes_pool[sz] = max(0, cutting_sizes_pool[sz] - pcs_sub)
+                            
+                        sum_of_ratios = sum([int(r) for r in ratio_display])
+                        total_planned_cut_pcs += actual_table_outputidx_lookup = table_counter - 1
+                        if is_calc_active and idx_lookup < len(cad_pool):
+                            current_so_do_name = cad_pool[idx_lookup].get("marker_id", f"C{table_counter:02d}")
+                            current_table_marker_yds = cad_pool[idx_lookup].get("length_yards", 0.0)
+                            table_fabric_required_yds = round((planned_layers * current_table_marker_yds), 2)
+                            total_calculated_fabric_yds += table_fabric_required_yds
+                            display_fabric_text = f"{table_fabric_required_yds:,} Yds"
+                            display_marker_text = f"{current_table_marker_yds:.3f} Yds"
+                        else:
+                            current_so_do_name = f"C{table_counter:02d}"
+                            display_marker_text, display_fabric_text = "Chờ máy CAD...", "Chờ nhập dài..."
+                        
+                        # Xây dựng chuỗi văn bản mô tả cấu trúc gộp rập phối size phẳng
+                        size_structure_parts = []
+                        for idx_join, sz_name_join in enumerate(current_combination):
+                            size_structure_parts.append(f"{sz_name_join}(x{ratio_display[idx_join]})")
+                        combo_str = " + ".join(size_structure_parts)
+                        
+                        marker_tables_report.append({
+                            "Bàn cắt": current_so_do_name, 
+                            "Cấu trúc Size / Phối Rập": combo_str,
+                            "Số sản phẩm/Sơ đồ": f"{current_marker_total_pcs} Quần",
+                            "Số lớp vải (Sản lượng bàn)": f"{planned_layers} Lớp",
+                            "Sản lượng cắt (Pcs)": f"{actual_table_output:,} Pcs",
+                            "Dài sơ đồ (Yds)": display_marker_text,
+                            "Tổng vải tiêu thụ": display_fabric_text
                         })
+                        table_counter += 1
                     
-                    # Tính toán các chỉ số chi phí tài chính tiêu hao vải tổng thể dựa trên dữ liệu đầu vào mới
-                    total_yards_all = round(total_meters * 1.09361, 3)
-                    actual_consumption = round(total_yards_all / po_qty_input, 4) if po_qty_input > 0 else 0.0
-                    consumption_delta = round(actual_consumption - consumption_input, 4)
-                    efficiency_percent = round((consumption_input / actual_consumption) * 100, 2) if actual_consumption > 0 else 100.0
+                    # Xuất bảng báo cáo phân tách sơ đồ đa tầng dự kiến ra màn hình
+                    df_marker_blueprint = pd.DataFrame(marker_tables_report)
+                    st.dataframe(df_marker_blueprint, use_container_width=True, hide_index=True)
                     
-                    st.session_state["c2_actual_consumption"] = actual_consumption
-                    st.session_state["c2_total_yards"] = total_yards_all
-                    st.session_state["c2_consumption_delta"] = consumption_delta
-                    st.session_state["c2_efficiency_percent"] = efficiency_percent
-                    st.success(f"🎯 Đã số hóa toán học hoàn tất {len(cad_length_meters_list)} sơ đồ CAD!")
-
-            # --- KHỐI ĐỒ HỌA KẾT XUẤT HỒ SƠ ĐỊNH MỨC THỰC TẾ ---
-            if st.session_state.get("step2_computation_active") and st.session_state.get("bulk_cad_data_store"):
-                st.markdown("<br>### 📊 HỒ SƠ TỔNG HỢP ĐỊNH MỨC TÁC NGHIỆP BÀN CẮT THỰC TẾ", unsafe_allow_html=True)
-                metric_col1, metric_col2, metric_col3 = st.columns(3)
-                with metric_col1:
-                    st.metric(
-                        label="📐 ĐỊNH MỨC THỰC TẾ THU ĐƯỢC", 
-                        value=f"{st.session_state.get('c2_actual_consumption', 0.0):.4f} Yds/Pcs", 
-                        delta=f"{st.session_state.get('c2_consumption_delta', 0.0):.4f} Yds vs Tài liệu"
-                    )
-                with metric_col2:
-                    st.metric(label="📦 TỔNG VẢI TIÊU THỤ THỰC TẾ", value=f"{st.session_state.get('c2_total_yards', 0.0):,} Yards")
-                with metric_col3:
-                    st.metric(label="⚡ HIỆU SUẤT ĐI SƠ ĐỒ CAD", value=f"{st.session_state.get('c2_efficiency_percent', 100.0)} %")
-                
-                st.markdown("##### 📝 Chi tiết chiều dài phân bổ trên từng sơ đồ CAD:")
-                df_cad_report = pd.DataFrame(st.session_state["bulk_cad_data_store"])
-                df_cad_report.columns = ["Mã sơ đồ (Marker ID)", "Chiều dài (Meters)", "Chiều dài Quy đổi (Yards)"]
-                st.dataframe(df_cad_report, use_container_width=True, hide_index=True)
+                    if is_calc_active:
+                        st.session_state["c2_total_yards"] = round(total_calculated_fabric_yds, 3)
+                        st.session_state["c2_actual_consumption"] = round(total_calculated_fabric_yds / po_qty_input, 4) if po_qty_input > 0 else 0.0
+                        st.session_state["c2_consumption_delta"] = round(st.session_state["c2_actual_consumption"] - consumption_input, 4)
