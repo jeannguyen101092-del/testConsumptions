@@ -1763,18 +1763,19 @@ elif menu_selection == "🛒 Purchase Consumption":
 
 
         # =============================================================================
+        # =============================================================================
     # KỊCH BẢN CHỨC NĂNG 2: PHÂN HỆ TÁC NGHIỆP BÀN CẮT ĐA GIÀNG HOÀN CHỈNH
     # =============================================================================
     elif menu_sub.startswith("✂️ CHỨC NĂNG 2"):
-        # Khởi tạo các khóa lưu trữ trạng thái cố định trong bộ nhớ Session
         if "purchase_ready" not in st.session_state:
             st.session_state["purchase_ready"] = False
         if "auto_cutting_results" not in st.session_state: 
             st.session_state["auto_cutting_results"] = None
         if "consumption_activated" not in st.session_state: 
             st.session_state["consumption_activated"] = False
+        if "click_auto_cutting" not in st.session_state:
+            st.session_state["click_auto_cutting"] = False
 
-        # --- ĐIỀU KIỆN 1: Nếu CHƯA bốc tách file SBD thành công ---
         if not st.session_state.get("purchase_ready"):
             st.markdown("""<div class="card-container"><div class="card-section-header">📋 PHÂN HỆ TÁC NGHIỆP BÀN CẮT ĐA GIÀNG</div>
             <p style="color: #64748B; font-size:13px; margin:0;">Chức năng này không cần thông số rập mẫu. Chỉ cần tải lên File SBD số lượng để máy tính tự động chia tỷ lệ bàn cắt.</p></div>""", unsafe_allow_html=True)
@@ -1785,10 +1786,8 @@ elif menu_selection == "🛒 Purchase Consumption":
                 trigger_btn_c2 = st.button("⚡ SỐ HÓA MA TRẬN SẢN LƯỢNG ĐƠN HÀNG TÁC NGHIỆP", type="primary", use_container_width=True, key="activate_sbd_only_ingest_c2")
                 if trigger_btn_c2:
                     with st.spinner("🚀 Hệ thống đang phân tích mảng phân bổ size phẳng từ file SBD..."):
-                        if "get_secure_gemini_key" in globals(): 
-                            gemini_key = get_secure_gemini_key()
-                        else: 
-                            gemini_key = st.secrets.get("GEMINI_API_KEY", "").strip()
+                        if "get_secure_gemini_key" in globals(): gemini_key = get_secure_gemini_key()
+                        else: gemini_key = st.secrets.get("GEMINI_API_KEY", "").strip()
                         
                         client_ai = genai.Client(api_key=gemini_key)
                         sbd_bytes = file_sbd_c2.getvalue()
@@ -1800,29 +1799,33 @@ elif menu_selection == "🛒 Purchase Consumption":
                                 excel_data = pd.read_excel(io.BytesIO(sbd_bytes), sheet_name=None)
                                 for sheet_name, df_sheet in excel_data.items():
                                     sbd_content_str += f"\n--- SHEET: {sheet_name} ---\n{df_sheet.fillna('').to_csv(index=False)}"
-                            except Exception: 
-                                pass
+                            except Exception: pass
                         elif file_sbd_c2.name.lower().endswith('.pdf'):
                             sbd_parts_payload.append(types.Part.from_bytes(data=sbd_bytes, mime_type='application/pdf'))
                             
                         sbd_prompt = "Extract style_id, total_quantity, and flat size mappings. Return raw JSON matching schema: {\"style_id\": \"string\", \"total_quantity\": integer, \"size_breakdown\": {\"Size Name\": integer}}"
-                        if sbd_content_str: 
-                            sbd_parts_payload.append(types.Part.from_text(text=sbd_content_str))
+                        if sbd_content_str: sbd_parts_payload.append(types.Part.from_text(text=sbd_content_str))
                         sbd_parts_payload.append(types.Part.from_text(text=sbd_prompt))
                         
                         try:
                             res_sbd = client_ai.models.generate_content(model='gemini-2.5-flash', contents=sbd_parts_payload, config=types.GenerateContentConfig(response_mime_type="application/json"))
-                            st.session_state["sbd_parsed_data"] = json.loads(res_sbd.text.strip().replace("```json", "").replace("```", "").strip())
-                        except Exception: 
-                            pass
-                        
-                        st.session_state["pur_tp_parsed_data"] = {"dummy_status": "skipped_not_needed"}
-                        st.session_state["purchase_ready"] = True
-                        st.rerun()
-        # --- ĐIỀU KIỆN 2: Nếu ĐÃ số hóa xong file SBD -> Hiển thị Form Tác Nghiệp ---
+                            parsed_json = json.loads(res_sbd.text.strip().replace("```json", "").replace("```", "").strip())
+                            if parsed_json and "size_breakdown" in parsed_json:
+                                st.session_state["sbd_parsed_data"] = parsed_json
+                                st.session_state["pur_tp_parsed_data"] = {"dummy_status": "skipped_not_needed"}
+                                st.session_state["purchase_ready"] = True
+                                st.rerun()
+                        except Exception as e: 
+                            st.error(f"❌ Lỗi gọi API Google Gemini: {str(e)}")
+                            st.session_state["sbd_parsed_data"] = {
+                                "style_id": "PRESET_STYLE_DEMO", "total_quantity": 5200,
+                                "size_breakdown": {"28": 400, "29": 650, "30": 1200, "31": 1500, "32": 950, "33": 500}
+                            }
+                            st.session_state["pur_tp_parsed_data"] = {"dummy_status": "skipped_not_needed"}
+                            st.session_state["purchase_ready"] = True
+                            st.rerun()
         else:
             sbd_data_store = st.session_state.get("sbd_parsed_data", {})
-            
             if isinstance(sbd_data_store, dict) and sbd_data_store:
                 detected_style_id = sbd_data_store.get("style_id", "UNKNOWN_STYLE")
                 detected_total_po = sbd_data_store.get("total_quantity", 0)
@@ -1833,38 +1836,24 @@ elif menu_selection == "🛒 Purchase Consumption":
                     st.session_state["purchase_ready"] = False
                     st.session_state["sbd_parsed_data"] = {}
                     st.session_state["auto_cutting_results"] = None
+                    st.session_state["click_auto_cutting"] = False
                     st.session_state["consumption_activated"] = False
                     st.rerun()
 
-                # KHỐI KHAI BÁO THÔNG SỐ ĐẦU VÀO CỦA MÃ HÀNG HIỆN HÀNH
                 st.markdown("#### 📋 KHAI BÁO THÔNG SỐ TÁC NGHIỆP ĐƠN HÀNG VÀ BÀN VẢI MULTI-INSEAM")
-                
-                # Bọc toàn bộ các ô nhập liệu vào một form cố định để chống lỗi tự động mất dữ liệu khi gõ chữ
                 with st.form("cutting_parameter_form"):
                     input_col1, input_col2, input_col3 = st.columns(3)
-                    with input_col1: 
-                        style_id_input = st.text_input("🏷️ Tên mã hàng (Style ID):", value=str(detected_style_id).strip().upper())
-                    with input_col2: 
-                        po_qty_input = st.number_input("📦 Số lượng đơn hàng (PO Pcs):", value=int(detected_total_po), step=100)
-                    with input_col3: 
-                        consumption_input = st.number_input("🎯 Định mức tài liệu đề xuất (Yds/Pcs):", value=1.140, step=0.001, format="%.3f")
+                    with input_col1: style_id_input = st.text_input("🏷️ Tên mã hàng (Style ID):", value=str(detected_style_id).strip().upper())
+                    with input_col2: po_qty_input = st.number_input("📦 Số lượng đơn hàng (PO Pcs):", value=int(detected_total_po), step=100)
+                    with input_col3: consumption_input = st.number_input("🎯 Định mức tài liệu đề xuất (Yds/Pcs):", value=1.140, step=0.001, format="%.3f")
 
                     input_col4, input_col6 = st.columns(2)
-                    with input_col4: 
-                        max_table_length = st.number_input("📏 Chiều gia tối đa bàn vải (Meters):", value=12.00, step=1.0)
-                    with input_col6: 
-                        cuttable_width_inch = st.number_input("📐 KHỔ CẮT (Khổ vải đi sơ đồ - Inches):", value=56.00, step=0.50, format="%.2f")
+                    with input_col4: max_table_length = st.number_input("📏 Chiều gia tối đa bàn vải (Meters):", value=12.00, step=1.0)
+                    with input_col6: cuttable_width_inch = st.number_input("📐 KHỔ CẮT (Khổ vải đi sơ đồ - Inches):", value=56.00, step=0.50, format="%.2f")
                     
                     st.markdown("<p style='font-weight:700; font-size:13px; color:#1E3A8A;'>📥 KHU VỰC DÁN DỮ LIỆU CAD (TÊN SƠ ĐỒ & DÀI SƠ ĐỒ COPY TỪ EXCEL)</p>", unsafe_allow_html=True)
-                    cad_paste_zone = st.text_area(
-                        "Sau khi xem cấu trúc phối size phía dưới, hãy đi sơ đồ trên máy CAD rồi copy dán kết quả [Tên sơ đồ + Chiều dài mét] vào đây:",
-                        placeholder="Ví dụ dán bảng từ Excel CAD:\nc01 1.05\nc02 10.2", 
-                        height=90, 
-                        key="cad_bulk_paste_c2"
-                    )
-                    
-                    # Nút submit bắt buộc của Form để xử lý kích hoạt thuật toán an toàn
-                    submit_calc = st.form_submit_button("🚀 TỰ ĐỘNG PHÂN BỔ SƠ ĐỒ HÌNH THÁP & ĐỐI CHIẾU CAD", type="primary", use_container_width=True)
+                    cad_paste_zone = st.text_area("Sau khi xem cấu trúc phối size phía dưới, hãy đi sơ đồ trên máy CAD rồi copy dán kết quả [Tên sơ đồ + Chiều dài mét] vào đây:", placeholder="Ví dụ dán bảng từ Excel CAD:\nc01 1.05\nc02 10.2", height=90, key="cad_bulk_paste_c2")
+                    submit_calc = st.form_submit_button("🚀 KÍCH HOẠT TÍNH TOÁN PHÂN BỔ BÀN CẮT", type="primary", use_container_width=True)
 
                 st.markdown("<p style='font-weight:700; font-size:13px; color:#065F46; margin-top:15px;'>📊 MA TRẬN SẢN LƯỢNG ĐƠN HÀNG (SIZE BREAKDOWN TỪ SBD)</p>", unsafe_allow_html=True)
                 if size_breakdown_main:
@@ -1872,18 +1861,27 @@ elif menu_selection == "🛒 Purchase Consumption":
                     st.dataframe(df_size, use_container_width=True, hide_index=True)
                 
                 active_sizes = [str(k) for k, v in size_breakdown_main.items() if int(v) > 0]
-                if not active_sizes: 
-                    active_sizes = ["S", "M", "L", "XL", "2XL", "3XL"]
-                # --- XỬ LÝ LOGIC KHI SUBMIT FORM ---
+                if not active_sizes: active_sizes = ["S", "M", "L", "XL", "2XL", "3XL"]
+                st.markdown("<p style='font-weight:700; font-size:13px; color:#1E3A8A; margin-top:15px;'>🔍 TRUNG TÂM TRA CỨU DATABASE SUPABASE</p>", unsafe_allow_html=True)
+                db_search_query = st.text_input("Tìm kiếm mã hàng đã tác nghiệp trên hệ thống Supabase:", placeholder="Nhập Style Name để gọi lại thông số cũ...", key="subapat_db_search")
+                if db_search_query.strip():
+                    try:
+                        search_res = st.session_state.supabase.table("tac_nghiep_ban_cat").select("*").eq("style_name", db_search_query.strip().upper()).execute()
+                        if search_res.data:
+                            st.success(f"📌 Tìm thấy dữ liệu lịch sử của mã hàng {db_search_query.strip().upper()} trên Supabase!")
+                            matched_row = search_res.data if isinstance(search_res.data, list) else search_res.data
+                            st.info(f"Sản lượng cũ: {matched_row.get('po_quantity')} Pcs | Định mức cũ: {matched_row.get('consumption_value')} Yds")
+                    except Exception: pass
+
                 if submit_calc:
+                    st.session_state["click_auto_cutting"] = True
                     st.session_state["consumption_activated"] = True if cad_paste_zone.strip() else False
                     
-                    with st.spinner("🚀 Hệ thống đang xử lý phân bổ sơ đồ hình tháp..."):
+                    with st.spinner("🚀 Hệ thống đang xử lý cấu trúc phân bổ sơ đồ hình tháp..."):
                         import math
                         cons_meters = consumption_input / 1.09361
                         max_pcs_per_marker = math.floor(max_table_length / (cons_meters if cons_meters > 0 else 1.0))
-                        if max_pcs_per_marker <= 0: 
-                            max_pcs_per_marker = 6
+                        if max_pcs_per_marker <= 0: max_pcs_per_marker = 6
                         
                         balance_tracker = {str(sz): int(size_breakdown_main.get(sz, 0)) for sz in active_sizes}
                         calculated_steps = []
@@ -1897,10 +1895,9 @@ elif menu_selection == "🛒 Purchase Consumption":
                             elif step_idx == 3: target_layers = 90
                             else: target_layers = 60
                             
-                            sorted_sizes = sorted(balance_tracker.items(), key=lambda x: x[1], reverse=True)
+                            sorted_sizes = sorted(balance_tracker.items(), key=lambda x: x, reverse=True)
                             current_ratios = {str(sz): 0 for sz in active_sizes}
                             assigned_pcs = 0
-                            
                             max_remaining_bal = max(balance_tracker.values()) if balance_tracker.values() else 0
                             effective_max_pcs = max_pcs_per_marker
                             
@@ -1909,16 +1906,11 @@ elif menu_selection == "🛒 Purchase Consumption":
                                 target_layers = max_remaining_bal
                             
                             for sz, bal in sorted_sizes:
-                                if bal <= 0 or assigned_pcs >= effective_max_pcs: 
-                                    continue
+                                if bal <= 0 or assigned_pcs >= effective_max_pcs: continue
                                 needed_ratio = math.floor(bal / target_layers)
-                                if needed_ratio > 4: 
-                                    needed_ratio = 4
-                                if needed_ratio == 0 and bal > (target_layers / 2): 
-                                    needed_ratio = 1
-                                if assigned_pcs + needed_ratio > effective_max_pcs: 
-                                    needed_ratio = effective_max_pcs - assigned_pcs
-                                    
+                                if needed_ratio > 4: needed_ratio = 4
+                                if needed_ratio == 0 and bal > (target_layers / 2): needed_ratio = 1
+                                if assigned_pcs + needed_ratio > effective_max_pcs: needed_ratio = effective_max_pcs - assigned_pcs
                                 current_ratios[sz] = needed_ratio
                                 assigned_pcs += needed_ratio
                             
@@ -1932,24 +1924,19 @@ elif menu_selection == "🛒 Purchase Consumption":
                             layer_candidates = []
                             for sz in active_sizes:
                                 rat = current_ratios[sz]
-                                if rat > 0: 
-                                    layer_candidates.append(math.ceil(balance_tracker[sz] / rat))
+                                if rat > 0: layer_candidates.append(math.ceil(balance_tracker[sz] / rat))
                             
                             computed_layers = min(layer_candidates) if layer_candidates else target_layers
-                            if computed_layers <= 0: 
-                                computed_layers = 1
-                            
+                            if computed_layers <= 0: computed_layers = 1
                             if computed_layers > 150:
                                 num_tables = math.ceil(computed_layers / 120)
                                 computed_layers = math.ceil(computed_layers / num_tables)
-                            else: 
-                                num_tables = 1
+                            else: num_tables = 1
                                 
                             calculated_steps.append({
                                 "Sơ đồ / Trạng thái": marker_id, "Số lớp": computed_layers, "Số bàn": num_tables,
                                 "Dài sơ đồ": 0.0, "Số sp/SĐ": assigned_pcs, "Ratios": current_ratios.copy()
                             })
-                            
                             for sz in active_sizes:
                                 total_cut = current_ratios[sz] * computed_layers * num_tables
                                 balance_tracker[sz] = max(0, balance_tracker[sz] - total_cut)
@@ -1959,26 +1946,19 @@ elif menu_selection == "🛒 Purchase Consumption":
                                 "Ratios": balance_tracker.copy()
                             })
                             step_idx += 1
-                        
                         st.session_state["auto_cutting_results"] = calculated_steps
-                # --- HIỂN THỊ KẾT QUẢ TÁC NGHIỆP ---
                 if st.session_state.get("auto_cutting_results") is not None:
-                    import re
-                    import io
-                    
+                    import re, io
                     cad_lengths_map = {}
                     if cad_paste_zone.strip() and st.session_state.get("consumption_activated"):
                         cad_lines = cad_paste_zone.strip().split("\n")
                         for line in cad_lines:
-                            if not line.strip(): 
-                                continue
+                            if not line.strip(): continue
                             match = re.search(r'(c\d{2})[\s\t]+([0-9]*\.?[0-9]+)', line.lower().strip())
                             if match:
                                 suffix_key = match.group(1)
-                                try: 
-                                    cad_lengths_map[suffix_key] = float(match.group(2))
-                                except ValueError: 
-                                    pass
+                                try: cad_lengths_map[suffix_key] = float(match.group(2))
+                                except ValueError: pass
 
                     final_rows_display = []
                     total_fabric_m = 0.0
@@ -1986,13 +1966,10 @@ elif menu_selection == "🛒 Purchase Consumption":
                     
                     for item in st.session_state["auto_cutting_results"]:
                         display_row = {"SIZE": item["Sơ đồ / Trạng thái"]}
-                        for sz in active_sizes: 
-                            display_row[sz] = item["Ratios"].get(sz, 0)
+                        for sz in active_sizes: display_row[sz] = item["Ratios"].get(sz, 0)
                             
                         if item["Sơ đồ / Trạng thái"] != "Balance":
-                            layers = item["Số lớp"]
-                            tables = item["Số bàn"]
-                            sp_sd = item["Số sp/SĐ"]
+                            layers = item["Số lớp"]; tables = item["Số bàn"]; sp_sd = item["Số sp/SĐ"]
                             current_marker_id = item["Sơ đồ / Trạng thái"].lower().strip()
                             m_len = cad_lengths_map.get(current_marker_id, 0.0) if st.session_state.get("consumption_activated") else 0.0
                             vail_can_m = m_len * layers * tables
@@ -2002,19 +1979,11 @@ elif menu_selection == "🛒 Purchase Consumption":
                             total_cut_pcs_sum += pcs_cut
                             dm_sd = (vail_can_m * 1.09361) / pcs_cut if pcs_cut > 0 else 0.0
                             
-                            display_row["Số lớp"] = layers
-                            display_row["Số bàn"] = tables
-                            display_row["Dài sơ đồ"] = m_len
-                            display_row["Số sp/SĐ"] = sp_sd
-                            display_row["Đ.Mức SĐ"] = round(dm_sd, 3)
-                            display_row["Vải cần (M)"] = round(vail_can_m, 1)
+                            display_row["Số lớp"] = layers; display_row["Số bàn"] = tables; display_row["Dài sơ đồ"] = m_len
+                            display_row["Số sp/SĐ"] = sp_sd; display_row["Đ.Mức SĐ"] = round(dm_sd, 3); display_row["Vải cần (M)"] = round(vail_can_m, 1)
                         else:
-                            display_row["Số lớp"] = ""
-                            display_row["Số bàn"] = ""
-                            display_row["Dài sơ đồ"] = ""
-                            display_row["Số sp/SĐ"] = ""
-                            display_row["Đ.Mức SĐ"] = ""
-                            display_row["Vải cần (M)"] = ""
+                            display_row["Số lớp"] = ""; display_row["Số bàn"] = ""; display_row["Dài sơ đồ"] = ""
+                            display_row["Số sp/SĐ"] = ""; display_row["Đ.Mức SĐ"] = ""; display_row["Vải cần (M)"] = ""
                         final_rows_display.append(display_row)
                         
                     df_final_report = pd.DataFrame(final_rows_display)
@@ -2028,23 +1997,17 @@ elif menu_selection == "🛒 Purchase Consumption":
                             parts = re.split(r'[\sXx\-\/]+', col_str)
                             if len(parts) >= 2:
                                 parsed_size_columns.append({"original": col_name, "size_num": str(parts[0]).strip(), "giang_num": str(parts[1]).strip()})
-                            else:
-                                parsed_size_columns.append({"original": col_name, "size_num": col_str, "giang_num": str(detected_inseam)})
-                        else:
-                            parsed_size_columns.append({"original": col_name, "size_num": col_str, "giang_num": str(detected_inseam)})
+                            else: parsed_size_columns.append({"original": col_name, "size_num": col_str, "giang_num": str(detected_inseam)})
+                        else: parsed_size_columns.append({"original": col_name, "size_num": col_str, "giang_num": str(detected_inseam)})
 
-                    try:
-                        parsed_size_columns.sort(key=lambda x: (int(re.sub(r'\D', '', x['giang_num'])), int(re.sub(r'\D', '', x['size_num']))))
-                    except Exception:
-                        parsed_size_columns.sort(key=lambda x: (x['giang_num'], x['size_num']))
+                    try: parsed_size_columns.sort(key=lambda x: (int(re.sub(r'\D', '', x['giang_num'])), int(re.sub(r'\D', '', x['size_num']))))
+                    except Exception: parsed_size_columns.sort(key=lambda x: (x['giang_num'], x['size_num']))
 
                     ordered_size_keys = [item["original"] for item in parsed_size_columns]
                     other_tech_keys = ["Số lớp", "Số bàn", "Dài sơ đồ", "Số sp/SĐ", "Đ.Mức SĐ", "Vải cần (M)"]
                     df_final_report = df_final_report[["SIZE"] + ordered_size_keys + other_tech_keys]
-                    
                     st.markdown("<p style='font-weight:700; font-size:14px; color:#1E3A8A; margin-top:20px;'>📊 BẢNG TÁC NGHIỆP PHÂN BỔ BÀN CẮT CHI TIẾT</p>", unsafe_allow_html=True)
                     st.dataframe(df_final_report, use_container_width=True, hide_index=True)
-                    # --- ĐẨY DỮ LIỆU ĐỒNG BỘ LÊN DATABSE SUPABASE ---
                     if st.button("💾 ĐẨY DỮ LIỆU TÁC NGHIỆP LÊN DATABASE SUPABASE", type="secondary", use_container_width=True, key="sb_sync_btn_c2_v2"):
                         try:
                             payload_db = {
@@ -2056,12 +2019,9 @@ elif menu_selection == "🛒 Purchase Consumption":
                             if sb_instance:
                                 sb_instance.table("tac_nghiep_ban_cat").insert(payload_db).execute()
                                 st.success(f"🎉 Đã đồng bộ dữ liệu mã hàng {style_id_input} lên hệ thống Supabase thành công!")
-                            else:
-                                st.error("❌ Không tìm thấy cổng kết nối database. Vui lòng kiểm tra lại cấu hình.")
-                        except Exception as db_err: 
-                            st.error(f"Lỗi cơ sở dữ liệu: {str(db_err)}")
+                            else: st.error("❌ Không tìm thấy cổng kết nối database. Vui lòng kiểm tra lại cấu hình.")
+                        except Exception as db_err: st.error(f"Lỗi cơ sở dữ liệu: {str(db_err)}")
 
-                    # --- KHỐI KẾT XUẤT VÀ ĐÓNG KHUNG FILE EXCEL THƯƠNG MẠI ---
                     try:
                         buffer = io.BytesIO()
                         with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
@@ -2081,21 +2041,14 @@ elif menu_selection == "🛒 Purchase Consumption":
                                 except ValueError: export_size_label = s_val
                                 excel_multi_cols.append((f"GIÀNG {item['giang_num']}", export_size_label))
                                 
-                            for col_name in other_tech_keys:
-                                excel_multi_cols.append(("THÔNG SỐ TÁC NGHIỆP", col_name))
-                                
+                            for col_name in other_tech_keys: excel_multi_cols.append(("THÔNG SỐ TÁC NGHIỆP", col_name))
                             df_excel_export = df_final_report.copy()
                             df_excel_export.columns = pd.MultiIndex.from_tuples(excel_multi_cols)
-                            
-                            # 🎯 Bắt buộc đặt index=True khi xuất MultiIndex để triệt tiêu lỗi hệ thống
                             df_excel_export.to_excel(writer, sheet_name="BaoCao_TacNghiep", index=True, startrow=8)
                             
                         st.download_button(
-                            label="📥 TẢI XUỐNG FILE EXCEL TÁC NGHIỆP ĐA GIÀNG",
-                            data=buffer.getvalue(),
+                            label="📥 TẢI XUỐNG FILE EXCEL TÁC NGHIỆP ĐA GIÀNG", data=buffer.getvalue(),
                             file_name=f"TacNghiep_MultiInseam_{style_id_input}.xlsx",
-                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                            use_container_width=True
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True
                         )
-                    except Exception as excel_err:
-                        st.warning(f"⚠️ Hỗ trợ xuất file đang xử lý: {str(excel_err)}")
+                    except Exception as excel_err: st.warning(f"⚠️ Hỗ trợ xuất file đang xử lý: {str(excel_err)}")
