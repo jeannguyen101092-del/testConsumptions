@@ -2069,7 +2069,7 @@ if st.session_state.get("auto_cutting_results") is not None:
             }
             pd.DataFrame(header_data).to_excel(writer, sheet_name="BaoCao_TacNghiep", index=False, startrow=0)
             
-            # 2. Xây dựng cấu trúc cột MultiIndex cho bảng báo cáo dữ liệu
+                       # 2. Xây dựng cấu trúc cột MultiIndex cho bảng báo cáo dữ liệu
             excel_multi_cols = [("", "SIZE")]
             for item in parsed_size_columns:
                 s_val = item['size_num']
@@ -2083,19 +2083,21 @@ if st.session_state.get("auto_cutting_results") is not None:
             df_excel_export = df_final_report.copy()
             df_excel_export.columns = pd.MultiIndex.from_tuples(excel_multi_cols)
             
-            # 🎯 FIX CỐT LÕI: Ghi bảng dữ liệu chính thức vào Excel (bắt đầu từ dòng số 8 để không đè lên header)
-            df_excel_export.to_excel(writer, sheet_name="BaoCao_TacNghiep", startrow=8, index=False)
+            # 🎯 SỬA LỖI TẠI ĐÂY: Phải đặt index=True khi xuất bảng có MultiIndex Columns
+            # Bắt đầu ghi từ dòng số 8 để tránh đè lên phần Header đơn hàng ở trên
+            df_excel_export.to_excel(writer, sheet_name="BaoCao_TacNghiep", startrow=8, index=True)
         
         # Lấy dữ liệu nhị phân từ bộ nhớ đệm
         excel_data = buffer.getvalue()
         
-        # 🎯 FIX CỐT LÕI: Xuất nút tải file Excel ra giao diện Streamlit
+        # Tạo nút tải file Excel ra giao diện Streamlit
         st.download_button(
             label="📥 KẾT XUẤT VÀ TẢI FILE EXCEL BÁO CÁO TÁC NGHIỆP",
             data=excel_data,
             file_name=f"Bao_Cao_Tac_Nghiep_{style_id_input}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            use_container_width=True
+            use_container_width=True,
+            key="download_excel_commercial_v3"
         )
 
     except Exception as xl_err:
