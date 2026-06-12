@@ -1875,6 +1875,12 @@ elif menu_selection == "🛒 Purchase Consumption":
                     st.dataframe(df_size, use_container_width=True, hide_index=True)
                 
                 # --- ĐỒNG BỘ TRUY VẤN TÌM KIẾM SUPABASE ---
+                                st.markdown("<p style='font-weight:700; font-size:13px; color:#065F46;'>📊 MA TRẬN SẢN LƯỢNG ĐƠN HÀNG (SIZE BREAKDOWN TỪ SBD)</p>", unsafe_allow_html=True)
+                if size_breakdown_main:
+                    df_size = pd.DataFrame([size_breakdown_main])
+                    st.dataframe(df_size, use_container_width=True, hide_index=True)
+                
+                # --- ĐỒNG BỘ TRUY VẤN TÌM KIẾM SUPABASE ---
                 st.markdown("<p style='font-weight:700; font-size:13px; color:#1E3A8A; margin-top:15px;'>🔍 TRUNG TÂM TRA CỨU DATABASE SUPABASE</p>", unsafe_allow_html=True)
                 db_search_query = st.text_input("Tìm kiếm mã hàng đã tác nghiệp trên hệ thống Supabase:", placeholder="Nhập Style Name để gọi lại thông số cũ...", key="subapat_db_search")
                 if db_search_query.strip():
@@ -1909,6 +1915,8 @@ elif menu_selection == "🛒 Purchase Consumption":
                 if trigger_auto_cutting:
                     st.session_state["consumption_activated"] = False
                     with st.spinner("🔮 Hệ thống đang phân bổ sơ đồ hình tháp..."):
+                        # 📥 KHAI BÁO THƯ VIỆN TOÁN HỌC TẠI ĐÂY ĐỂ VÁ LỖI NAMEERROR
+                        import math
                         cons_meters = consumption_input / 1.09361
                         max_pcs_per_marker = math.floor(max_table_length / (cons_meters if cons_meters > 0 else 1.0))
                         if max_pcs_per_marker <= 0: max_pcs_per_marker = 6
@@ -2098,7 +2106,15 @@ elif menu_selection == "🛒 Purchase Consumption":
                     except Exception:
                         pass
 
-                    # Dựng cấu trúc bảng Multi-Index hiển thị lên giao diện Streamlit Web
+                    # 🎯 SỬA LỖI MẤT MÀU VÀNG: Thực hiện cấu trúc style nền trước khi lồng Multi-Index
+                    def style_excel_matrix(row):
+                        if row["Sơ đồ / Trạng thái"] == "Balance":
+                            return ['background-color: #FEF08A; color: #991B1B; font-weight: 700; border: 1px solid #FDE047;'] * len(row)
+                        return [''] * len(row)
+                    
+                    styled_df_report = df_final_report.style.apply(style_excel_matrix, axis=1)
+
+                    # Tiến hành lồng cấu trúc tiêu đề Multi-Index bọc nhóm Inseam lên giao diện Web
                     multi_cols = []
                     for col in df_final_report.columns:
                         if col in active_sizes: multi_cols.append((f"Nhóm Inseam: {detected_inseam}", col))
@@ -2107,15 +2123,10 @@ elif menu_selection == "🛒 Purchase Consumption":
                     
                     st.markdown("<p style='font-weight:700; font-size:14px; color:#1E3A8A; margin-top:15px;'>📊 BẢNG THEO DÕI TÁC NGHIỆP & CÂN ĐỐI ĐƠN HÀNG MULTI-INSEAM</p>", unsafe_allow_html=True)
                     
-                    def style_excel_matrix(row):
-                        status_val = row.iloc
-                        if status_val == "Balance":
-                            return ['background-color: #FEF08A; color: #991B1B; font-weight: 700; border: 1px solid #FDE047;'] * len(row)
-                        return [''] * len(row)
-                        
-                    st.dataframe(df_final_report.style.apply(style_excel_matrix, axis=1), use_container_width=True, hide_index=True)
+                    # Đổ bảng đã được nhuộm màu vàng và gộp nhóm lên màn hình
+                    st.dataframe(styled_df_report, use_container_width=True, hide_index=True)
                     
-                    # --- THẺ ĐO LƯỜNG TỔNG HỢP ---
+                    # --- THÊM KHỐI HIỂN THỊ METRICS TỔNG HỢP ---
                     st.markdown("---")
                     m_col1, m_col2, m_col3 = st.columns(3)
                     with m_col1:
