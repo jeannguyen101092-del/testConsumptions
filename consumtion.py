@@ -1891,7 +1891,8 @@ elif menu_selection == "🛒 Purchase Consumption":
 
                                 # =============================================================================
                                 # =============================================================================
-                # ĐOẠN 1: THUẬT TOÁN HÌNH THÁP NGƯỢC ƯU TIÊN SỐ LỚP NHIỀU (VÁ LỖI TRÙNG ID)
+                                # =============================================================================
+                # ĐOẠN 1: THUẬT TOÁN HÌNH THÁP NGƯỢC ƯU TIÊN SỐ LỚP NHIỀU (ĐÃ SỬA LỖI TYPEERROR)
                 # =============================================================================
                 st.markdown("<br>", unsafe_allow_html=True)
                 
@@ -1900,9 +1901,10 @@ elif menu_selection == "🛒 Purchase Consumption":
                     active_sizes = ["S", "M", "L", "XL", "2XL", "3XL"]
                 
                 detected_inseam = sbd_data_store.get("inseam_group", "None")
-                st.markdown(f"**📌 Nhóm Inseam hiện hành:** `{detected_inseam}`", key="c2_inseam_display_unique")
+                # Đã gỡ bỏ tham số key để triệt tiêu dứt điểm lỗi TypeError
+                st.markdown(f"**📌 Nhóm Inseam hiện hành:** `{detected_inseam}`")
                 
-                # Bọc tham số key độc nhất để triệt tiêu lỗi StreamlitDuplicateElementId
+                # Giữ nguyên tham số key độc nhất cho các nút bấm để tránh lỗi trùng ID
                 btn_col1, btn_col2 = st.columns(2)
                 with btn_col1:
                     trigger_auto_cutting = st.button("⚡ 1. KÍCH HOẠT TÍNH TÁC NGHIỆP SƠ ĐỒ (HÌNH THÁP)", type="primary", use_container_width=True, key="c2_btn_auto_cut_unique")
@@ -1950,7 +1952,7 @@ elif menu_selection == "🛒 Purchase Consumption":
                                     needed_ratio = 1
                                     
                                 if assigned_pcs + needed_ratio > max_pcs_per_marker:
-                                    needed_ratio = max_pcs_per_marker - assigned_pcs
+                                    ratio_to_give = max_pcs_per_marker - assigned_pcs
                                     
                                 current_ratios[sz] = needed_ratio
                                 assigned_pcs += needed_ratio
@@ -1998,6 +2000,7 @@ elif menu_selection == "🛒 Purchase Consumption":
                 if trigger_consumption:
                     st.session_state["consumption_activated"] = True
                     st.rerun()
+
 
 
                                # BƯỚC 3: LIÊN KẾT ĐỐI CHIẾU DỮ LIỆU Ô CAD, ĐẨY SUPABASE & KẾT XUẤT EXCEL
