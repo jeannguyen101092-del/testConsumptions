@@ -1892,7 +1892,8 @@ elif menu_selection == "🛒 Purchase Consumption":
                                 # =============================================================================
                                 # =============================================================================
                                 # =============================================================================
-                # ĐOẠN 1: THUẬT TOÁN HÌNH THÁP NGƯỢC ƯU TIÊN SỐ LỚP NHIỀU (ĐÃ SỬA LỖI TYPEERROR)
+                                # =============================================================================
+                # ĐOẠN 1: THUẬT TOÁN HÌNH THÁP NGƯỢC TỰ ĐỘNG THU NGẮN SƠ ĐỒ ĐỂ TĂNG SỐ LỚP VẢI
                 # =============================================================================
                 st.markdown("<br>", unsafe_allow_html=True)
                 
@@ -1901,10 +1902,8 @@ elif menu_selection == "🛒 Purchase Consumption":
                     active_sizes = ["S", "M", "L", "XL", "2XL", "3XL"]
                 
                 detected_inseam = sbd_data_store.get("inseam_group", "None")
-                # Đã gỡ bỏ tham số key để triệt tiêu dứt điểm lỗi TypeError
                 st.markdown(f"**📌 Nhóm Inseam hiện hành:** `{detected_inseam}`")
                 
-                # Giữ nguyên tham số key độc nhất cho các nút bấm để tránh lỗi trùng ID
                 btn_col1, btn_col2 = st.columns(2)
                 with btn_col1:
                     trigger_auto_cutting = st.button("⚡ 1. KÍCH HOẠT TÍNH TÁC NGHIỆP SƠ ĐỒ (HÌNH THÁP)", type="primary", use_container_width=True, key="c2_btn_auto_cut_unique")
@@ -1918,7 +1917,7 @@ elif menu_selection == "🛒 Purchase Consumption":
 
                 if trigger_auto_cutting:
                     st.session_state["consumption_activated"] = False
-                    with st.spinner("🔮 Hệ thống đang phân bổ sơ đồ hình tháp ngược ưu tiên số lớp nhiều..."):
+                    with st.spinner("🔮 Hệ thống đang tối ưu hóa số lớp và chiều dài sơ đồ..."):
                         import math
                         cons_meters = consumption_input / 1.09361
                         max_pcs_per_marker = math.floor(max_table_length / (cons_meters if cons_meters > 0 else 1.0))
@@ -1932,18 +1931,28 @@ elif menu_selection == "🛒 Purchase Consumption":
                         while sum(balance_tracker.values()) > 0 and step_idx <= max_loops:
                             marker_id = f"c{step_idx:02d}"
                             
-                            # Ưu tiên số lớp dày từ 100 - 150 lớp đối với các sơ đồ đầu (đỉnh tháp)
+                            # Cấu hình mốc lớp tiêu chuẩn cho các tầng hình tháp
                             if step_idx == 1: target_layers = 150
                             elif step_idx == 2: target_layers = 120
                             elif step_idx == 3: target_layers = 90
-                            else: target_layers = 50
+                            else: target_layers = 60
                             
                             sorted_sizes = sorted(balance_tracker.items(), key=lambda x: x, reverse=True)
                             current_ratios = {sz: 0 for sz in active_sizes}
                             assigned_pcs = 0
                             
+                            # 🎯 CẢI TIẾN CỐT LÕI: Kiểm tra sản lượng còn lại lớn nhất
+                            max_remaining_bal = max(balance_tracker.values()) if balance_tracker.values() else 0
+                            
+                            # NGUYÊN TẮC MAY: Nếu lượng hàng tồn kho còn quá mỏng, ép thu ngắn chiều dài sơ đồ lại
+                            effective_max_pcs = max_pcs_per_marker
+                            if max_remaining_bal < target_layers and max_remaining_bal > 0:
+                                # Nếu sản lượng quá ít, tự động ép sơ đồ ngắn chỉ đi 1 đến 2 sản phẩm
+                                effective_max_pcs = min(2, max_pcs_per_marker)
+                                target_layers = max_remaining_bal # Ép số lớp đạt đỉnh sản lượng để triệt tiêu
+                            
                             for sz, bal in sorted_sizes:
-                                if bal <= 0 or assigned_pcs >= max_pcs_per_marker: 
+                                if bal <= 0 or assigned_pcs >= effective_max_pcs: 
                                     continue
                                 
                                 needed_ratio = math.floor(bal / target_layers)
@@ -1951,18 +1960,21 @@ elif menu_selection == "🛒 Purchase Consumption":
                                 if needed_ratio == 0 and bal > (target_layers / 2): 
                                     needed_ratio = 1
                                     
-                                if assigned_pcs + needed_ratio > max_pcs_per_marker:
-                                    ratio_to_give = max_pcs_per_marker - assigned_pcs
+                                if assigned_pcs + needed_ratio > effective_max_pcs:
+                                    needed_ratio = effective_max_pcs - assigned_pcs
                                     
                                 current_ratios[sz] = needed_ratio
                                 assigned_pcs += needed_ratio
                             
                             if assigned_pcs == 0:
+                                # Gom nốt lượng hàng lẻ ở đuôi đơn hàng vào sơ đồ cực ngắn
+                                effective_max_pcs = min(2, max_pcs_per_marker)
                                 for sz, bal in sorted_sizes:
-                                    if bal > 0 and assigned_pcs < max_pcs_per_marker:
+                                    if bal > 0 and assigned_pcs < effective_max_pcs:
                                         current_ratios[sz] = 1
                                         assigned_pcs += 1
                                         
+                            # Tính toán số lớp thực tế dựa trên tỷ lệ mới phối
                             layer_candidates = []
                             for sz in active_sizes:
                                 rat = current_ratios[sz]
@@ -1972,6 +1984,7 @@ elif menu_selection == "🛒 Purchase Consumption":
                             computed_layers = min(layer_candidates) if layer_candidates else target_layers
                             if computed_layers <= 0: computed_layers = 1
                             
+                            # Cân đối bàn cắt thương mại
                             if computed_layers > 150:
                                 num_tables = math.ceil(computed_layers / 120)
                                 computed_layers = math.ceil(computed_layers / num_tables)
@@ -2000,6 +2013,7 @@ elif menu_selection == "🛒 Purchase Consumption":
                 if trigger_consumption:
                     st.session_state["consumption_activated"] = True
                     st.rerun()
+
 
 
 
