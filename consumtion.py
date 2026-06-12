@@ -1629,9 +1629,10 @@ elif menu_selection == "🛒 Purchase Consumption":
                                 st.error(f"Lỗi cổng kết nối AI: {str(chat_err)}")
 
        # =============================================================================
+        # =============================================================================
     # KỊCH BẢN CHỨC NĂNG 2: CHỈ HIỂN THỊ 1 Ô TẢI FILE SBD SỐ LƯỢNG, ẨN FILE TECHPACK
     # =============================================================================
-    elif menu_sub.startswith("✂️ CHỨC NĂNG 2") and not st.session_state.get("purchase_ready"):
+    elif menu_sub.startswith("✂️ CHỨC NĂNG 2") and st.session_state.get("purchase_ready") is False:
         st.markdown("""<div class="card-container"><div class="card-section-header">📋 PHÂN HỆ TÁC NGHIỆP BÀN CẮT ĐA GIÀNG</div>
         <p style="color: #64748B; font-size:13px; margin:0;">Chức năng này không cần thông số rập mẫu. Chỉ cần tải lên File SBD số lượng để máy tính tự động chia tỷ lệ bàn cắt.</p></div>""", unsafe_allow_html=True)
         
@@ -1686,11 +1687,10 @@ elif menu_selection == "🛒 Purchase Consumption":
                         st.session_state["sbd_parsed_data"] = json.loads(res_sbd.text.strip().replace("```json", "").replace("```", "").strip())
                     except Exception: st.session_state["sbd_parsed_data"] = {}
                     
-                    st.session_state["pur_tp_parsed_data"] = {"dummy_status": "skipped_not_needed"} # Gán biến mồi để mở cửa luồng xử lý
+                    st.session_state["pur_tp_parsed_data"] = {"dummy_status": "skipped_not_needed"} 
                     st.session_state["purchase_ready"] = True
                     st.rerun()
-        # -----------------------------------------------------------------------------
-       # -----------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # ✂️ CHỨC NĂNG 2 - PHẦN 1: ĐÃ SỬA TRIỆT ĐỂ LỖI BÓC MẢNG - ĐỘNG LỰC TỰ ĐỘNG NHẢY SỐ CAD
     # -----------------------------------------------------------------------------
     elif st.session_state.get("purchase_ready") is True and menu_sub.startswith("✂️ CHỨC NĂNG 2"):
@@ -1716,7 +1716,7 @@ elif menu_selection == "🛒 Purchase Consumption":
             with input_col6: 
                 cuttable_width_inch = st.number_input("📐 KHỔ CẮT (Khổ vải đi sơ đồ - Inches):", value=56.00, step=0.50, format="%.2f")
             
-            # ĐƯA MA TRẬN PHẲNG MỚI LÊN MÀN HÌNH CHỨC NĂNG 2 ĐỂ KHÔNG BÌ EMPTY
+            # ĐƯA MA TRẬN PHẲNG MỚI LÊN MÀN HÌNH CHỨC NĂNG 2 ĐỂ KHÔNG BỊ EMPTY
             if "breakdown_details" in sbd_data_store and sbd_data_store["breakdown_details"]:
                 rows = []
                 for detail in sbd_data_store["breakdown_details"]:
@@ -1755,7 +1755,7 @@ elif menu_selection == "🛒 Purchase Consumption":
                         continue
                     tokens = [t.strip() for t in re.split(r'\t+|\s+', line.strip()) if t.strip()]
                     if len(tokens) >= 2:
-                        # ✅ ĐÃ VÁ LỖI CHÍ MẠNG: Bốc chính xác phần tử Index trần của mảng tokens
+                        # Đã sửa lỗi: Bốc chính xác phần tử Index trần của mảng tokens bằng chỉ số []
                         raw_name = tokens[0]
                         raw_length = tokens[1]
                         
