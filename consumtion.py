@@ -1983,20 +1983,31 @@ elif menu_selection == "🛒 Purchase Consumption":
                     st.session_state["consumption_activated"] = True
                     st.rerun()
                 # =============================================================================
-                # ĐOẠN 2: LIÊN KẾT Ô CAD, TÍNH TOÁN TIÊU HAO VÀ ĐỔ MÀU MA TRẬN VÀNG
+                                # =============================================================================
+                # ĐOẠN 2: LIÊN KẾT Ô CAD BẰNG REGEX (CHÍNH XÁC CHO MỌI ĐỊNH DẠNG TEXT DÁN VÀO)
                 # =============================================================================
                 if st.session_state.get("auto_cutting_results") is not None:
-                    # Đọc và bóc tách ô dán dữ liệu CAD
+                    import re
+                    
+                    # 1. Quét tìm và bóc tách dữ liệu từ ô dán CAD bằng toán học Regex
                     cad_lengths_map = {}
                     if cad_paste_zone.strip() and st.session_state["consumption_activated"]:
-                        for line in cad_paste_zone.strip().split("\n"):
-                            if not line.strip(): continue
-                            parts = line.split()
-                            if len(parts) >= 2:
-                                m_name = " ".join(parts[:-1]).strip().lower()
+                        # Tách văn bản thành từng dòng độc lập
+                        cad_lines = cad_paste_zone.strip().split("\n")
+                        for line in cad_lines:
+                            if not line.strip(): 
+                                continue
+                            
+                            # Regex tìm kiếm mẫu: lấy cụm c + 2 chữ số (ví dụ c01, c10) và số thập phân/số nguyên cuối dòng
+                            # Chấp nhận mọi khoảng trống ở giữa như dấu cách (Space) hoặc dấu Tab thụt lề từ Excel
+                            match = re.search(r'(c\d{2})[\s\t]+([0-9]*\.?[0-9]+)', line.lower().strip())
+                            if match:
+                                suffix_key = match.group(1) # Trích xuất được mã 'c01', 'c02'...
                                 try:
-                                    cad_lengths_map[m_name] = float(parts[-1])
-                                except ValueError: pass
+                                    marker_length_value = float(match.group(2)) # Trích xuất chiều dài '1.05', '10'
+                                    cad_lengths_map[suffix_key] = marker_length_value
+                                except ValueError:
+                                    pass
 
                     final_rows_display = []
                     total_fabric_m = 0.0
@@ -2013,9 +2024,13 @@ elif menu_selection == "🛒 Purchase Consumption":
                             tables = item["Số bàn"]
                             sp_sd = item["Số sp/SĐ"]
                             
-                            # 🎯 CHỈ NHẢY SỐ MÉT NẾU ĐÃ BẤM NÚT KÍCH HOẠT ĐỊNH MỨC
-                            m_name_lower = item["Sơ đồ / Trạng thái"].lower()
-                            m_len = cad_lengths_map.get(m_name_lower, 0.0) if st.session_state["consumption_activated"] else 0.0
+                            # Đối chiếu theo mã đuôi rút gọn đã được Regex chuẩn hóa sạch sẽ (Ví dụ: 'c01')
+                            current_marker_id = item["Sơ đồ / Trạng thái"].lower().strip()
+                            
+                            if st.session_state["consumption_activated"]:
+                                m_len = cad_lengths_map.get(current_marker_id, 0.0)
+                            else:
+                                m_len = 0.0
                             
                             vail_can_m = m_len * layers * tables
                             total_fabric_m += vail_can_m
@@ -2055,9 +2070,8 @@ elif menu_selection == "🛒 Purchase Consumption":
                     
                     st.markdown("<p style='font-weight:700; font-size:14px; color:#1E3A8A; margin-top:20px;'>📊 BẢNG THEO DÕI TÁC NGHIỆP & CÂN ĐỐI ĐƠN HÀNG MULTI-INSEAM</p>", unsafe_allow_html=True)
                     
-                    # Hàm tô màu vàng sáng cho dòng Balance chuẩn mẫu Excel
                     def style_excel_matrix(row):
-                        status_val = row.iloc[0]
+                        status_val = row.iloc
                         if status_val == "Balance":
                             return ['background-color: #FEF08A; color: #991B1B; font-weight: 700; border: 1px solid #FDE047;'] * len(row)
                         return [''] * len(row)
@@ -2068,7 +2082,7 @@ elif menu_selection == "🛒 Purchase Consumption":
                         hide_index=True
                     )
                     
-                    # Báo cáo tổng hợp tiêu thụ vải (Chỉ hiển thị giá trị thực khi nút định mức được bấm)
+                    # Báo cáo tổng hợp hiệu suất tiêu thụ vải cuối trang
                     total_fabric_yds_final = total_fabric_m * 1.09361
                     final_avg_yield = total_fabric_yds_final / (total_cut_pcs_sum if total_cut_pcs_sum > 0 else 1)
                     
