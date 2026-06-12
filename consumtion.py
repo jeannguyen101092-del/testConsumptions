@@ -1355,95 +1355,99 @@ elif menu_selection == "🛒 Purchase Consumption":
         st.markdown("<hr style='border:0.5px dashed #CBD5E1;'>", unsafe_allow_html=True)
 
     # KHU VỰC TIẾP NHẬN FILE CHO TỪNG PHÂN HỆ
-if menu_sub.startswith("🧠 CHỨC NĂNG 1"):
-    col_left, col_right = st.columns(2)
-    with col_left: file_sbd = st.file_uploader("📋 Chọn File SBD Số Lượng (Excel/PDF)", type=["xlsx", "xls", "pdf"], key="purchase_sbd_c1")
-    with col_right: file_tp = st.file_uploader("📐 Chọn File Techpack Thông Số (PDF)", type=["pdf"], key="purchase_tp_c1")
-    
-    if file_sbd and file_tp:
-        trigger_btn = st.button("⚡ KÍCH HOẠT SỐ HÓA ĐA LUỒNG SONG SONG", type="primary", use_container_width=True, key="activate_parallel_ingest_c1")
-        if trigger_btn:
-            with st.spinner("🚀 AI đang bóc tách ma trận dữ liệu tổng thể..."):
-                # 1. Khởi tạo API Key và Client AI
-                if "get_secure_gemini_key" in globals(): gemini_key = get_secure_gemini_key()
-                else: gemini_key = st.secrets.get("GEMINI_API_KEY", "").strip()
-                
-                if not gemini_key:
-                    st.error("❌ Thiếu GEMINI_API_KEY trong cấu hình hệ thống!")
-                    st.stop()
+    if menu_sub.startswith("🧠 CHỨC NĂNG 1"):
+        col_left, col_right = st.columns(2)
+        with col_left: 
+            file_sbd = st.file_uploader("📋 Chọn File SBD Số Lượng (Excel/PDF)", type=["xlsx", "xls", "pdf"], key="purchase_sbd_c1")
+        with col_right: 
+            file_tp = st.file_uploader("📐 Chọn File Techpack Thông Số (PDF)", type=["pdf"], key="purchase_tp_c1")
+        
+        if file_sbd and file_tp:
+            trigger_btn = st.button("⚡ KÍCH HOẠT SỐ HÓA ĐA LUỒNG SONG SONG", type="primary", use_container_width=True, key="activate_parallel_ingest_c1")
+            if trigger_btn:
+                with st.spinner("🚀 AI đang bóc tách ma trận dữ liệu tổng thể..."):
+                    # 1. Khởi tạo API Key và Client AI
+                    if "get_secure_gemini_key" in globals(): 
+                        gemini_key = get_secure_gemini_key()
+                    else: 
+                        gemini_key = st.secrets.get("GEMINI_API_KEY", "").strip()
                     
-                client_ai = genai.Client(api_key=gemini_key)
-                sbd_bytes = file_sbd.getvalue()
-                sbd_parts_payload = []
-
-                # 2. Đính kèm File vào Payload dưới dạng nhị phân (Giữ nguyên cấu trúc ma trận trực quan)
-                if file_sbd.name.lower().endswith(('.xlsx', '.xls')):
-                    sbd_parts_payload.append(
-                        types.Part.from_bytes(
-                            data=sbd_bytes,
-                            mime_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                        )
-                    )
-                elif file_sbd.name.lower().endswith('.pdf'):
-                    sbd_parts_payload.append(
-                        types.Part.from_bytes(data=sbd_bytes, mime_type="application/pdf")
-                    )
-
-                # 3. Siêu Prompt chuyên dụng cho tất cả các loại ma trận SBD ngành may
-                sbd_prompt = (
-                    "You are an expert Garment ERP Data Extractor. Analyze the attached purchase order / size breakdown (SBD) sheet.\n"
-                    "Your task is to parse the quantity matrix. Note that garment size headers can be single (S, M, L, 32), "
-                    "or split vertically across two rows (e.g., '26 X' on top, '30' below, which means size '26 X 30').\n\n"
-                    "Extract the data into a dynamic structure to handle multi-color or multi-style grids. "
-                    "Return a strict JSON format matching exactly this schema:\n"
-                    "{\n"
-                    "  \"style_id\": \"string (Look for Style / Key Item / Ref Code)\",\n"
-                    "  \"total_quantity\": integer (Grand total quantity of the document),\n"
-                    "  \"breakdown_details\": [\n"
-                    "    {\n"
-                    "      \"color\": \"string (Color name/code, use 'Default' if not specified)\",\n"
-                    "      \"color_code\": \"string (e.g., CC or Color Code, use '' if empty)\",\n"
-                    "      \"sizes\": [\n"
-                    "        {\n"
-                    "          \"size_name\": \"string (Full reconstructed size name, e.g., '26 X 30', 'M', '34')\",\n"
-                    "          \"quantity\": integer\n"
-                    "        }\n"
-                    "      ]\n"
-                    "    }\n"
-                    "  ]\n"
-                    "}\n\n"
-                    "Rules:\n"
-                    "1. Do not skip any size columns.\n"
-                    "2. Do not include markdown blocks like ```json. Output ONLY the raw valid JSON text."
-                )
-                sbd_parts_payload.append(types.Part.from_text(text=sbd_prompt))
-
-                # 4. Thực thi gọi Gemini và xử lý chuỗi an toàn
-                try:
-                    res_sbd = client_ai.models.generate_content(
-                        model='gemini-2.5-flash', 
-                        contents=sbd_parts_payload, 
-                        config=types.GenerateContentConfig(response_mime_type="application/json")
-                    )
-                    
-                    # Làm sạch dữ liệu chuỗi đề phòng AI tự chèn block code ngầm
-                    clean_json_str = res_sbd.text.strip()
-                    if clean_json_str.startswith("```"):
-                        clean_json_str = clean_json_str.split("\n", 1)[1].rsplit("\n", 1)[0].strip()
-                    if clean_json_str.startswith("json"):
-                        clean_json_str = clean_json_str[4:].strip()
+                    if not gemini_key:
+                        st.error("❌ Thiếu GEMINI_API_KEY trong cấu hình hệ thống!")
+                        st.stop()
                         
-                    st.session_state["sbd_parsed_data"] = json.loads(clean_json_str)
-                except Exception as e: 
-                    st.error(f"❌ Lỗi AI bóc tách ma trận SBD: {str(e)}")
-                    st.session_state["sbd_parsed_data"] = {}
+                    client_ai = genai.Client(api_key=gemini_key)
+                    sbd_bytes = file_sbd.getvalue()
+                    sbd_parts_payload = []
 
-                # 5. Xử lý song song file Techpack
-                res_tp = process_single_pdf_batch(file_tp.getvalue(), file_tp.name)
-                st.session_state["pur_tp_parsed_data"] = res_tp["data"] if res_tp.get("success") else {}
-                
-                st.session_state["purchase_ready"] = True
-                st.rerun()
+                    # 2. Đính kèm File vào Payload dưới dạng nhị phân (Giữ nguyên cấu trúc ma trận trực quan)
+                    if file_sbd.name.lower().endswith(('.xlsx', '.xls')):
+                        sbd_parts_payload.append(
+                            types.Part.from_bytes(
+                                data=sbd_bytes,
+                                mime_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                            )
+                        )
+                    elif file_sbd.name.lower().endswith('.pdf'):
+                        sbd_parts_payload.append(
+                            types.Part.from_bytes(data=sbd_bytes, mime_type="application/pdf")
+                        )
+
+                    # 3. Siêu Prompt chuyên dụng cho tất cả các loại ma trận SBD ngành may
+                    sbd_prompt = (
+                        "You are an expert Garment ERP Data Extractor. Analyze the attached purchase order / size breakdown (SBD) sheet.\n"
+                        "Your task is to parse the quantity matrix. Note that garment size headers can be single (S, M, L, 32), "
+                        "or split vertically across two rows (e.g., '26 X' on top, '30' below, which means size '26 X 30').\n\n"
+                        "Extract the data into a dynamic structure to handle multi-color or multi-style grids. "
+                        "Return a strict JSON format matching exactly this schema:\n"
+                        "{\n"
+                        "  \"style_id\": \"string (Look for Style / Key Item / Ref Code)\",\n"
+                        "  \"total_quantity\": integer (Grand total quantity of the document),\n"
+                        "  \"breakdown_details\": [\n"
+                        "    {\n"
+                        "      \"color\": \"string (Color name/code, use 'Default' if not specified)\",\n"
+                        "      \"color_code\": \"string (e.g., CC or Color Code, use '' if empty)\",\n"
+                        "      \"sizes\": [\n"
+                        "        {\n"
+                        "          \"size_name\": \"string (Full reconstructed size name, e.g., '26 X 30', 'M', '34')\",\n"
+                        "          \"quantity\": integer\n"
+                        "        }\n"
+                        "      ]\n"
+                        "    }\n"
+                        "  ]\n"
+                        "}\n\n"
+                        "Rules:\n"
+                        "1. Do not skip any size columns.\n"
+                        "2. Do not include markdown blocks like ```json. Output ONLY the raw valid JSON text."
+                    )
+                    sbd_parts_payload.append(types.Part.from_text(text=sbd_prompt))
+
+                    # 4. Thực thi gọi Gemini và xử lý chuỗi an toàn
+                    try:
+                        res_sbd = client_ai.models.generate_content(
+                            model='gemini-2.5-flash', 
+                            contents=sbd_parts_payload, 
+                            config=types.GenerateContentConfig(response_mime_type="application/json")
+                        )
+                        
+                        clean_json_str = res_sbd.text.strip()
+                        if clean_json_str.startswith("```"):
+                            clean_json_str = clean_json_str.split("\n", 1).rsplit("\n", 1).strip()
+                        if clean_json_str.startswith("json"):
+                            clean_json_str = clean_json_str[4:].strip()
+                            
+                        st.session_state["sbd_parsed_data"] = json.loads(clean_json_str)
+                    except Exception as e: 
+                        st.error(f"❌ Lỗi AI bóc tách ma trận SBD: {str(e)}")
+                        st.session_state["sbd_parsed_data"] = {}
+
+                    # 5. Xử lý song song file Techpack tiếp theo
+                    res_tp = process_single_pdf_batch(file_tp.getvalue(), file_tp.name)
+                    st.session_state["pur_tp_parsed_data"] = res_tp["data"] if res_tp.get("success") else {}
+                    
+                    st.session_state["purchase_ready"] = True
+                    st.rerun()
+
 
 
     elif menu_sub.startswith("✂️ CHỨC NĂNG 2"):
