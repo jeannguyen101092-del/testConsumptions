@@ -2049,7 +2049,7 @@ if st.session_state.get("auto_cutting_results") is not None:
         st.write("### 📊 BẢNG KẾT QUẢ TÁC NGHIỆP CHI TIẾT")
         st.dataframe(df_final_report, use_container_width=True)
 
-        # 💾 ĐẨY DỮ LIỆU ĐỒNG BỘ LÊN DATABSE SUPABASE
+               # 💾 ĐẨY DỮ LIỆU ĐỒNG BỘ LÊN DATABSE SUPABASE (CẬP NHẬT CƠ CHẾ DO TÌM AN TOÀN)
         if st.button("💾 ĐẨY DỮ LIỆU TÁC NGHIỆP LÊN DATABASE SUPABASE", type="primary", use_container_width=True, key="sb_sync_btn_c2_v2"):
             try:
                 payload_db = {
@@ -2060,14 +2060,34 @@ if st.session_state.get("auto_cutting_results") is not None:
                     "total_material_value": str(round(total_fabric_yds_final, 2)), 
                     "cuttable_width_inch": float(cuttable_width_inch)
                 }
-                sb_instance = globals().get("supabase", globals().get("supabase_client", st.session_state.get("supabase")))
+                
+                # 1. Tự động dò tìm biến kết nối qua các tên biến phổ biến trong dự án của bạn
+                sb_instance = globals().get("supabase", 
+                              globals().get("supabase_client", 
+                              st.session_state.get("supabase", 
+                              globals().get("st_supabase", None))))
+                
+                # 2. 🎯 NẾU KHÔNG TÌM THẤY, TỰ ĐỘNG KHỞI TẠO LẠI TỪ SECRETS (Bảo mật & Thông tuyến ngay)
+                if not sb_instance:
+                    try:
+                        from supabase import create_client
+                        # Kiểm tra xem bạn lưu cấu hình trong st.secrets hay biến môi trường toàn cục
+                        url = st.secrets.get("SUPABASE_URL", globals().get("SUPABASE_URL"))
+                        key = st.secrets.get("SUPABASE_KEY", globals().get("SUPABASE_KEY"))
+                        if url and key:
+                            sb_instance = create_client(url, key)
+                    except Exception:
+                        pass
+                
+                # 3. Tiến hành insert dữ liệu khi đã thông cổng kết nối
                 if sb_instance:
                     sb_instance.table("tac_nghiep_ban_cat").insert(payload_db).execute()
                     st.success(f"🎉 Đã đồng bộ dữ liệu mã hàng {style_id_input} lên hệ thống Supabase thành công!")
                 else:
-                    st.error("❌ Không tìm thấy cổng kết nối database. Vui lòng kiểm tra lại cấu hình.")
+                    st.error("❌ Cổng kết nối Database (Supabase) chưa được khởi tạo ở đầu trang. Vui lòng kiểm tra lại biến 'supabase' hoặc cấu hình st.secrets.")
+                    
             except Exception as db_err: 
-                st.error(f"Lỗi cơ sở dữ liệu: {str(db_err)}")
+                st.error(f"Lỗi cơ sở dữ liệu khi đẩy lệnh insert: {str(db_err)}")
 
         # --- KHỐI KẾT XUẤT FILE EXCEL THƯƠNG MẠI ---
         try:
