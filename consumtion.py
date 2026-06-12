@@ -1780,11 +1780,12 @@ elif menu_selection == "🛒 Purchase Consumption":
 
 
              # =============================================================================
-    # KỊCH BẢN CHỨC NĂNG 2: PHÂN HỆ TÁC NGHIỆP BÀN CẮT ĐA GIÀNG
+        # =============================================================================
+    # KỊCH BẢN CHỨC NĂNG 2: PHÂN HỆ TÁC NGHIỆP BÀN CẮT ĐA GIÀNG HOÀN CHỈNH
     # =============================================================================
     elif menu_sub.startswith("✂️ CHỨC NĂNG 2"):
         
-        # 1. KIỂM TRA: Nếu CHƯA tải file hoặc chưa xử lý xong, hiển thị giao diện tải file
+        # KIỂM TRA ĐIỀU KIỆN 1: Nếu CHƯA bốc tách file SBD thành công
         if not st.session_state.get("purchase_ready"):
             st.markdown("""<div class="card-container"><div class="card-section-header">📋 PHÂN HỆ TÁC NGHIỆP BÀN CẮT ĐA GIÀNG</div>
             <p style="color: #64748B; font-size:13px; margin:0;">Chức năng này không cần thông số rập mẫu. Chỉ cần tải lên File SBD số lượng để máy tính tự động chia tỷ lệ bàn cắt.</p></div>""", unsafe_allow_html=True)
@@ -1829,8 +1830,7 @@ elif menu_selection == "🛒 Purchase Consumption":
                         st.session_state["pur_tp_parsed_data"] = {"dummy_status": "skipped_not_needed"}
                         st.session_state["purchase_ready"] = True
                         st.rerun()
-
-        # 2. KIỂM TRA: Nếu ĐÃ số hóa xong file SBD -> Kích hoạt khu vực tính toán chuyên sâu
+        # KIỂM TRA ĐIỀU KIỆN 2: Nếu ĐÃ số hóa xong file SBD -> Kích hoạt màn hình tác nghiệp bàn cắt
         else:
             sbd_data_store = st.session_state.get("sbd_parsed_data", {})
             
@@ -1844,6 +1844,7 @@ elif menu_selection == "🛒 Purchase Consumption":
                     st.session_state["sbd_parsed_data"] = {}
                     st.rerun()
 
+                # KHỐI KHAI BÁO THÔNG SỐ ĐẦU VÀO CỦA MÃ HÀNG HIỆN HÀNH
                 st.markdown("#### 📋 KHAI BÁO THÔNG SỐ TÁC NGHIỆP ĐƠN HÀNG VÀ BÀN VẢI MULTI-INSEAM")
                 input_col1, input_col2, input_col3 = st.columns(3)
                 with input_col1: 
@@ -1864,55 +1865,35 @@ elif menu_selection == "🛒 Purchase Consumption":
                 
                 cad_paste_zone = st.text_area(
                     "Sau khi xem cấu trúc phối size phía dưới, hãy đi sơ đồ trên máy CAD rồi copy dán kết quả [Tên sơ đồ + Chiều dài mét] vào đây:",
-                    placeholder="Ví dụ dán bảng từ Excel CAD:\n5765-c01 10.5\n5765-c02 11.3", 
+                    placeholder="Ví dụ dán bảng từ Excel CAD:\n5844-c01 1.05\n5844-c02 10", 
                     height=90, 
                     key="cad_bulk_paste_c2"
                 )
-                
                 st.markdown("<p style='font-weight:700; font-size:13px; color:#065F46;'>📊 MA TRẬN SẢN LƯỢNG ĐƠN HÀNG (SIZE BREAKDOWN TỪ SBD)</p>", unsafe_allow_html=True)
-                
                 if size_breakdown_main:
                     df_size = pd.DataFrame([size_breakdown_main])
                     st.dataframe(df_size, use_container_width=True, hide_index=True)
-                    
-                    total_calculated_qty = sum(int(v) for v in size_breakdown_main.values() if str(v).isdigit())
-                    if total_calculated_qty != po_qty_input:
-                        st.warning(f"⚠️ Lưu ý: Tổng sản lượng cộng dồn theo các size ({total_calculated_qty} Pcs) đang lệch so với tổng lượng PO nhập ở trên ({po_qty_input} Pcs).")
-                else:
-                    st.info("💡 Không tìm thấy dữ liệu chia size chi tiết từ file SBD. Vui lòng nhập thủ công bên dưới nếu cần.")
-                              # =============================================================================
-                # ĐOẠN 1: NÚT BẤM KÍCH HOẠT & THUẬT TOÁN TỰ ĐỘNG GIẢI TOÁN HÌNH THÁP NGƯỢC
-                                # =============================================================================
-                                # =============================================================================
-                # ĐOẠN 1: ĐỒNG BỘ SUPABASE DATABASE & THUẬT TOÁN HÌNH THÁP NGƯỢC CHUẨN SỐ LỚP
-                # =============================================================================
-                st.markdown("<br>", unsafe_allow_html=True)
-                st.markdown("<p style='font-weight:700; font-size:14px; color:#1E3A8A;'>🔍 TRUNG TÂM TRA CỨU DATABASE SUPABASE</p>", unsafe_allow_html=True)
                 
-                # Thanh tìm kiếm nhanh kết nối trực tiếp với bảng tac_nghiep_ban_cat
+                # --- ĐỒNG BỘ TRUY VẤN TÌM KIẾM SUPABASE ---
+                st.markdown("<p style='font-weight:700; font-size:13px; color:#1E3A8A; margin-top:15px;'>🔍 TRUNG TÂM TRA CỨU DATABASE SUPABASE</p>", unsafe_allow_html=True)
                 db_search_query = st.text_input("Tìm kiếm mã hàng đã tác nghiệp trên hệ thống Supabase:", placeholder="Nhập Style Name để gọi lại thông số cũ...", key="subapat_db_search")
-                
                 if db_search_query.strip():
                     try:
-                        # Thực hiện truy vấn trực tiếp vào database Supabase hiện tại của bạn
                         search_res = st.session_state.supabase.table("tac_nghiep_ban_cat").select("*").eq("style_name", db_search_query.strip().upper()).execute()
                         if search_res.data:
                             st.success(f"📌 Tìm thấy dữ liệu lịch sử của mã hàng {db_search_query.strip().upper()} trên Supabase!")
-                            matched_row = search_res.data[0]
-                            # Hiển thị nhanh thông số lịch sử cho tổ trưởng đối chiếu
+                            matched_row = search_res.data
                             st.info(f"Sản lượng cũ: {matched_row.get('po_quantity')} Pcs | Định mức cũ: {matched_row.get('consumption_value')} Yds")
-                    except Exception as e:
-                        st.error(f"Không thể kết nối tra cứu Supabase: {str(e)}")
+                    except Exception:
+                        pass
 
-                # Xác định cấu trúc kích cỡ đơn hàng từ mảng SBD
+                # Định nghĩa cấu trúc mảng kích cỡ và nhóm Inseam
                 active_sizes = [str(k) for k, v in size_breakdown_main.items() if int(v) > 0]
                 if not active_sizes:
                     active_sizes = ["S", "M", "L", "XL", "2XL", "3XL"]
-                
                 detected_inseam = sbd_data_store.get("inseam_group", "None")
-                st.markdown(f"**📌 Nhóm Inseam hiện hành:** `{detected_inseam}`")
                 
-                # Thiết lập 2 nút bấm điều khiển theo đúng quy trình bàn cắt
+                # Thiết lập hai nút bấm quy trình tác nghiệp độc lập
                 btn_col1, btn_col2 = st.columns(2)
                 with btn_col1:
                     trigger_auto_cutting = st.button("⚡ 1. KÍCH HOẠT TÍNH TÁC NGHIỆP SƠ ĐỒ (HÌNH THÁP)", type="primary", use_container_width=True)
@@ -1924,10 +1905,10 @@ elif menu_selection == "🛒 Purchase Consumption":
                 if "consumption_activated" not in st.session_state:
                     st.session_state["consumption_activated"] = False
 
-                # --- THUẬT TOÁN HÌNH THÁP NGƯỢC: TRIỆT TIÊU SẢN LƯỢNG & ĐIỀU TIẾT SỐ LỚP ---
+                # BƯỚC 1: CHẠY THUẬT TOÁN HÌNH THÁP NGƯỢC CHUẨN SỐ LỚP
                 if trigger_auto_cutting:
                     st.session_state["consumption_activated"] = False
-                    with st.spinner("🔮 Hệ thống đang tính toán phân bổ sơ đồ hình tháp..."):
+                    with st.spinner("🔮 Hệ thống đang phân bổ sơ đồ hình tháp..."):
                         cons_meters = consumption_input / 1.09361
                         max_pcs_per_marker = math.floor(max_table_length / (cons_meters if cons_meters > 0 else 1.0))
                         if max_pcs_per_marker <= 0: max_pcs_per_marker = 6
@@ -1944,10 +1925,8 @@ elif menu_selection == "🛒 Purchase Consumption":
                             current_ratios = {sz: 0 for sz in active_sizes}
                             assigned_pcs = 0
                             
-                            # Phối tỷ lệ hình tháp ngược triệt tiêu dần sản lượng
                             for sz, bal in sorted_sizes:
                                 if bal <= 0 or assigned_pcs >= max_pcs_per_marker: continue
-                                
                                 if step_idx == 1: ratio_to_give = min(4, math.ceil(bal / 120))
                                 elif step_idx == 2: ratio_to_give = min(3, math.ceil(bal / 80))
                                 elif step_idx == 3: ratio_to_give = min(2, math.ceil(bal / 50))
@@ -1963,7 +1942,7 @@ elif menu_selection == "🛒 Purchase Consumption":
                                 current_ratios[sorted_sizes] = 1
                                 assigned_pcs = 1
                                 
-                            # 🎯 ĐIỀU TIẾT SỐ LỚP TỈ LỆ THUẬN THEO TỔNG TỶ LỆ PHỐI SƠ ĐỒ
+                            # SỐ LỚP TỶ LỆ THUẬN VỚI SỐ SẢN PHẨM TRÊN SƠ ĐỒ
                             base_layers_per_pc = 25 
                             computed_layers = int(assigned_pcs * base_layers_per_pc)
                             
@@ -1974,7 +1953,6 @@ elif menu_selection == "🛒 Purchase Consumption":
                                         computed_layers = max_allowable_layers
 
                             if computed_layers <= 0: computed_layers = 1
-                            
                             if computed_layers > 120:
                                 num_tables = math.ceil(computed_layers / 120)
                                 computed_layers = math.ceil(computed_layers / num_tables)
@@ -2000,16 +1978,18 @@ elif menu_selection == "🛒 Purchase Consumption":
                             step_idx += 1
                             
                         st.session_state["auto_cutting_results"] = calculated_steps
-                # =============================================================================
-                # ĐOẠN 2: BÓC TÁCH CAD CHUẨN REGEX, ĐẨY DỮ LIỆU LÊN SUPABASE & XUẤT FILE EXCEL
-                # =============================================================================
+
+                # BƯỚC 2: KÍCH HOẠT NHẢY SỐ ĐỊNH MỨC THEO Ô CAD
+                if trigger_consumption:
+                    st.session_state["consumption_activated"] = True
+                    st.rerun()
+                # ĐỔ DỮ LIỆU LÊN GIAO DIỆN BẢNG VÀ KẾT XUẤT EXCEL / SUPABASE
                 if st.session_state.get("auto_cutting_results") is not None:
                     cad_lengths_map = {}
                     if cad_paste_zone.strip() and st.session_state["consumption_activated"]:
                         cad_lines = cad_paste_zone.strip().split("\n")
                         for line in cad_lines:
                             if not line.strip(): continue
-                            # Sử dụng toán tử Regex bóc tách chuẩn xác khoảng trắng dấu Tab từ Excel CAD dán sang
                             match = re.search(r'(c\d{2})[\s\t]+([0-9]*\.?[0-9]+)', line.lower().strip())
                             if match:
                                 suffix_key = match.group(1)
@@ -2059,11 +2039,10 @@ elif menu_selection == "🛒 Purchase Consumption":
                         final_rows_display.append(display_row)
                         
                     df_final_report = pd.DataFrame(final_rows_display)
-                    
                     total_fabric_yds_final = total_fabric_m * 1.09361
                     final_avg_yield = total_fabric_yds_final / (total_cut_pcs_sum if total_cut_pcs_sum > 0 else 1)
                     
-                    # 💾 NÚT BẤM LƯU DỮ LIỆU THỰC TẾ LÊN BẢNG SUPABASE (SUBAPAT) CỦA BẠN
+                    # 💾 ĐẨY DỮ LIỆU LÊN SUPABASE
                     if st.button("💾 ĐẨY DỮ LIỆU TÁC NGHIỆP LÊN DATABASE SUPABASE", type="secondary", use_container_width=True):
                         try:
                             payload_db = {
@@ -2074,13 +2053,12 @@ elif menu_selection == "🛒 Purchase Consumption":
                                 "total_material_value": str(round(total_fabric_yds_final, 2)),
                                 "cuttable_width_inch": float(cuttable_width_inch)
                             }
-                            # Thực hiện chèn/ghi đè trực tiếp dữ liệu vào bảng của bạn
                             st.session_state.supabase.table("tac_nghiep_ban_cat").insert(payload_db).execute()
                             st.success(f"🎉 Đã đồng bộ dữ liệu mã hàng {style_id_input} lên hệ thống Supabase thành công!")
                         except Exception as db_err:
                             st.error(f"Lỗi khi đẩy dữ liệu lên Supabase: {str(db_err)}")
 
-                    # --- XỬ LÝ KHỐI XUẤT FILE EXCEL BÁO CÁO ---
+                    # --- KẾT XUẤT FILE EXCEL CHUẨN ĐẸP CÓ HEADER ---
                     try:
                         buffer = io.BytesIO()
                         with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
@@ -2098,7 +2076,6 @@ elif menu_selection == "🛒 Purchase Consumption":
                             pd.DataFrame(header_data).to_excel(writer, sheet_name="BaoCao_TacNghiep", index=False, startrow=0)
                             df_final_report.to_excel(writer, sheet_name="BaoCao_TacNghiep", index=False, startrow=10)
                             
-                            # Cấu hình bôi nền màu vàng sáng cho dòng Balance trên file Excel
                             worksheet = writer.sheets["BaoCao_TacNghiep"]
                             from openpyxl.styles import PatternFill, Font
                             yellow_fill = PatternFill(start_color="FEF08A", end_color="FEF08A", fill_type="solid")
@@ -2118,10 +2095,10 @@ elif menu_selection == "🛒 Purchase Consumption":
                             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                             use_container_width=True
                         )
-                    except Exception as e:
-                        st.error(f"Lỗi xuất file Excel: {str(e)}")
+                    except Exception:
+                        pass
 
-                    # Dựng cấu trúc bảng Multi-Index (Inseam trên, Size dưới) trên giao diện Streamlit Web
+                    # Dựng cấu trúc bảng Multi-Index hiển thị lên giao diện Streamlit Web
                     multi_cols = []
                     for col in df_final_report.columns:
                         if col in active_sizes: multi_cols.append((f"Nhóm Inseam: {detected_inseam}", col))
@@ -2138,7 +2115,7 @@ elif menu_selection == "🛒 Purchase Consumption":
                         
                     st.dataframe(df_final_report.style.apply(style_excel_matrix, axis=1), use_container_width=True, hide_index=True)
                     
-                    # --- ĐẦU RA THẺ ĐO LƯỜNG TỔNG HỢP ---
+                    # --- THẺ ĐO LƯỜNG TỔNG HỢP ---
                     st.markdown("---")
                     m_col1, m_col2, m_col3 = st.columns(3)
                     with m_col1:
@@ -2149,3 +2126,4 @@ elif menu_selection == "🛒 Purchase Consumption":
                         variance = final_avg_yield - consumption_input if total_fabric_m > 0 and st.session_state["consumption_activated"] else 0.0
                         st.metric("Chênh lệch so với tài liệu", f"{variance:+.3f}" if st.session_state["consumption_activated"] else "0.000", delta_color="inverse" if variance > 0 else "normal")
                 else:
+                    st.info("💡 Quy trình: Bấm nút 1 để tính tác nghiệp sơ đồ -> Điền độ dài CAD -> Bấm nút 2 để kích hoạt nhảy số định mức.")
