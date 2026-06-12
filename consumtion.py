@@ -2042,3 +2042,36 @@ elif menu_selection == "🛒 Purchase Consumption":
                         st.metric("Chênh lệch so với tài liệu", f"{variance:+.3f}" if st.session_state["consumption_activated"] else "0.000", delta_color="inverse" if variance > 0 else "normal")
                 else:
                     st.info("💡 Quy trình: Bấm nút 1 để chạy kế hoạch sơ đồ -> Điền độ dài CAD -> Bấm nút 2 để kích hoạt định mức thực tế.")
+                                    # 🎯 THUẬT TOÁN KHÓA MÀU AN TOÀN 100%: Dò tìm vị trí dòng bằng .iloc để loại bỏ lỗi KeyError
+                    def style_full_balance_rows(row):
+                        # Bắt chính xác chữ "Balance" ở ô đầu tiên (vị trí số 0) bất kể bảng phẳng hay đa cấp
+                        if row.iloc == "Balance":
+                            return ['background-color: #FEF08A; color: #991B1B; font-weight: 700; border: 1px solid #FDE047;'] * len(row)
+                        return [''] * len(row)
+                    
+                    styled_df_report = df_final_report.style.apply(style_full_balance_rows, axis=1)
+
+                    # Tiến hành bọc cấu trúc tiêu đề MultiIndex lồng nhau (Giàng trên, Size trần dưới) để hiển thị lên UI Web
+                    multi_cols_tuples = [("", "SIZE")]
+                    for item in parsed_size_columns:
+                        multi_cols_tuples.append((f"GIÀNG: {item['giang_num']}", item['size_num']))
+                    for col_name in other_tech_keys:
+                        multi_cols_tuples.append(("THÔNG SỐ TÁC NGHIỆP", col_name))
+                    
+                    df_final_report.columns = pd.MultiIndex.from_tuples(multi_cols_tuples)
+
+                    st.markdown("<p style='font-weight:700; font-size:14px; color:#1E3A8A; margin-top:15px;'>📊 BẢNG THEO DÕI TÁC NGHIỆP & CÂN ĐỐI ĐƠN HÀNG MULTI-INSEAM</p>", unsafe_allow_html=True)
+                    st.dataframe(styled_df_report, use_container_width=True, hide_index=True)
+                    
+                    # --- CÁC THỂ ĐO LƯỜNG TỔNG HỢP ---
+                    st.markdown("---")
+                    m_col1, m_col2, m_col3 = st.columns(3)
+                    with m_col1:
+                        st.metric("Tổng vải tiêu thụ tự động", f"{total_fabric_m:,.1f} Mét")
+                    with m_col2:
+                        st.metric("Định mức trung bình (Đ.Mức TB)", f"{final_avg_yield:.3f} Yds/Pcs" if st.session_state["consumption_activated"] else "0.000 Yds/Pcs")
+                    with m_col3:
+                        variance = final_avg_yield - consumption_input if total_fabric_m > 0 and st.session_state["consumption_activated"] else 0.0
+                        st.metric("Chênh lệch so với tài liệu", f"{variance:+.3f}" if st.session_state["consumption_activated"] else "0.000", delta_color="inverse" if variance > 0 else "normal")
+                else:
+                    st.info("💡 Quy trình: Bấm nút 1 để chạy kế hoạch sơ đồ -> Điền độ dài CAD -> Bấm nút 2 để kích hoạt định mức thực tế.")
