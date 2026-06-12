@@ -1969,6 +1969,10 @@ elif menu_selection == "🛒 Purchase Consumption":
                     import re
                     import io
                     
+                    active_sizes = [str(k) for k, v in size_breakdown_main.items() if int(v) > 0]
+                    if not active_sizes: 
+                        active_sizes = ["S", "M", "L", "XL", "2XL", "3XL"]
+
                     cad_lengths_map = {}
                     if cad_paste_zone.strip() and st.session_state["consumption_activated"]:
                         cad_lines = cad_paste_zone.strip().split("\n")
@@ -2023,14 +2027,18 @@ elif menu_selection == "🛒 Purchase Consumption":
                                 st.success(f"🎉 Đã đồng bộ dữ liệu mã hàng {style_id_input} lên hệ thống Supabase!")
                         except Exception: pass
 
-                    # Sắp xếp và phân nhóm các cột Giàng & Size trần
+                    # 🎯 ĐÃ VÁ LỖI STRIP TRẦN: Chỉ định rõ vị trí mảng dữ liệu để triệt tiêu dứt điểm lỗi đỏ AttributeError
                     parsed_size_columns = []
                     for col_name in active_sizes:
                         col_str = str(col_name).strip()
                         if any(char in col_str.lower() for char in ["x", "-", "/"]):
                             parts = re.split(r'[\sXx\-\/]+', col_str)
                             if len(parts) >= 2:
-                                parsed_size_columns.append({"original": col_name, "size_num": parts.strip(), "giang_num": parts.strip()})
+                                parsed_size_columns.append({
+                                    "original": col_name, 
+                                    "size_num": str(parts[0]).strip(), 
+                                    "giang_num": str(parts[1]).strip()
+                                })
                             else:
                                 parsed_size_columns.append({"original": col_name, "size_num": col_str, "giang_num": str(detected_inseam)})
                         else:
@@ -2044,7 +2052,7 @@ elif menu_selection == "🛒 Purchase Consumption":
                     ordered_size_keys = [item["original"] for item in parsed_size_columns]
                     other_tech_keys = ["Số lớp", "Số bàn", "Dài sơ đồ", "Số sp/SĐ", "Đ.Mức SĐ", "Vải cần (M)"]
                     df_final_report = df_final_report[["SIZE"] + ordered_size_keys + other_tech_keys]
-                 # --- KHỐI KẾT XUẤT VÀ ĐÓNG KHUNG FILE EXCEL THƯƠNG MẠI ---
+                            # --- KHỐI KẾT XUẤT VÀ ĐÓNG KHUNG FILE EXCEL THƯƠNG MẠI ---
                     try:
                         buffer = io.BytesIO()
                         with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
@@ -2089,25 +2097,26 @@ elif menu_selection == "🛒 Purchase Consumption":
                             label="📥 XUẤT FILE EXCEL TÁC NGHIỆP CHUẨN THƯƠNG MẠI", data=buffer.getvalue(),
                             file_name=f"BÁO_CÁO_TÁC_NGHIỆP_BÀN_CẮT_{style_id_input}.xlsx",
                             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True,
-                            key="excel_download_btn_final_v12"
+                            key="excel_download_btn_final_v16"
                         )
                     except Exception: pass
 
-                    # 🎯 GIẢI PHÁP SỬA MÀU VÀNG: Ép cấu trúc mảng Styler bôi màu trên bảng phẳng trước khi tạo MultiIndex
-                    def style_full_balance_rows(row):
-                        if row["SIZE"] == "Balance":
-                            return ['background-color: #FEF08A; color: #991B1B; font-weight: 700; border: 1px solid #FDE047;'] * len(row)
-                        return [''] * len(row)
-                    
-                    styled_df_report = df_final_report.style.apply(style_full_balance_rows, axis=1)
-
-                    # Sau khi đối tượng Styler bắt cứng màu vàng full dòng, ta mới gán tiêu đề MultiIndex lên DataFrame gốc để hiển thị
+                    # Gán cấu trúc tiêu đề MultiIndex lồng nhau lên lưới Web
                     web_multi_cols = [("", "SIZE")]
                     for item in parsed_size_columns:
                         web_multi_cols.append((f"GIÀNG: {item['giang_num']}", item['size_num']))
                     for col_name in other_tech_keys:
                         web_multi_cols.append(("THÔNG SỐ TÁC NGHIỆP", col_name))
                     df_final_report.columns = pd.MultiIndex.from_tuples(web_multi_cols)
+
+                    # 🎯 ĐÃ KHÓA: Sử dụng ma trận phẳng để nhuộm màu vàng rực rỡ lên TẤT CẢ các cột (kể cả cụm tỷ lệ size ở giữa)
+                    def highlight_balance_matrix(x):
+                        color_df = pd.DataFrame('', index=x.index, columns=x.columns)
+                        is_balance = x.iloc[:, 0] == "Balance"
+                        color_df.loc[is_balance, :] = 'background-color: #FEF08A; color: #991B1B; font-weight: 700; border: 1px solid #FDE047;'
+                        return color_df
+
+                    styled_df_report = df_final_report.style.apply(highlight_balance_matrix, axis=None)
 
                     st.markdown("<p style='font-weight:700; font-size:14px; color:#1E3A8A; margin-top:15px;'>📊 BẢNG THEO DÕI TÁC NGHIỆP & CÂN ĐỐI ĐƠN HÀNG MULTI-INSEAM</p>", unsafe_allow_html=True)
                     st.dataframe(styled_df_report, use_container_width=True, hide_index=True)
