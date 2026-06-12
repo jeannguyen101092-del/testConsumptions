@@ -1964,7 +1964,7 @@ elif menu_selection == "🛒 Purchase Consumption":
                 if trigger_consumption:
                     st.session_state["consumption_activated"] = True
                     st.rerun()
-               # BƯỚC 3: LIÊN KẾT ĐỐI CHIẾU DỮ LIỆU Ô CAD, ĐẨY SUPABASE & KẾT XUẤT EXCEL
+               # BƯỚC 3: LIÊN KẾT ĐỐI CHIẾU DỮ LIỆU Ô CAD, ĐẨY SUPABASE & KẾT XUẤT EXCEL ĐÓNG KHUNG CHUẨN
                 if st.session_state.get("auto_cutting_results") is not None:
                     import re
                     import io
@@ -2023,59 +2023,90 @@ elif menu_selection == "🛒 Purchase Consumption":
                                 st.success(f"🎉 Đã đồng bộ dữ liệu mã hàng {style_id_input} lên hệ thống Supabase!")
                         except Exception: pass
 
-                    try:
-                        buffer = io.BytesIO()
-                        with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-                            header_data = {
-                                "THÔNG TIN ĐƠN HÀNG TÁC NGHIỆP BÀN CẮT": [
-                                    f"Mã hàng: {style_id_input}", f"PO Qty: {po_qty_input} Pcs", f"Planned Cut: {total_cut_pcs_sum} Pcs",
-                                    f"ĐM tài liệu: {consumption_input:.3f} Yds/Pcs", f"ĐM thực tế: {final_avg_yield:.3f} Yds/Pcs",
-                                    f"Khổ cắt: {cuttable_width_inch}\"", f"Nhóm Inseam: {detected_inseam}"
-                                ]
-                            }
-                            pd.DataFrame(header_data).to_excel(writer, sheet_name="BaoCao_TacNghiep", index=False, startrow=0)
-                            df_final_report.to_excel(writer, sheet_name="BaoCao_TacNghiep", index=False, startrow=10)
-                            worksheet = writer.sheets["BaoCao_TacNghiep"]
-                            from openpyxl.styles import PatternFill, Font
-                            yellow_fill = PatternFill(start_color="FEF08A", end_color="FEF08A", fill_type="solid")
-                            red_font = Font(color="991B1B", bold=True)
-                            for r_idx in range(12, worksheet.max_row + 1):
-                                if worksheet.cell(row=r_idx, column=1).value == "Balance":
-                                    for c_idx in range(1, worksheet.max_column + 1):
-                                        cell = worksheet.cell(row=r_idx, column=c_idx)
-                                        cell.fill = yellow_fill; cell.font = red_font
-                        st.download_button(label="📥 XUẤT FILE EXCEL TÁC NGHIỆP CHUẨN THƯƠNG MẠI", data=buffer.getvalue(), file_name=f"BÁO_CÁO_TÁC_NGHIỆP_BÀN_CẮT_{style_id_input}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
-                    except Exception: pass
-
+                    # Sắp xếp và phân nhóm các cột Giàng & Size trần
                     parsed_size_columns = []
                     for col_name in active_sizes:
                         col_str = str(col_name).strip()
                         if any(char in col_str.lower() for char in ["x", "-", "/"]):
                             parts = re.split(r'[\sXx\-\/]+', col_str)
-                            if len(parts) >= 2: parsed_size_columns.append({"original": col_name, "size_num": parts[0].strip(), "giang_num": parts[1].strip()})
-                            else: parsed_size_columns.append({"original": col_name, "size_num": col_str, "giang_num": str(detected_inseam)})
-                        else: parsed_size_columns.append({"original": col_name, "size_num": col_str, "giang_num": str(detected_inseam)})
+                            if len(parts) >= 2:
+                                parsed_size_columns.append({"original": col_name, "size_num": parts[0].strip(), "giang_num": parts[1].strip()})
+                            else:
+                                parsed_size_columns.append({"original": col_name, "size_num": col_str, "giang_num": str(detected_inseam)})
+                        else:
+                            parsed_size_columns.append({"original": col_name, "size_num": col_str, "giang_num": str(detected_inseam)})
 
-                    try: parsed_size_columns.sort(key=lambda x: (int(re.sub(r'\D', '', x['giang_num'])), int(re.sub(r'\D', '', x['size_num']))))
-                    except Exception: parsed_size_columns.sort(key=lambda x: (x['giang_num'], x['size_num']))
+                    try:
+                        parsed_size_columns.sort(key=lambda x: (int(re.sub(r'\D', '', x['giang_num'])), int(re.sub(r'\D', '', x['size_num']))))
+                    except Exception:
+                        parsed_size_columns.sort(key=lambda x: (x['giang_num'], x['size_num']))
 
                     ordered_size_keys = [item["original"] for item in parsed_size_columns]
                     other_tech_keys = ["Số lớp", "Số bàn", "Dài sơ đồ", "Số sp/SĐ", "Đ.Mức SĐ", "Vải cần (M)"]
                     df_final_report = df_final_report[["SIZE"] + ordered_size_keys + other_tech_keys]
+                # --- KHỐI KẾT XUẤT VÀ ĐÓNG KHUNG FILE EXCEL THƯƠNG MẠI ---
+                    try:
+                        buffer = io.BytesIO()
+                        with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+                            header_data = {
+                                "THÔNG TIN ĐƠN HÀNG TÁC NGHIỆP BÀN CẮT CHUẨN": [
+                                    f"Mã hàng (Style Name): {style_id_input}", f"Số lượng đơn hàng (PO Qty): {po_qty_input} Pcs",
+                                    f"Sản lượng kế hoạch cắt (Planned Cut): {total_cut_pcs_sum} Pcs", f"Định mức tài liệu đề xuất: {consumption_input:.3f} Yds/Pcs",
+                                    f"Định mức tác nghiệp thực tế: {final_avg_yield:.3f} Yds/Pcs", f"Khổ cắt: {cuttable_width_inch}\"",
+                                    f"Nhóm phân hệ Inseam: {detected_inseam}"
+                                ]
+                            }
+                            pd.DataFrame(header_data).to_excel(writer, sheet_name="BaoCao_TacNghiep", index=False, startrow=0)
+                            
+                            excel_multi_cols = [("", "SIZE")]
+                            for item in parsed_size_columns:
+                                excel_multi_cols.append((f"GIÀNG {item['giang_num']}", int(item['size_num']) if item['size_num'].isdigit() else item['size_num']))
+                            for col_name in other_tech_keys:
+                                excel_multi_cols.append(("THÔNG SỐ TÁC NGHIỆP", col_name))
+                                
+                            df_excel_export = df_final_report.copy()
+                            df_excel_export.columns = pd.MultiIndex.from_tuples(excel_multi_cols)
+                            df_excel_export.to_excel(writer, sheet_name="BaoCao_TacNghiep", index=False, startrow=10)
+                            
+                            worksheet = writer.sheets["BaoCao_TacNghiep"]
+                            from openpyxl.styles import PatternFill, Font, Border, Side
+                            
+                            yellow_fill = PatternFill(start_color="FEF08A", end_color="FEF08A", fill_type="solid")
+                            red_font = Font(color="991B1B", bold=True)
+                            thin_side = Side(border_style="thin", color="000000")
+                            factory_border = Border(left=thin_side, right=thin_side, top=thin_side, bottom=thin_side)
+                            
+                            for r_idx in range(11, worksheet.max_row + 1):
+                                is_balance_row = (worksheet.cell(row=r_idx, column=1).value == "Balance")
+                                for c_idx in range(1, worksheet.max_column + 1):
+                                    cell = worksheet.cell(row=r_idx, column=c_idx)
+                                    cell.border = factory_border
+                                    if is_balance_row:
+                                        cell.fill = yellow_fill
+                                        cell.font = red_font
+                                        
+                        st.download_button(
+                            label="📥 XUẤT FILE EXCEL TÁC NGHIỆP CHUẨN THƯƠNG MẠI", data=buffer.getvalue(),
+                            file_name=f"BÁO_CÁO_TÁC_NGHIỆP_BÀN_CẮT_{style_id_input}.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True,
+                            key="excel_download_btn_final_v10"
+                        )
+                    except Exception: pass
 
-                    # 🎯 SỬA CHÍNH XÁC: Ép cấu trúc tiêu đề MultiIndex lên DataFrame TRƯỚC
-                    multi_cols_tuples = [("", "SIZE")]
-                    for item in parsed_size_columns: multi_cols_tuples.append((f"GIÀNG: {item['giang_num']}", item['size_num']))
-                    for col_name in other_tech_keys: multi_cols_tuples.append(("THÔNG SỐ TÁC NGHIỆP", col_name))
-                    df_final_report.columns = pd.MultiIndex.from_tuples(multi_cols_tuples)
-
-                    # 🎯 SỬA CHÍNH XÁC: Quét Styler theo chỉ mục hàng (row.iloc[0]) sau khi bảng đã đổi cấu trúc để tránh lỗi KeyError
+                    # Nhuộm màu vàng full 100% dòng Balance hiển thị trên nền Web Streamlit
                     def style_full_balance_rows(row):
-                        if row.iloc[0] == "Balance":
+                        if row.iloc == "Balance":
                             return ['background-color: #FEF08A; color: #991B1B; font-weight: 700; border: 1px solid #FDE047;'] * len(row)
                         return [''] * len(row)
                     
                     styled_df_report = df_final_report.style.apply(style_full_balance_rows, axis=1)
+
+                    web_multi_cols = [("", "SIZE")]
+                    for item in parsed_size_columns:
+                        web_multi_cols.append((f"GIÀNG: {item['giang_num']}", item['size_num']))
+                    for col_name in other_tech_keys:
+                        web_multi_cols.append(("THÔNG SỐ TÁC NGHIỆP", col_name))
+                    df_final_report.columns = pd.MultiIndex.from_tuples(web_multi_cols)
 
                     st.markdown("<p style='font-weight:700; font-size:14px; color:#1E3A8A; margin-top:15px;'>📊 BẢNG THEO DÕI TÁC NGHIỆP & CÂN ĐỐI ĐƠN HÀNG MULTI-INSEAM</p>", unsafe_allow_html=True)
                     st.dataframe(styled_df_report, use_container_width=True, hide_index=True)
