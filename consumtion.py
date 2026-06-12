@@ -1297,7 +1297,6 @@ if menu_selection == "🧵 BOM & Consumption Matrix":
 
 # -----------------------------------------------------------------------------
 # CHỨC NĂNG 3: QUẢN LÝ ĐỊNH MỨC MUA SẮM VÀ ĐẶT HÀNG (PURCHASE CONSUMPTION)
-# CHỨC NĂNG 3: QUẢN LÝ ĐỊNH MỨC MUA SẮM VÀ ĐẶT HÀNG (PURCHASE CONSUMPTION)
 # -----------------------------------------------------------------------------
 elif menu_selection == "🛒 Purchase Consumption":
     st.markdown('<div class="component-title-box">🛒 PURCHASE CONSUMPTION & INTELLIGENT PLANNING ENGINE</div>', unsafe_allow_html=True)
@@ -1319,6 +1318,7 @@ elif menu_selection == "🛒 Purchase Consumption":
     )
     
     st.markdown("---")
+
     # =============================================================================
     # ✂️ CHỨC NĂNG 2: TRA CỨU LỊCH SỬ KHO
     # =============================================================================
@@ -1353,6 +1353,7 @@ elif menu_selection == "🛒 Purchase Consumption":
                     st.error(f"Lỗi cổng tra cứu Cloud: {str(search_err)}")
                     
         st.markdown("<hr style='border:0.5px dashed #CBD5E1;'>", unsafe_allow_html=True)
+
     # =============================================================================
     # 🧠 CHỨC NĂNG 1: KHU VỰC TIẾP NHẬN FILE (MÃ KEY ĐỘC BẢN CHỐNG TRÙNG LẶP)
     # =============================================================================
