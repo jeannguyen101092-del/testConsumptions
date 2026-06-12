@@ -1962,7 +1962,7 @@ elif menu_selection == "🛒 Purchase Consumption":
                 if trigger_consumption:
                     st.session_state["consumption_activated"] = True
                     st.rerun()
-                # BƯỚC 3: LIÊN KẾT ĐỐI CHIẾU DỮ LIỆU Ô CAD, ĐẨY SUPABASE & KẾT XUẤT EXCEL
+                                # BƯỚC 3: LIÊN KẾT ĐỐI CHIẾU DỮ LIỆU Ô CAD, ĐẨY SUPABASE & KẾT XUẤT EXCEL
                 if st.session_state.get("auto_cutting_results") is not None:
                     import re
                     import io
@@ -2068,22 +2068,14 @@ elif menu_selection == "🛒 Purchase Consumption":
                         )
                     except Exception: pass
 
-                    # ✅ ĐÃ SỬA: Thực hiện nhuộm màu vàng trên cấu trúc bảng phẳng trước khi lồng Multi-Index để triệt tiêu lỗi KeyError
-                    def style_excel_matrix(row):
-                        if row["Sơ đồ / Trạng thái"] == "Balance":
-                            return ['background-color: #FEF08A; color: #991B1B; font-weight: 700; border: 1px solid #FDE047;'] * len(row)
-                        return [''] * len(row)
+                    # 1. Thực hiện nhuộm màu vàng trực tiếp bằng hàm .map() cho chuẩn phiên bản mới
+                    def style_balance_rows(val):
+                        return 'background-color: #FEF08A; color: #991B1B; font-weight: 700;' if val == "Balance" else ''
                     
-                    styled_df_report = df_final_report.style.apply(style_excel_matrix, axis=1)
+                    styled_df_report = df_final_report.style.map(style_balance_rows, subset=["Sơ đồ / Trạng thái"])
 
-                    # Sau khi nhuộm màu xong, tiến hành lồng Multi-Index bọc nhóm Inseam để hiển thị lên UI Web
-                    multi_cols = []
-                    for col in df_final_report.columns:
-                        if col in active_sizes: multi_cols.append((f"Nhóm Inseam: {detected_inseam}", col))
-                        else: multi_cols.append(("", col))
-                    df_final_report.columns = pd.MultiIndex.from_tuples(multi_cols)
-                    
-                    st.markdown("<p style='font-weight:700; font-size:14px; color:#1E3A8A; margin-top:15px;'>📊 BẢNG THEO DÕI TÁC NGHIỆP & CÂN ĐỐI ĐƠN HÀNG MULTI-INSEAM</p>", unsafe_allow_html=True)
+                    # 2. Hiển thị nhãn nhóm Inseam bằng thẻ tiêu đề phụ trực quan
+                    st.markdown(f"<div style='padding:4px; background-color:#1E3A8A; color:white; font-weight:700; text-align:center; font-size:12px; border-radius:4px 4px 0 0;'>NHÓM INSEAM: {str(detected_inseam).upper()}</div>", unsafe_allow_html=True)
                     st.dataframe(styled_df_report, use_container_width=True, hide_index=True)
                     
                     st.markdown("---")
