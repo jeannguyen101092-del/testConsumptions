@@ -2103,7 +2103,7 @@ def generate_premium_excel_file(style_id, po_qty, planned_cut, consumption_input
 if st.session_state.get("auto_cutting_results") is not None:
     cad_lengths_map = {}
     
-    # 🎯 FIX CỐT LÕI: Kiểm tra an toàn sự tồn tại của biến cad_paste_zone để chống sập giao diện
+    # Bẫy an toàn kiểm tra sự tồn tại của biến cad_paste_zone
     cad_zone_value = globals().get("cad_paste_zone", locals().get("cad_paste_zone", ""))
     
     if str(cad_zone_value).strip() and st.session_state.get("consumption_activated"):
@@ -2116,13 +2116,24 @@ if st.session_state.get("auto_cutting_results") is not None:
                 try: cad_lengths_map[suffix_key] = float(match.group(2))
                 except ValueError: pass
 
+    # 🎯 FIX CỐT LÕI: Tự động khôi phục danh sách size từ dữ liệu nếu chức năng 2 làm mất biến active_sizes
+    local_active_sizes = globals().get("active_sizes", locals().get("active_sizes", None))
+    if local_active_sizes is None:
+        try:
+            # Lấy tất cả các khóa kích cỡ từ phần tử đầu tiên của kết quả phối sơ đồ
+            first_item = st.session_state["auto_cutting_results"][0]
+            local_active_sizes = list(first_item["Ratios"].keys())
+        except Exception:
+            local_active_sizes = []
+
     final_rows_display = []
     total_fabric_m = 0.0
     total_cut_pcs_sum = 0
     
     for item in st.session_state["auto_cutting_results"]:
         display_row = {"SIZE": item["Sơ đồ / Trạng thái"]}
-        for sz in active_sizes: display_row[sz] = item["Ratios"].get(sz, 0)
+        # Sử dụng danh sách kích cỡ đã được bẫy an toàn
+        for sz in local_active_sizes: display_row[sz] = item["Ratios"].get(sz, 0)
             
         if item["Sơ đồ / Trạng thái"] != "Balance":
             layers = item["Số lớp"]; tables = item["Số bàn"]; sp_sd = item["Số sp/SĐ"]
@@ -2147,32 +2158,42 @@ if st.session_state.get("auto_cutting_results") is not None:
     final_avg_yield = total_fabric_yds_final / (total_cut_pcs_sum if total_cut_pcs_sum > 0 else 1)
 
     parsed_size_columns = []
-    for col_name in active_sizes:
+    for col_name in local_active_sizes:
         col_str = str(col_name).strip()
         if any(char in col_str.lower() for char in ["x", "-", "/"]):
             parts = re.split(r'[\sXx\-\/]+', col_str)
             if len(parts) >= 2:
                 parsed_size_columns.append({"original": col_name, "size_num": str(parts[0]).strip(), "giang_num": str(parts[1]).strip()})
             else:
-                parsed_size_columns.append({"original": col_name, "size_num": col_str, "giang_num": str(detected_inseam)})
+                parsed_size_columns.append({"original": col_name, "size_num": col_str, "giang_num": str(globals().get("detected_inseam", "None"))})
         else:
-            parsed_size_columns.append({"original": col_name, "size_num": col_str, "giang_num": str(detected_inseam)})
+            parsed_size_columns.append({"original": col_name, "size_num": col_str, "giang_num": str(globals().get("detected_inseam", "None"))})
 
     try:
         parsed_size_columns.sort(key=lambda x: (int(re.sub(r'\D', '', x['giang_num'])), int(re.sub(r'\D', '', x['size_num']))))
     except Exception:
-        parsed_size_columns.sort(key=lambda x: (x['giang_num'], x['size_num']))
+        try: parsed_size_columns.sort(key=lambda x: (x['giang_num'], x['size_num']))
+        except Exception: pass
 
     ordered_size_keys = [item["original"] for item in parsed_size_columns]
     other_tech_keys = ["Số lớp", "Số bàn", "Dài sơ đồ", "Số sp/SĐ", "Đ.Mức SĐ", "Vải cần (M)"]
-    df_final_report = df_final_report[["SIZE"] + ordered_size_keys + other_tech_keys]
+    
+    # Đồng bộ lại danh sách cột thực tế của DataFrame
+    existing_cols = [c for c in df_final_report.columns if c in ordered_size_keys]
+    df_final_report = df_final_report[["SIZE"] + existing_cols + other_tech_keys]
 
     st.write("### 📊 BẢNG KẾT QUẢ TÁC NGHIỆP CHI TIẾT")
     st.dataframe(df_final_report, use_container_width=True)
 
+    # Đọc an toàn các biến cấu hình giao diện nhập liệu đầu trang
+    style_id_val = globals().get("style_id_input", "UNKNOWN")
+    po_qty_val = globals().get("po_qty_input", 0)
+    consumption_val = globals().get("consumption_input", 0.0)
+    width_val = globals().get("cuttable_width_inch", 0.0)
+
     excel_file_data = generate_premium_excel_file(
-        style_id_input, po_qty_input, total_cut_pcs_sum, consumption_input, 
-        final_avg_yield, cuttable_width_inch, df_final_report, parsed_size_columns, other_tech_keys, ordered_size_keys
+        style_id_val, po_qty_val, total_cut_pcs_sum, consumption_val, 
+        final_avg_yield, width_val, df_final_report, parsed_size_columns, other_tech_keys, existing_cols
     )
 
     st.write("---")
@@ -2180,14 +2201,14 @@ if st.session_state.get("auto_cutting_results") is not None:
 
     with col1:
         if st.button("💾 ĐẨY DỮ LIỆU TÁC NGHIỆP LÊN DATABASE SUPABASE", type="secondary", use_container_width=True, key="sb_sync_btn_v12"):
-            push_to_supabase_table(style_id_input, po_qty_input, total_cut_pcs_sum, final_avg_yield, total_fabric_yds_final, cuttable_width_inch)
+            push_to_supabase_table(style_id_val, po_qty_val, total_cut_pcs_sum, final_avg_yield, total_fabric_yds_final, width_val)
 
     with col2:
         if excel_file_data:
             st.download_button(
                 label="📥 KẾT XUẤT VÀ TẢI FILE EXCEL BÁO CÁO",
                 data=excel_file_data,
-                file_name=f"Bao_Cao_Tac_Nghiep_{str(style_id_input).strip()}.xlsx",
+                file_name=f"Bao_Cao_Tac_Nghiep_{str(style_id_val).strip()}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 use_container_width=True,
                 key="download_excel_v12"
