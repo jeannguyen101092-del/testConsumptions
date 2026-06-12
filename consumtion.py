@@ -1875,6 +1875,10 @@ elif menu_selection == "🛒 Purchase Consumption":
                     import re
                     import io
                     
+                    active_sizes = [str(k) for k, v in size_breakdown_main.items() if int(v) > 0]
+                    if not active_sizes: 
+                        active_sizes = ["S", "M", "L", "XL", "2XL", "3XL"]
+                        
                     cad_lengths_map = {}
                     if cad_paste_zone.strip() and st.session_state["consumption_activated"]:
                         cad_lines = cad_paste_zone.strip().split("\n")
@@ -1892,7 +1896,7 @@ elif menu_selection == "🛒 Purchase Consumption":
                     total_cut_pcs_sum = 0
                     
                     for item in st.session_state["auto_cutting_results"]:
-                        display_row = {"SIZE": item["Sơ đồ / Trạng thái"]} # Đã đổi tên cột đầu tiên từ Sơ đồ thành SIZE
+                        display_row = {"SIZE": item["Sơ đồ / Trạng thái"]}
                         for sz in active_sizes:
                             display_row[sz] = item["Ratios"].get(sz, 0)
                             
@@ -1931,8 +1935,8 @@ elif menu_selection == "🛒 Purchase Consumption":
                     total_fabric_yds_final = total_fabric_m * 1.09361
                     final_avg_yield = total_fabric_yds_final / (total_cut_pcs_sum if total_cut_pcs_sum > 0 else 1)
                     
-                    # 💾 ĐẨY DỮ LIỆU ĐỒNG BỘ LÊN SUPABASE
-                    if st.button("💾 ĐẨY DỮ LIỆU TÁC NGHIỆP LÊN DATABASE SUPABASE", type="secondary", use_container_width=True):
+                    # 💾 ĐẨY DỮ LIỆU ĐỒNG BỘ LÊN DATABASE SUPABASE
+                    if st.button("💾 ĐẨY DỮ LIỆU TÁC NGHIỆP LÊN DATABASE SUPABASE", type="secondary", use_container_width=True, key="sb_sync_btn_c2"):
                         try:
                             payload_db = {
                                 "style_name": str(style_id_input).strip().upper(), "po_quantity": int(po_qty_input),
@@ -1943,11 +1947,8 @@ elif menu_selection == "🛒 Purchase Consumption":
                                 sb_client = get_supabase_client()
                                 sb_client.table("tac_nghiep_ban_cat").insert(payload_db).execute()
                                 st.success(f"🎉 Đã đồng bộ dữ liệu mã hàng {style_id_input} lên hệ thống Supabase thành công!")
-                            else:
-                                st.error("❌ Hệ thống chưa khởi tạo kết nối database. Vui lòng bấm F5 tải lại trang.")
                         except Exception as db_err:
-                            st.error(f"Lỗi khi đẩy dữ liệu lên Supabase: {str(db_err)}")
-                    # --- KẾT XUẤT FILE EXCEL BÁO CÁO ---
+                            st.error(f"Lỗi khi đẩy dữ liệu lên Supabase: {str(db_err)}")# --- KẾT XUẤT FILE EXCEL BÁO CÁO CÓ HEADER THÔNG TIN ---
                     try:
                         buffer = io.BytesIO()
                         with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
@@ -1977,72 +1978,59 @@ elif menu_selection == "🛒 Purchase Consumption":
                         st.download_button(
                             label="📥 XUẤT FILE EXCEL TÁC NGHIỆP CHUẨN THƯƠNG MẠI", data=buffer.getvalue(),
                             file_name=f"BÁO_CÁO_TÁC_NGHIỆP_BÀN_CẮT_{style_id_input}.xlsx",
-                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True,
+                            key="excel_download_btn_c2"
                         )
                     except Exception: pass
 
-                    # 🎯 THUẬT TOÁN ĐIỀU CHỈNH THỨ TỰ VÀ ĐỊNH DẠNG TIÊU ĐỀ ĐA TẦNG CHUẨN XƯỞNG
-                    # Bước A: Tách chuỗi tên size gốc thành cấu trúc tạm thời để chuẩn bị phân nhóm
+                    # Sắp xếp và phân nhóm các cột Giàng & Size trần an toàn
                     parsed_size_columns = []
-                    tech_columns = []
-                    
                     for col_name in active_sizes:
                         col_str = str(col_name).strip()
                         if any(char in col_str.lower() for char in ["x", "-", "/"]):
                             parts = re.split(r'[\sXx\-\/]+', col_str)
                             if len(parts) >= 2:
-                                # Kỹ thuật may: parts[0] là Size, parts[1] là Giàng (Inseam)
+                                # 🎯 ĐG VÁ LỖI: Lấy phần tử cụ thể trong mảng và xóa khoảng trắng
                                 parsed_size_columns.append({
-                                    "original": col_name,
-                                    "size_num": parts[0],
-                                    "giang_num": parts[1]
+                                    "original": col_name, 
+                                    "size_num": str(parts[0]).strip(), 
+                                    "giang_num": str(parts[1]).strip()
                                 })
                             else:
                                 parsed_size_columns.append({"original": col_name, "size_num": col_str, "giang_num": str(detected_inseam)})
                         else:
                             parsed_size_columns.append({"original": col_name, "size_num": col_str, "giang_num": str(detected_inseam)})
 
-                    # Bước B: Thực hiện SẮP XẾP ĐỘNG để đưa tất cả các size của cùng một GIÀNG đứng liền nhau
-                    # Sắp xếp ưu tiên theo số Giàng trước, sau đó sắp xếp theo số Size từ nhỏ đến lớn
                     try:
                         parsed_size_columns.sort(key=lambda x: (int(re.sub(r'\D', '', x['giang_num'])), int(re.sub(r'\D', '', x['size_num']))))
                     except Exception:
                         parsed_size_columns.sort(key=lambda x: (x['giang_num'], x['size_num']))
 
-                    # Bước C: Sắp xếp lại thứ tự cột trong DataFrame gốc theo mảng vừa phân nhóm
                     ordered_size_keys = [item["original"] for item in parsed_size_columns]
                     other_tech_keys = ["Số lớp", "Số bàn", "Dài sơ đồ", "Số sp/SĐ", "Đ.Mức SĐ", "Vải cần (M)"]
-                    
-                    # Tái cấu trúc bảng hoàn chỉnh: Cột SIZE -> Cột Kích cỡ đã sắp xếp -> Các cột thông số đuôi
                     df_final_report = df_final_report[["SIZE"] + ordered_size_keys + other_tech_keys]
 
-                    # Bước D: Dựng tuple MultiIndex sạch (Chỉ để lại Số, xóa chữ SIZE và GIÀNG thừa)
-                    multi_cols_tuples = []
-                    
-                    # Cột đầu tiên (SIZE)
-                    multi_cols_tuples.append(("", "SIZE"))
-                    
-                    # Các cột kích cỡ lồng nhóm
-                    for item in parsed_size_columns:
-                        multi_cols_tuples.append((f"GIÀNG: {item['giang_num']}", item['size_num'])) # 🎯 CHỈ ĐỂ LẠI SỐ SIZE TRẦN
-                        
-                    # Các cột thông số tác nghiệp
-                    for col_name in other_tech_keys:
-                        multi_cols_tuples.append(("THÔNG SỐ TÁC NGHIỆP", col_name))
-                    
-                    df_final_report.columns = pd.MultiIndex.from_tuples(multi_cols_tuples)
-
-                    # 🎯 THUẬT TOÁN NHUỘM MÀU VÀNG FULL DÒNG BALANCE DỰA TRÊN TÊN CỘT MỚI
+                    # 🎯 THUẬT TOÁN KHÓA MÀU: Áp dụng Styler bôi màu vàng dựa trên nhãn "Balance" TRƯỚC KHI tạo MultiIndex để triệt tiêu lỗi KeyError
                     def style_full_balance_rows(row):
-                        if row.iloc == "Balance":
+                        if row["SIZE"] == "Balance":
                             return ['background-color: #FEF08A; color: #991B1B; font-weight: 700; border: 1px solid #FDE047;'] * len(row)
                         return [''] * len(row)
                     
                     styled_df_report = df_final_report.style.apply(style_full_balance_rows, axis=1)
 
+                    # Tiến hành bọc cấu trúc tiêu đề MultiIndex lồng nhau (Giàng trên, Size trần dưới) để hiển thị lên UI Web
+                    multi_cols_tuples = [("", "SIZE")]
+                    for item in parsed_size_columns:
+                        multi_cols_tuples.append((f"GIÀNG: {item['giang_num']}", item['size_num']))
+                    for col_name in other_tech_keys:
+                        multi_cols_tuples.append(("THÔNG SỐ TÁC NGHIỆP", col_name))
+                    
+                    df_final_report.columns = pd.MultiIndex.from_tuples(multi_cols_tuples)
+
                     st.markdown("<p style='font-weight:700; font-size:14px; color:#1E3A8A; margin-top:15px;'>📊 BẢNG THEO DÕI TÁC NGHIỆP & CÂN ĐỐI ĐƠN HÀNG MULTI-INSEAM</p>", unsafe_allow_html=True)
                     st.dataframe(styled_df_report, use_container_width=True, hide_index=True)
                     
+                    # --- THÊM KHỐI HIỂN THỊ METRICS TỔNG HỢP ---
                     st.markdown("---")
                     m_col1, m_col2, m_col3 = st.columns(3)
                     with m_col1:
@@ -2053,4 +2041,4 @@ elif menu_selection == "🛒 Purchase Consumption":
                         variance = final_avg_yield - consumption_input if total_fabric_m > 0 and st.session_state["consumption_activated"] else 0.0
                         st.metric("Chênh lệch so với tài liệu", f"{variance:+.3f}" if st.session_state["consumption_activated"] else "0.000", delta_color="inverse" if variance > 0 else "normal")
                 else:
-                    st.info("💡 Quy trình: Bấm nút 1 để tính tác nghiệp sơ đồ -> Điền độ dài CAD -> Bấm nút 2 để kích hoạt nhảy số định mức.")
+                    st.info("💡 Quy trình: Bấm nút 1 để chạy kế hoạch sơ đồ -> Điền độ dài CAD -> Bấm nút 2 để kích hoạt định mức thực tế.")
