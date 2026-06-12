@@ -1659,6 +1659,7 @@ elif menu_selection == "🛒 Purchase Consumption":
             detected_style_id = sbd_data_store.get("style_id", "UNKNOWN_STYLE")
             detected_total_po = sbd_data_store.get("total_quantity", 0)
 
+            # KHỐI KHAI BÁO THÔNG SỐ ĐẦU VÀO CỦA MÃ HÀNG HIỆN HÀNH
             st.markdown("#### 📋 KHAI BÁO THÔNG SỐ TÁC NGHIỆP ĐƠN HÀNG VÀ BÀN VẢI MULTI-INSEAM")
             input_col1, input_col2, input_col3 = st.columns(3)
             with input_col1: style_id_input = st.text_input("🏷️ Tên mã hàng (Style ID):", value=str(detected_style_id).strip().upper())
@@ -1669,6 +1670,7 @@ elif menu_selection == "🛒 Purchase Consumption":
             with input_col4: max_table_length = st.number_input("📏 Chiều gia tối đa bàn vải (Meters):", value=12.00, step=1.0)
             with input_col6: cuttable_width_inch = st.number_input("📐 KHỔ CẮT (Khổ vải đi sơ đồ - Inches):", value=56.00, step=0.50, format="%.2f")
             
+            # ĐƯA MA TRẬN PHẲNG MỚI LÊN MÀN HÌNH CHỨC NĂNG 2 ĐỂ KHÔNG BỊ EMPTY
             if "breakdown_details" in sbd_data_store and sbd_data_store["breakdown_details"]:
                 rows = []
                 for detail in sbd_data_store["breakdown_details"]:
@@ -1706,7 +1708,6 @@ elif menu_selection == "🛒 Purchase Consumption":
                     if not line.strip(): continue
                     tokens = [t.strip() for t in re.split(r'\t+|\s+', line.strip()) if t.strip()]
                     if len(tokens) >= 2:
-                        # SỬA LỖI ĐỌC CHUỖI: Bốc chuẩn phần tử theo chỉ số index mảng []
                         raw_name = tokens[0]
                         raw_length = tokens[1]
                         
@@ -1720,23 +1721,12 @@ elif menu_selection == "🛒 Purchase Consumption":
                         except Exception: continue
 
             st.markdown("<br>", unsafe_allow_html=True)
-            btn_calc = st.button("⚡ TÍNH TOÁN LẬP SƠ ĐỒ", type="secondary", use_container_width=True, key="run_setup_marker_structure")
+            # Đã đổi key duy nhất cho nút lập sơ đồ
+            btn_calc = st.button("⚡ TÍNH TOÁN LẬP SƠ ĐỒ", type="secondary", use_container_width=True, key="run_setup_marker_structure_c2_unique")
             if btn_calc: st.session_state["step1_marker_ready"] = True
 
-            btn_final_execute = st.button("⚡ KÍCH HOẠT QUY ĐỔI & TÍNH ĐỊNH MỨC THỰC TẾ", type="primary", use_container_width=True, key="run_final_yds_calculation")
-            if btn_final_execute:
-                st.session_state["step2_computation_active"] = True
-                st.session_state["bulk_cad_data_store"] = []
-                if cad_length_meters_list:
-                    for idx_c in range(len(cad_length_meters_list)):
-                        st.session_state["bulk_cad_data_store"].append({
-                            "marker_id": cad_names_list[idx_c],
-                            "length_meters": cad_length_meters_list[idx_c]
-                        })
-                    st.success(f"🎯 Đã nạp thành công {len(cad_length_meters_list)} sơ đồ CAD để sẵn sàng quy đổi hình học thực tế!")
-
-
-            btn_final_execute = st.button("⚡ KÍCH HOẠT QUY ĐỔI & TÍNH ĐỊNH MỨC THỰC TẾ", type="primary", use_container_width=True, key="run_final_yds_calculation")
+            # Đã đổi key duy nhất cho nút tính định mức thực tế để xóa sạch lỗi đỏ trên màn hình
+            btn_final_execute = st.button("⚡ KÍCH HOẠT QUY ĐỔI & TÍNH ĐỊNH MỨC THỰC TẾ", type="primary", use_container_width=True, key="run_final_yds_calculation_c2_unique")
             if btn_final_execute:
                 st.session_state["step2_computation_active"] = True
                 st.session_state["bulk_cad_data_store"] = []
