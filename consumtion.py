@@ -1947,7 +1947,7 @@ elif menu_selection == "🛒 Purchase Consumption":
                             })
                             step_idx += 1
                         st.session_state["auto_cutting_results"] = calculated_steps
-                if st.session_state.get("auto_cutting_results") is not None:
+                                if st.session_state.get("auto_cutting_results") is not None:
                     import re, io
                     cad_lengths_map = {}
                     if cad_paste_zone.strip() and st.session_state.get("consumption_activated"):
@@ -1990,6 +1990,7 @@ elif menu_selection == "🛒 Purchase Consumption":
                     total_fabric_yds_final = total_fabric_m * 1.09361
                     final_avg_yield = total_fabric_yds_final / (total_cut_pcs_sum if total_cut_pcs_sum > 0 else 1)
                     
+                    # 🔥 ĐÃ SỬA LỖI: Tách chính xác phần tử đầu tiên [0] và phần tử thứ hai [1] của mảng parts
                     parsed_size_columns = []
                     for col_name in active_sizes:
                         col_str = str(col_name).strip()
@@ -1997,58 +1998,71 @@ elif menu_selection == "🛒 Purchase Consumption":
                             parts = re.split(r'[\sXx\-\/]+', col_str)
                             if len(parts) >= 2:
                                 parsed_size_columns.append({"original": col_name, "size_num": str(parts[0]).strip(), "giang_num": str(parts[1]).strip()})
-                            else: parsed_size_columns.append({"original": col_name, "size_num": col_str, "giang_num": str(detected_inseam)})
-                        else: parsed_size_columns.append({"original": col_name, "size_num": col_str, "giang_num": str(detected_inseam)})
+                            else: 
+                                parsed_size_columns.append({"original": col_name, "size_num": col_str, "giang_num": str(detected_inseam)})
+                        else: 
+                            parsed_size_columns.append({"original": col_name, "size_num": col_str, "giang_num": str(detected_inseam)})
 
-                    try: parsed_size_columns.sort(key=lambda x: (int(re.sub(r'\D', '', x['giang_num'])), int(re.sub(r'\D', '', x['size_num']))))
-                    except Exception: parsed_size_columns.sort(key=lambda x: (x['giang_num'], x['size_num']))
+                    try: 
+                        parsed_size_columns.sort(key=lambda x: (int(re.sub(r'\D', '', x['giang_num'])) if re.sub(r'\D', '', x['giang_num']) else 0, int(re.sub(r'\D', '', x['size_num'])) if re.sub(r'\D', '', x['size_num']) else 0))
+                    except Exception: 
+                        parsed_size_columns.sort(key=lambda x: (str(x['giang_num']), str(x['size_num'])))
 
                     ordered_size_keys = [item["original"] for item in parsed_size_columns]
                     other_tech_keys = ["Số lớp", "Số bàn", "Dài sơ đồ", "Số sp/SĐ", "Đ.Mức SĐ", "Vải cần (M)"]
                     df_final_report = df_final_report[["SIZE"] + ordered_size_keys + other_tech_keys]
                     st.markdown("<p style='font-weight:700; font-size:14px; color:#1E3A8A; margin-top:20px;'>📊 BẢNG TÁC NGHIỆP PHÂN BỔ BÀN CẮT CHI TIẾT</p>", unsafe_allow_html=True)
                     st.dataframe(df_final_report, use_container_width=True, hide_index=True)
-                    if st.button("💾 ĐẨY DỮ LIỆU TÁC NGHIỆP LÊN DATABASE SUPABASE", type="secondary", use_container_width=True, key="sb_sync_btn_c2_v2"):
-                        try:
-                            payload_db = {
-                                "style_name": str(style_id_input).strip().upper(), "po_quantity": int(po_qty_input),
-                                "planned_cut_pcs": int(total_cut_pcs_sum), "consumption_value": str(round(final_avg_yield, 3)),
-                                "total_material_value": str(round(total_fabric_yds_final, 2)), "cuttable_width_inch": float(cuttable_width_inch)
-                            }
-                            sb_instance = globals().get("supabase", globals().get("supabase_client", st.session_state.get("supabase")))
-                            if sb_instance:
-                                sb_instance.table("tac_nghiep_ban_cat").insert(payload_db).execute()
-                                st.success(f"🎉 Đã đồng bộ dữ liệu mã hàng {style_id_input} lên hệ thống Supabase thành công!")
-                            else: st.error("❌ Không tìm thấy cổng kết nối database. Vui lòng kiểm tra lại cấu hình.")
-                        except Exception as db_err: st.error(f"Lỗi cơ sở dữ liệu: {str(db_err)}")
+                    # --- HIỂN THỊ CÁC NÚT CHỨC NĂNG SAU KHI ĐÃ CÓ BẢNG ---
+                    db_btn_col, excel_btn_col = st.columns(2)
+                    with db_btn_col:
+                        if st.button("💾 ĐẨY DỮ LIỆU LÊN SUPABASE", type="secondary", use_container_width=True, key="sb_sync_btn_c2_v2"):
+                            try:
+                                payload_db = {
+                                    "style_name": str(style_id_input).strip().upper(), "po_quantity": int(po_qty_input),
+                                    "planned_cut_pcs": int(total_cut_pcs_sum), "consumption_value": str(round(final_avg_yield, 3)),
+                                    "total_material_value": str(round(total_fabric_yds_final, 2)), "cuttable_width_inch": float(cuttable_width_inch)
+                                }
+                                sb_instance = globals().get("supabase", globals().get("supabase_client", st.session_state.get("supabase")))
+                                if sb_instance:
+                                    sb_instance.table("tac_nghiep_ban_cat").insert(payload_db).execute()
+                                    st.success(f"🎉 Đã đồng bộ mã hàng {style_id_input} lên Supabase!")
+                                else: 
+                                    st.error("❌ Không tìm thấy cổng kết nối database.")
+                            except Exception as db_err: 
+                                st.error(f"Lỗi cơ sở dữ liệu: {str(db_err)}")
 
-                    try:
-                        buffer = io.BytesIO()
-                        with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-                            header_data = {
-                                "THÔNG TIN ĐƠN HÀNG TÁC NGHIỆP BÀN CẮT CHUẨN": [
-                                    f"Mã hàng (Style Name): {style_id_input}", f"Số lượng đơn hàng (PO Qty): {po_qty_input} Pcs",
-                                    f"Sản lượng kế hoạch cắt (Planned Cut): {total_cut_pcs_sum} Pcs", f"Định mức tài liệu đề xuất: {consumption_input:.3f} Yds/Pcs",
-                                    f"Định mức tác nghiệp thực tế: {final_avg_yield:.3f} Yds/Pcs", f"Khổ cắt: {cuttable_width_inch}\""
-                                ]
-                            }
-                            pd.DataFrame(header_data).to_excel(writer, sheet_name="BaoCao_TacNghiep", index=False, startrow=0)
-                            
-                            excel_multi_cols = [("", "SIZE")]
-                            for item in parsed_size_columns:
-                                s_val = item['size_num']
-                                try: export_size_label = int(s_val) if str(s_val).isdigit() else float(s_val)
-                                except ValueError: export_size_label = s_val
-                                excel_multi_cols.append((f"GIÀNG {item['giang_num']}", export_size_label))
+                    with excel_btn_col:
+                        try:
+                            buffer = io.BytesIO()
+                            with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+                                header_data = {
+                                    "THÔNG TIN ĐƠN HÀNG TÁC NGHIỆP BÀN CẮT CHUẨN": [
+                                        f"Mã hàng (Style Name): {style_id_input}", f"Số lượng đơn hàng (PO Qty): {po_qty_input} Pcs",
+                                        f"Sản lượng kế hoạch cắt (Planned Cut): {total_cut_pcs_sum} Pcs", f"Định mức tài liệu đề xuất: {consumption_input:.3f} Yds/Pcs",
+                                        f"Định mức tác nghiệp thực tế: {final_avg_yield:.3f} Yds/Pcs", f"Khổ cắt: {cuttable_width_inch}\""
+                                    ]
+                                }
+                                pd.DataFrame(header_data).to_excel(writer, sheet_name="BaoCao_TacNghiep", index=False, startrow=0)
                                 
-                            for col_name in other_tech_keys: excel_multi_cols.append(("THÔNG SỐ TÁC NGHIỆP", col_name))
-                            df_excel_export = df_final_report.copy()
-                            df_excel_export.columns = pd.MultiIndex.from_tuples(excel_multi_cols)
-                            df_excel_export.to_excel(writer, sheet_name="BaoCao_TacNghiep", index=True, startrow=8)
-                            
-                        st.download_button(
-                            label="📥 TẢI XUỐNG FILE EXCEL TÁC NGHIỆP ĐA GIÀNG", data=buffer.getvalue(),
-                            file_name=f"TacNghiep_MultiInseam_{style_id_input}.xlsx",
-                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True
-                        )
-                    except Exception as excel_err: st.warning(f"⚠️ Hỗ trợ xuất file đang xử lý: {str(excel_err)}")
+                                excel_multi_cols = [("", "SIZE")]
+                                for item in parsed_size_columns:
+                                    s_val = item['size_num']
+                                    try: export_size_label = int(s_val) if str(s_val).isdigit() else float(s_val)
+                                    except ValueError: export_size_label = s_val
+                                    excel_multi_cols.append((f"GIÀNG {item['giang_num']}", export_size_label))
+                                    
+                                for col_name in other_tech_keys: 
+                                    excel_multi_cols.append(("THÔNG SỐ TÁC NGHIỆP", col_name))
+                                    
+                                df_excel_export = df_final_report.copy()
+                                df_excel_export.columns = pd.MultiIndex.from_tuples(excel_multi_cols)
+                                df_excel_export.to_excel(writer, sheet_name="BaoCao_TacNghiep", index=True, startrow=8)
+                                
+                            st.download_button(
+                                label="📥 TẢI FILE EXCEL ĐA GIÀNG", data=buffer.getvalue(),
+                                file_name=f"TacNghiep_MultiInseam_{style_id_input}.xlsx",
+                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True
+                            )
+                        except Exception as excel_err: 
+                            st.warning(f"⚠️ Hỗ trợ xuất file đang xử lý: {str(excel_err)}")
