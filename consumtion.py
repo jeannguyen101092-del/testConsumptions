@@ -1964,7 +1964,7 @@ elif menu_selection == "🛒 Purchase Consumption":
                 if trigger_consumption:
                     st.session_state["consumption_activated"] = True
                     st.rerun()
-                 # BƯỚC 3: LIÊN KẾT ĐỐI CHIẾU DỮ LIỆU Ô CAD, ĐẨY SUPABASE & KẾT XUẤT EXCEL
+                # BƯỚC 3: LIÊN KẾT ĐỐI CHIẾU DỮ LIỆU Ô CAD, ĐẨY SUPABASE & KẾT XUẤT EXCEL
                 if st.session_state.get("auto_cutting_results") is not None:
                     import re
                     import io
@@ -2046,12 +2046,14 @@ elif menu_selection == "🛒 Purchase Consumption":
                                         cell.fill = yellow_fill; cell.font = red_font
                         st.download_button(label="📥 XUẤT FILE EXCEL TÁC NGHIỆP CHUẨN THƯƠNG MẠI", data=buffer.getvalue(), file_name=f"BÁO_CÁO_TÁC_NGHIỆP_BÀN_CẮT_{style_id_input}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
                     except Exception: pass
-                 parsed_size_columns = []
+
+                    # Căn lề lùi 20 khoảng trắng chuẩn chỉ cho biến ma trận size
+                    parsed_size_columns = []
                     for col_name in active_sizes:
                         col_str = str(col_name).strip()
                         if any(char in col_str.lower() for char in ["x", "-", "/"]):
                             parts = re.split(r'[\sXx\-\/]+', col_str)
-                            if len(parts) >= 2: parsed_size_columns.append({"original": col_name, "size_num": parts.strip(), "giang_num": parts.strip()})
+                            if len(parts) >= 2: parsed_size_columns.append({"original": col_name, "size_num": parts[0].strip(), "giang_num": parts[1].strip()})
                             else: parsed_size_columns.append({"original": col_name, "size_num": col_str, "giang_num": str(detected_inseam)})
                         else: parsed_size_columns.append({"original": col_name, "size_num": col_str, "giang_num": str(detected_inseam)})
 
@@ -2062,9 +2064,8 @@ elif menu_selection == "🛒 Purchase Consumption":
                     other_tech_keys = ["Số lớp", "Số bàn", "Dài sơ đồ", "Số sp/SĐ", "Đ.Mức SĐ", "Vải cần (M)"]
                     df_final_report = df_final_report[["SIZE"] + ordered_size_keys + other_tech_keys]
 
-                    # N KHÓA MÀU VÀNG FULL BẢNG ĐA CẤP DỰA TRÊN TRỤC THỨ TỰ HÀNG .ILOC ĐỘNG
                     def style_full_balance_rows(row):
-                        if row.iloc == "Balance":
+                        if row.iloc[0] == "Balance":
                             return ['background-color: #FEF08A; color: #991B1B; font-weight: 700; border: 1px solid #FDE047;'] * len(row)
                         return [''] * len(row)
                     
