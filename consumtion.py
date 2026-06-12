@@ -1872,6 +1872,9 @@ elif menu_selection == "🛒 Purchase Consumption":
 
                               # BƯỚC 3: LIÊN KẾT ĐỐI CHIẾU DỮ LIỆU Ô CAD, ĐẨY SUPABASE & KẾT XUẤT EXCEL
                 if st.session_state.get("auto_cutting_results") is not None:
+                    active_sizes = [str(k) for k, v in size_breakdown_main.items() if int(v) > 0]
+                    if not active_sizes: active_sizes = ["S", "M", "L", "XL", "2XL", "3XL"]
+
                     import re
                     import io
                     
