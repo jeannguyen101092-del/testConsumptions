@@ -1962,7 +1962,7 @@ elif menu_selection == "🛒 Purchase Consumption":
                 if trigger_consumption:
                     st.session_state["consumption_activated"] = True
                     st.rerun()
-                                # BƯỚC 3: LIÊN KẾT ĐỐI CHIẾU DỮ LIỆU Ô CAD, ĐẨY SUPABASE & KẾT XUẤT EXCEL
+                                               # BƯỚC 3: LIÊN KẾT ĐỐI CHIẾU DỮ LIỆU Ô CAD, ĐẨY SUPABASE & KẾT XUẤT EXCEL
                 if st.session_state.get("auto_cutting_results") is not None:
                     import re
                     import io
@@ -2073,31 +2073,39 @@ elif menu_selection == "🛒 Purchase Consumption":
                         )
                     except Exception: pass
 
-                    # 🎯 TẠO TIÊU ĐỀ 2 TẦNG (HÀNG TRÊN INSEAM, HÀNG DƯỚI SIZE) THEO ĐÚNG Ý BẠN
-                    # Thuật toán tự bóc tách chuỗi (ví dụ: '32 x 30' -> Hàng trên: 'Inseam: 30', Hàng dưới: 'Size: 32')
+                    # 🎯 THUẬT TOÁN TẠO TIÊU ĐỀ ĐA TẦNG CHUẨN 100% THEO FILE MẪU CỦA BẠN
+                    # Tách chuỗi tên size để đưa thông tin GIÀNG lên hàng trên, SIZE xuống hàng dưới
                     multi_cols_tuples = []
                     for col_name in df_final_report.columns:
-                        if col_name in active_sizes and "x" in str(col_name).lower():
-                            parts = str(col_name).lower().split("x")
-                            size_part = parts[0].strip()
-                            inseam_part = parts[1].strip()
-                            # Tuple gồm (Hàng trên, Hàng dưới)
-                            multi_cols_tuples.append((f"Inseam {inseam_part}", f"Size {size_part}"))
+                        col_str = str(col_name).strip()
+                        
+                        # Trường hợp 1: Nếu tên cột dạng phối hợp (Ví dụ: "26 x 30" hoặc "26-30")
+                        if col_name in active_sizes and any(char in col_str.lower() for char in ["x", "-", "/"]):
+                            # Phân tách tự động bằng các ký tự phân tách ngành may thông dụng
+                            parts = re.split(r'[\sXx\-\/]+', col_str)
+                            if len(parts) >= 2:
+                                size_part = parts[0].strip()   # Số đứng trước là SIZE (ví dụ: 26)
+                                giang_part = parts[1].strip()  # Số đứng sau là GIÀNG / INSEAM (ví dụ: 30)
+                                multi_cols_tuples.append((f"GIÀNG: {giang_part}", f"SIZE: {size_part}"))
+                            else:
+                                multi_cols_tuples.append((f"GIÀNG: {detected_inseam}", f"SIZE: {col_str}"))
+                                
+                        # Trường hợp 2: Nếu file SBD chỉ trả về số size phẳng đơn thuần (Ví dụ: "26")
                         elif col_name in active_sizes:
-                            # Dự phòng nếu tên size trong file SBD của bạn là dạng số phẳng không có chữ x
-                            multi_cols_tuples.append((f"Inseam: {detected_inseam}", col_name))
+                            multi_cols_tuples.append((f"GIÀNG: {detected_inseam}", f"SIZE: {col_str}"))
+                            
+                        # Trường hợp 3: Các cột thông số kỹ thuật tác nghiệp ở đuôi bảng (Số lớp, Số bàn, Dài sơ đồ...)
                         else:
-                            # Các cột thông số kỹ thuật (Số lớp, Số bàn...) giữ nguyên hàng trên trống, hàng dưới hiện tên cột
-                            multi_cols_tuples.append(("", col_name))
+                            multi_cols_tuples.append(("THÔNG SỐ TÁC NGHIỆP", col_name))
                     
-                    # Áp cấu trúc tiêu đề đa tầng vào bảng dữ liệu
+                    # Đồng bộ ép cấu trúc tiêu đề lồng hai tầng vào DataFrame
                     df_final_report.columns = pd.MultiIndex.from_tuples(multi_cols_tuples)
 
-                    # 🎯 THUẬT TOÁN TÔ MÀU VÀNG TOÀN DÒNG: Dùng hàm Styler quét theo trục index (axis=1) khớp chính xác với tiêu đề đa tầng mới
+                    # 🎯 THUẬT TOÁN NHUỘM MÀU VÀNG FULL BẢNG AN TOÀN TUYỆT ĐỐI CHO MULTI-INDEX
+                    # Dò tìm chữ "Balance" bằng hàm định vị dòng .iloc[0] bất kể bảng có bao nhiêu cột lồng nhau
                     def style_full_balance_rows(row):
-                        # Lấy giá trị ô đầu tiên của dòng hiện tại (cột Sơ đồ / Trạng thái)
                         if row.iloc[0] == "Balance":
-                            return ['background-color: #FEF08A; color: #991B1B; font-weight: 700;'] * len(row)
+                            return ['background-color: #FEF08A; color: #991B1B; font-weight: 700; border: 1px solid #FDE047;'] * len(row)
                         return [''] * len(row)
                     
                     styled_df_report = df_final_report.style.apply(style_full_balance_rows, axis=1)
