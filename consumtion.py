@@ -1874,7 +1874,18 @@ elif menu_selection == "🛒 Purchase Consumption":
                 detected_inseam = sbd_data_store.get("inseam_group", "None")
                 st.markdown(f"**📌 Nhóm Inseam hiện hành:** `{detected_inseam}`")
                 
-                # CHỈ GIỮ LẠI DUY NHẤT 1 KHỐI NÚT BẤM AI ENGINE (ĐÃ BỎ Ô THỪA PHÍA TRÊN)
+                                # =============================================================================
+                # ĐOẠN 1: TỐI ƯU HÓA PROMPT CHO GEMINI-2.5-FLASH CHẠY SIÊU TỐC TIẾT KIỆM CHI PHÍ
+                # =============================================================================
+                st.markdown("<br>", unsafe_allow_html=True)
+                
+                active_sizes = [str(k) for k, v in size_breakdown_main.items() if int(v) > 0]
+                if not active_sizes:
+                    active_sizes = ["S", "M", "L", "XL", "2XL", "3XL"]
+                
+                detected_inseam = sbd_data_store.get("inseam_group", "None")
+                st.markdown(f"**📌 Nhóm Inseam hiện hành:** `{detected_inseam}`")
+                
                 btn_col1, btn_col2 = st.columns(2)
                 with btn_col1:
                     trigger_auto_cutting = st.button("⚡ 1. KÍCH HOẠT TÍNH TÁC NGHIỆP SƠ ĐỒ (AI ENGINE)", type="primary", use_container_width=True, key="c2_ai_engine_cut_btn")
@@ -1886,10 +1897,9 @@ elif menu_selection == "🛒 Purchase Consumption":
                 if "consumption_activated" not in st.session_state:
                     st.session_state["consumption_activated"] = False
 
-                # SỨC MẠNH AI GIẢI TOÁN BÀN CẮT DỆT MAY
                 if trigger_auto_cutting:
                     st.session_state["consumption_activated"] = False
-                    with st.spinner("🔮 AI Gemini đang giải toán phối sơ đồ và tối ưu số lớp..."):
+                    with st.spinner("🚀 AI Flash đang giải toán siêu tốc..."):
                         if "get_secure_gemini_key" in globals(): 
                             gemini_key = get_secure_gemini_key()
                         else: 
@@ -1897,37 +1907,36 @@ elif menu_selection == "🛒 Purchase Consumption":
                         
                         client_ai = genai.Client(api_key=gemini_key)
                         
+                        # 🎯 CẢI TIẾN: Thu gọn Prompt ngắn nhất có thể để Flash xử lý trong 1 giây
                         ai_cutting_prompt = f"""
-                        You are an expert production planner in a garment factory. 
-                        Task: Create an optimized cutting plan based on the following size breakdown matrix: {json.dumps(size_breakdown_main)}.
-                        Constraints & Rules:
-                        1. Use the inverted pyramid method (Hình tháp ngược) to triệt tiêu total quantities.
-                        2. Max products per marker (Số sp/SĐ) based on max table length ({max_table_length}m) and consumption ({consumption_input}).
-                        3. CRITICAL RULE: Marker with high total ratios MUST have high layers (100 - 150 layers). 
-                        4. NEVER create a long marker (e.g., 11 products) with very thin layers (e.g., 5 layers). If remaining quantities are small, automatically shorten the marker length (1 - 3 products per marker) so that layers remain thick (at least 50-80 layers) and economical for a 12m table.
-                        5. Alternate each marker row with a "Balance" row showing the remaining quantities to be cut.
+                        Return a raw JSON list for a cutting plan based on this data: {json.dumps(size_breakdown_main)}.
+                        Rules:
+                        1. Use inverted pyramid. Max products per marker is {max_pcs_per_marker}.
+                        2. Long marker MUST have 100-150 layers. 
+                        3. If remaining quantity is small, shorten marker length to 1-2 products so layers stay thick (>=50 layers).
+                        4. Alternate each marker row with a "Balance" row.
                         
-                        Return a raw JSON list matching this structure exactly:
-                        [
-                          {{"Sơ đồ / Trạng thái": "c01", "Số lớp": 150, "Số bàn": 1, "Số sp/SĐ": 8, "Ratios": {{"size_name": ratio_integer}}}},
-                          {{"Sơ đồ / Trạng thái": "Balance", "Số lớp": "", "Số bàn": "", "Số sp/SĐ": "", "Ratios": {{"size_name": remaining_integer}}}}
+                        Format: [
+                          {{"Sơ đồ / Trạng thái": "c01", "Số lớp": 150, "Số bàn": 1, "Số sp/SĐ": 8, "Ratios": {{"size": 1}}}},
+                          {{"Sơ đồ / Trạng thái": "Balance", "Số lớp": "", "Số bàn": "", "Số sp/SĐ": "", "Ratios": {{"size": 0}}}}
                         ]
                         """
                         try:
                             res_ai = client_ai.models.generate_content(
-                                model='gemini-2.5-flash', 
+                                model='gemini-2.5-flash', # 💸 Giữ nguyên bản Flash để tiết kiệm tiền
                                 contents=[types.Part.from_text(text=ai_cutting_prompt)],
                                 config=types.GenerateContentConfig(response_mime_type="application/json")
                             )
                             st.session_state["auto_cutting_results"] = json.loads(res_ai.text.strip().replace("```json", "").replace("```", "").strip())
-                            st.success("🎉 AI Gemini đã lập kế hoạch tác nghiệp hình tháp ngược tối ưu thành công!")
+                            st.success("🎉 Đã lập kế hoạch xong!")
                             st.rerun()
                         except Exception as e:
-                            st.error(f"❌ AI Engine gặp sự cố khi giải toán bàn cắt: {str(e)}")
+                            st.error(f"❌ Sự cố: {str(e)}")
 
                 if trigger_consumption:
                     st.session_state["consumption_activated"] = True
                     st.rerun()
+
 
 
 
