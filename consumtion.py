@@ -1568,7 +1568,7 @@ elif menu_selection == "🛒 Purchase Consumption":
                                 st.rerun()
                             except Exception as chat_err: 
                                 st.error(f"Lỗi cổng kết nối AI: {str(chat_err)}")
-    # =============================================================================
+   # =============================================================================
     # GIAO DIỆN KHAI BÁO TÁC NGHIỆP BÀN CẮT & HÀM TOÁN TÍNH ĐỊNH MỨC THỰC TẾ
     # =============================================================================
     elif st.session_state.get("purchase_ready") is True and menu_sub.startswith("✂️ CHỨC NĂNG 2"):
@@ -1625,8 +1625,8 @@ elif menu_selection == "🛒 Purchase Consumption":
                     if not line.strip(): continue
                     tokens = [t.strip() for t in re.split(r'\t+|\s+', line.strip()) if t.strip()]
                     if len(tokens) >= 2:
-                        raw_name = tokens[0]   # ĐÃ SỬA LỖI: Trích xuất chính xác token đầu tiên (Tên sơ đồ)
-                        raw_length = tokens[1] # ĐÃ SỬA LỖI: Trích xuất chính xác token thứ hai (Chiều dài mét)
+                        raw_name = tokens[0]    # SỬA LỖI INDEX: Lấy chính xác phần tử index 0 (Tên sơ đồ)
+                        raw_length = tokens[1]  # SỬA LỖI INDEX: Lấy chính xác phần tử index 1 (Chiều dài)
                         
                         if "-" in raw_name: clean_name = str(raw_name.split("-")[-1]).upper()
                         else: clean_name = str(raw_name[-3:]).upper()
@@ -1639,8 +1639,7 @@ elif menu_selection == "🛒 Purchase Consumption":
 
             st.markdown("<br>", unsafe_allow_html=True)
             btn_calc = st.button("⚡ TÍNH TOÁN LẬP SƠ ĐỒ", type="secondary", use_container_width=True, key="run_setup_marker_structure_c2_unique")
-            if btn_calc: st.session_state["step1_marker_ready"] = True
-            # --- THUẬT TOÁN QUY ĐỔI HÌNH HỌC & TÍNH ĐỊNH MỨC GIA QUYỀN THỰC TẾ ---
+            if btn_calc: st.session_state["step1_marker_ready"] = True# --- THUẬT TOÁN QUY ĐỔI HÌNH HỌC & TÍNH ĐỊNH MỨC GIA QUYỀN THỰC TẾ ---
             btn_final_execute = st.button("⚡ KÍCH HOẠT QUY ĐỔI & TÍNH ĐỊNH MỨC THỰC TẾ", type="primary", use_container_width=True, key="run_final_yds_calculation_c2_unique")
             if btn_final_execute:
                 if not cad_length_meters_list:
@@ -1662,7 +1661,7 @@ elif menu_selection == "🛒 Purchase Consumption":
                             "length_yards": l_yards
                         })
                     
-                    # Tính các chỉ số chi phí tài chính tiêu hao vải tổng thể
+                    # Tính toán các chỉ số chi phí tài chính tiêu hao vải tổng thể dựa trên dữ liệu đầu vào mới
                     total_yards_all = round(total_meters * 1.09361, 3)
                     actual_consumption = round(total_yards_all / po_qty_input, 4) if po_qty_input > 0 else 0.0
                     consumption_delta = round(actual_consumption - consumption_input, 4)
