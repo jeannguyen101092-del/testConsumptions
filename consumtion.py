@@ -2068,6 +2068,7 @@ elif menu_selection == "🛒 Purchase Consumption":
                         )
                     except Exception: pass
 
+                    # ✅ ĐÃ SỬA: Thực hiện nhuộm màu vàng trên cấu trúc bảng phẳng trước khi lồng Multi-Index để triệt tiêu lỗi KeyError
                     def style_excel_matrix(row):
                         if row["Sơ đồ / Trạng thái"] == "Balance":
                             return ['background-color: #FEF08A; color: #991B1B; font-weight: 700; border: 1px solid #FDE047;'] * len(row)
@@ -2075,6 +2076,7 @@ elif menu_selection == "🛒 Purchase Consumption":
                     
                     styled_df_report = df_final_report.style.apply(style_excel_matrix, axis=1)
 
+                    # Sau khi nhuộm màu xong, tiến hành lồng Multi-Index bọc nhóm Inseam để hiển thị lên UI Web
                     multi_cols = []
                     for col in df_final_report.columns:
                         if col in active_sizes: multi_cols.append((f"Nhóm Inseam: {detected_inseam}", col))
