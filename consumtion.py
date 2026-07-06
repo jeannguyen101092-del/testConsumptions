@@ -107,12 +107,12 @@ if uploaded_file is not None:
             
             # Chuyển đổi dữ liệu ảnh trang đầu tiên sang bytes định dạng JPEG
             img_byte_arr = io.BytesIO()
-            images[0].save(img_byte_arr, format='JPEG')
+            images.save(img_byte_arr, format='JPEG')
             jpeg_bytes = img_byte_arr.getvalue()
             
-            # Gọi mô hình xử lý đa phương thức (Multimodal) của Gemini
+            # Gọi mô hình xử lý đa phương thức (Multimodal) với ID đã cập nhật ngắn gọn
             response = client.models.generate_content(
-                model='gemini-1.5-flash',
+                model='gemini-1.5-flash', # Tên model viết chuẩn xác cho bộ SDK mới
                 contents=[
                     types.Part.from_bytes(data=jpeg_bytes, mime_type='image/jpeg'),
                     "Hãy phân tích hình ảnh trang Techpack này và trích xuất BOM, POM, và các thành phần cấu tạo sản phẩm theo cấu trúc yêu cầu."
