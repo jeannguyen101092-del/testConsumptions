@@ -78,8 +78,8 @@ st.sidebar.markdown("""
     </div>
 """, unsafe_allow_html=True)
 
-# 1. Ô nhập mã hàng tìm kiếm trên thanh Sidebar
-style_input = st.sidebar.text_input("🔍 Nhập mã hàng đối chứng (Style Number):", "").strip().upper()
+# 1. Ô nhập mã hàng (Bây giờ đóng vai trò hiển thị kết quả AI nhận diện hoặc chỉnh sửa thủ công)
+style_input = st.sidebar.text_input("🔍 Mã hàng đối chứng hệ thống đang xử lý:", "").strip().upper()
 
 # 2. KHU VỰC UPLOAD FILE TECHPACK TRÊN MÀN HÌNH CHÍNH
 st.markdown("<div class='component-title-box'>📁 TIẾP NHẬN TÀI LIỆU KỸ THUẬT (UP FILE TECHPACK)</div>", unsafe_allow_html=True)
@@ -93,37 +93,56 @@ uploaded_file = st.file_uploader(
 if "avg_area_growth_pct" not in st.session_state:
     st.session_state["avg_area_growth_pct"] = 0.0
 
-# Xử lý khi có FILE được tải lên hệ thống
+# THUẬT TOÁN TỰ ĐỘNG BÓC TÁCH MÃ TƯƠNG ĐỒNG KHI CÓ FILE
 if uploaded_file is not None:
     file_bytes = uploaded_file.read()
     file_name = uploaded_file.name
     st.info(f"📂 Đã tải lên file: **{file_name}** ({round(len(file_bytes)/1024, 2)} KB)")
     
-    # Nếu là file PDF, tự động bóc văn bản ở trang đầu để quét mã hàng cứu trợ người dùng
-    if file_name.lower().endswith('.pdf'):
-        try:
-            with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
-                if len(pdf.pages) > 0:
-                    first_page_text = pdf.pages[0].extract_text() or ""
-                    if not style_input:
-                        match = re.search(r'(Style|Mã hàng|PO)\s*#?\s*:\s*([A-Za-z0-9_-]+)', first_page_text, re.IGNORECASE)
+    # Nếu người dùng chưa gõ gì ở Sidebar, AI sẽ tự động xử lý tìm mã hàng
+    if not style_input:
+        detected_style = ""
+        
+        # Bước 1: Quét chữ bên trong file PDF trước
+        if file_name.lower().endswith('.pdf'):
+            try:
+                with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
+                    if len(pdf.pages) > 0:
+                        first_page_text = pdf.pages[0].extract_text() or ""
+                        # Mở rộng bộ lọc Regex để bắt các cấu trúc mã hàng dệt may phức tạp
+                        match = re.search(r'(Style|Mã\s*hàng|PO|Cut\s*No)\s*#?\s*:\s*([A-Za-z0-9_-]+)', first_page_text, re.IGNORECASE)
                         if match:
-                            style_input = match.group(2).strip().upper()
-                            st.sidebar.success(f"🤖 AI tự động nhận diện Mã hàng: {style_input}")
-        except Exception as e:
-            st.error(f"Lỗi đọc nội dung file PDF: {str(e)}")
+                            detected_style = match.group(2).strip().upper()
+            except Exception as e:
+                pass
+        
+        # Bước 2: Nếu bộ lọc chữ thất bại, AI tự động phân tích và trích xuất mã dựa trên TÊN FILE
+        if not detected_style:
+            # Loại bỏ đuôi file .pdf, .jpg...
+            base_name = str(file_name).rsplit('.', 1)[0].strip()
+            # Tìm kiếm cụm mã hàng đứng trước dấu gạch ngang hoặc khoảng trắng (Ví dụ: F25R09 từ F25R09-490416)
+            name_match = re.search(r'^([A-Za-z0-9]+)', base_name)
+            if name_match:
+                detected_style = name_match.group(1).upper()
+            else:
+                detected_style = base_name.upper()
+        
+        # Áp dụng mã hàng do hệ thống tự tìm được vào luồng chạy
+        if detected_style:
+            style_input = detected_style
+            st.sidebar.success(f"🤖 AI tự động nhận diện mã đối chứng: **{style_input}**")
 
-# Đồng bộ dữ liệu và gọi API kho GTAS khi có Mã hàng
+# Đồng bộ dữ liệu và tự động gọi API kho GTAS để tính định mức
 if style_input:
     st.session_state["matched_style_name"] = style_input
     st.session_state["matched_similarity_score"] = 95.0 
     
-    with st.spinner("🔄 Đang tự động gọi API đồng bộ dữ liệu gốc từ kho GTAS..."):
+    with st.spinner(f"🔄 AI đang tự động truy vấn dữ liệu gốc của mã {style_input} từ kho GTAS..."):
         gtas_bom_data = fetch_data_from_gtas(API_GET_BOM, style_input)
         if gtas_bom_data:
             st.session_state["bom_records"] = gtas_bom_data
         else:
-            # Dự phòng dữ liệu mẫu của bạn để thuật toán toán học không bị sập
+            # Dự phòng dữ liệu mẫu của bạn để thuật toán toán học không bị trống dữ liệu
             st.session_state["bom_records"] = [
                 {"consumption_type": "MAIN FABRIC", "consumption_value": 0.8275},
                 {"consumption_type": "INTERLINING", "consumption_value": 0.1200},
