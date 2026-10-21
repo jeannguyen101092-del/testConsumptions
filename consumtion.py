@@ -89,43 +89,41 @@ uploaded_file = st.file_uploader(
     type=["pdf", "png", "jpg", "jpeg"]
 )
 
-# Khởi tạo các giá trị lưu trữ trong Session State
-if "avg_area_growth_pct" not block_vars if "avg_area_growth_pct" not in st.session_state:
+# Khởi tạo giá trị lưu trữ biến thiên trong Session State một cách an toàn
+if "avg_area_growth_pct" not in st.session_state:
     st.session_state["avg_area_growth_pct"] = 0.0
 
-# Xử lý khi có FILE được upload lên app
+# Xử lý khi có FILE được tải lên hệ thống
 if uploaded_file is not None:
     file_bytes = uploaded_file.read()
     file_name = uploaded_file.name
     st.info(f"📂 Đã tải lên file: **{file_name}** ({round(len(file_bytes)/1024, 2)} KB)")
     
-    # Nếu là file PDF, tự động quét tìm text hoặc phục vụ bóc tách bản vẽ kịch bản cũ của bạn
+    # Nếu là file PDF, tự động bóc văn bản ở trang đầu để quét mã hàng cứu trợ người dùng
     if file_name.lower().endswith('.pdf'):
         try:
             with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
-                # Ví dụ: Trích xuất thử text từ trang đầu tiên để tìm tự động Mã hàng (Style)
-                first_page_text = pdf.pages[0].extract_text() or ""
-                # Giả lập tìm từ khóa Mã hàng bằng Regex trong file PDF nếu người dùng không nhập tay
-                if not style_input:
-                    match = re.search(r'(Style|Mã hàng|PO)\s*#?\s*:\s*([A-Za-z0-9_-]+)', first_page_text, re.IGNORECASE)
-                    if match:
-                        style_input = match.group(2).strip().upper()
-                        st.sidebar.success(f"🤖 AI tự động nhận diện Mã hàng: {style_input}")
+                if len(pdf.pages) > 0:
+                    first_page_text = pdf.pages[0].extract_text() or ""
+                    if not style_input:
+                        match = re.search(r'(Style|Mã hàng|PO)\s*#?\s*:\s*([A-Za-z0-9_-]+)', first_page_text, re.IGNORECASE)
+                        if match:
+                            style_input = match.group(2).strip().upper()
+                            st.sidebar.success(f"🤖 AI tự động nhận diện Mã hàng: {style_input}")
         except Exception as e:
             st.error(f"Lỗi đọc nội dung file PDF: {str(e)}")
 
-# Đồng bộ hóa kích hoạt Engine tính toán định mức dựa trên File Upload hoặc Mã hàng nhập tay
+# Đồng bộ dữ liệu và gọi API kho GTAS khi có Mã hàng
 if style_input:
     st.session_state["matched_style_name"] = style_input
     st.session_state["matched_similarity_score"] = 95.0 
     
-    # Gọi API hệ thống GTAS lấy dữ liệu định mức mã cũ để so sánh
     with st.spinner("🔄 Đang tự động gọi API đồng bộ dữ liệu gốc từ kho GTAS..."):
         gtas_bom_data = fetch_data_from_gtas(API_GET_BOM, style_input)
         if gtas_bom_data:
             st.session_state["bom_records"] = gtas_bom_data
         else:
-            # Dự phòng dữ liệu mẫu của bạn để thuật toán ở Đoạn 4 không bị trống dữ liệu
+            # Dự phòng dữ liệu mẫu của bạn để thuật toán toán học không bị sập
             st.session_state["bom_records"] = [
                 {"consumption_type": "MAIN FABRIC", "consumption_value": 0.8275},
                 {"consumption_type": "INTERLINING", "consumption_value": 0.1200},
