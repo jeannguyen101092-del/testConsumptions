@@ -1,140 +1,192 @@
-import os
-from urllib.parse import urlparse
 
-import pandas as pd
-import requests
 import streamlit as st
 
-APP_BUILD_ID = "GTAS-PATTERN-ONLY-20261022-D"
-DEFAULT_BASE_URL = "https://cms.ppj-international.com"
-PATTERN_ENDPOINT = "/items/PATTERN"  # Giai đoạn 1: CHỈ gọi collection này
-
 st.set_page_config(
-    page_title="PPJ Techpack AI - GTAS PATTERN",
+    page_title="Test dự đoán định mức",
     page_icon="🧵",
-    layout="wide",
-    initial_sidebar_state="expanded",
+    layout="wide"
 )
 
-st.markdown("""
-<style>
-.block-container {padding-top: 1.3rem; padding-bottom: 2rem;}
-.main-title {font-size: 1.65rem; font-weight: 750; color: #17365D; margin-bottom: .2rem;}
-.section-title {background:#17365D;color:white;padding: .65rem .9rem;border-radius:7px;font-weight:700;margin:1rem 0 .6rem 0;}
-</style>
-""", unsafe_allow_html=True)
+st.title("🧵 TEST DỰ ĐOÁN ĐỊNH MỨC VẢI")
+st.caption("So sánh thông số mã hàng cũ và mới để ước tính định mức.")
 
+st.info(
+    "Công thức thử nghiệm: ĐM mới = ĐM cũ × "
+    "(1 + tổng tỷ lệ chênh lệch thông số có trọng số)."
+)
 
-def config_value(name, fallback=""):
-    try:
-        value = st.secrets.get(name, None)
-        if value is not None and str(value).strip():
-            return str(value).strip()
-    except Exception:
-        pass
-    value = os.getenv(name, "").strip()
-    return value or str(fallback or "").strip()
+# =====================================================
+# 1. ĐỊNH MỨC MÃ HÀNG CŨ
+# =====================================================
+st.subheader("1. Dữ liệu mã hàng cũ")
 
+col1, col2 = st.columns(2)
 
-base_default = config_value("GTAS_API_URL", DEFAULT_BASE_URL).rstrip("/")
-token_default = config_value("GTAS_TOKEN", "")
+with col1:
+    old_style = st.text_input("Mã hàng cũ", "STYLE_OLD")
+    old_dm = st.number_input(
+        "Định mức vải cũ (yard/pcs)",
+        min_value=0.001,
+        value=1.800,
+        step=0.01,
+        format="%.4f"
+    )
 
-st.markdown('<div class="main-title">🧵 PPJ Techpack AI — Kết nối GTAS PATTERN</div>', unsafe_allow_html=True)
-st.caption(f"Giai đoạn 1 — chỉ đọc /items/PATTERN; không gọi Styles Lib, BOM, POM hoặc endpoint khác. | Build: {APP_BUILD_ID}")
-st.info("Mục tiêu bước này là xác nhận ứng dụng đang chạy có kết nối được đúng API PATTERN hay không. Lỗi TLS sẽ được báo riêng; không tắt xác minh SSL.")
+with col2:
+    new_style = st.text_input("Mã hàng mới", "STYLE_NEW")
+    fabric_width_old = st.number_input(
+        "Khổ vải mã cũ (inch)",
+        min_value=1.0,
+        value=58.0,
+        step=1.0
+    )
 
-with st.sidebar:
-    st.markdown("### Cấu hình kết nối")
-    base_url_input = st.text_input("GTAS API host", value=base_default, help="Chỉ nhập host, ví dụ https://cms.ppj-international.com")
-    token_input = st.text_input("GTAS token (nếu IT cấp)", value=token_default, type="password")
-    st.caption("Endpoint được khóa cố định trong code: /items/PATTERN")
+# =====================================================
+# 2. SO SÁNH THÔNG SỐ
+# =====================================================
+st.subheader("2. Nhập thông số kỹ thuật")
 
-left, right = st.columns([1, 1])
-with left:
-    limit = st.selectbox("Số bản ghi", [1, 10, 25, 50, 100], index=1)
-with right:
-    offset = st.number_input("Bỏ qua bản ghi đầu", min_value=0, value=0, step=10)
-keyword = st.text_input("Từ khóa tìm kiếm (không bắt buộc)", value="", placeholder="Nhập mã hàng hoặc từ khóa nếu API hỗ trợ search")
+st.caption(
+    "Ví dụ bên dưới dành cho quần. Có thể đổi tên chỉ tiêu "
+    "và trọng số theo loại sản phẩm."
+)
 
-if st.button("🔌 KẾT NỐI VÀ ĐỌC PATTERN", type="primary", use_container_width=True):
-    base_url = (base_url_input or "").strip().rstrip("/")
-    parsed = urlparse(base_url)
-    if parsed.scheme not in ("http", "https") or not parsed.netloc:
-        st.error("Host không hợp lệ. Nhập dạng https://cms.ppj-international.com")
-    elif parsed.path not in ("", "/") or parsed.query or parsed.fragment:
-        st.error("Chỉ nhập host, không nhập endpoint hoặc query ở ô GTAS API host.")
+specs = [
+    ("Vòng eo", 80.0, 84.0, 0.20),
+    ("Vòng mông", 100.0, 104.0, 0.40),
+    ("Dài quần", 100.0, 102.0, 0.25),
+    ("Rộng ống", 20.0, 21.0, 0.15),
+]
+
+header = st.columns([2, 2, 2, 2])
+header[0].markdown("**Thông số**")
+header[1].markdown("**Mã cũ**")
+header[2].markdown("**Mã mới**")
+header[3].markdown("**Trọng số (%)**")
+
+values = []
+
+for i, (name, old_default, new_default, weight_default) in enumerate(specs):
+    c1, c2, c3, c4 = st.columns([2, 2, 2, 2])
+
+    c1.write(name)
+
+    old_value = c2.number_input(
+        f"Cũ - {name}",
+        min_value=0.0,
+        value=float(old_default),
+        key=f"old_{i}",
+        label_visibility="collapsed"
+    )
+
+    new_value = c3.number_input(
+        f"Mới - {name}",
+        min_value=0.0,
+        value=float(new_default),
+        key=f"new_{i}",
+        label_visibility="collapsed"
+    )
+
+    weight = c4.number_input(
+        f"Trọng số - {name}",
+        min_value=0.0,
+        max_value=100.0,
+        value=float(weight_default * 100),
+        step=5.0,
+        key=f"weight_{i}",
+        label_visibility="collapsed"
+    )
+
+    values.append({
+        "name": name,
+        "old": old_value,
+        "new": new_value,
+        "weight": weight
+    })
+
+fabric_width_new = st.number_input(
+    "Khổ vải mã mới (inch)",
+    min_value=1.0,
+    value=58.0,
+    step=1.0
+)
+
+# =====================================================
+# 3. TÍNH TOÁN
+# =====================================================
+if st.button("🧮 TÍNH ĐỊNH MỨC MỚI", type="primary",
+             use_container_width=True):
+
+    total_weight = sum(x["weight"] for x in values)
+
+    if total_weight <= 0:
+        st.error("Tổng trọng số phải lớn hơn 0.")
+
+    elif any(x["old"] <= 0 for x in values):
+        st.error("Thông số mã cũ phải lớn hơn 0.")
+
     else:
-        # Only request made by this app in this phase:
-        # GET https://cms.ppj-international.com/items/PATTERN?limit=...&offset=...
-        url = base_url + PATTERN_ENDPOINT
-        params = {"limit": int(limit), "offset": int(offset)}
-        if keyword.strip():
-            params["search"] = keyword.strip()
-        headers = {"Accept": "application/json"}
-        if token_input.strip():
-            headers["Authorization"] = f"Bearer {token_input.strip()}"
-        st.markdown('<div class="section-title">Thông tin request thực tế</div>', unsafe_allow_html=True)
-        st.code(requests.Request("GET", url, params=params).prepare().url, language="text")
-        try:
-            with st.spinner("Đang gọi GTAS PATTERN..."):
-                response = requests.get(url, params=params, headers=headers, timeout=(8, 30))
-            st.write(f"**HTTP status:** {response.status_code}")
-            st.write(f"**URL cuối cùng:** `{response.url}`")
-            if response.status_code != 200:
-                st.error(f"GTAS trả HTTP {response.status_code}.")
-                st.code(response.text[:3000] or "Phản hồi rỗng", language="text")
-                if response.status_code in (401, 403):
-                    st.warning("Máy chủ đã phản hồi nhưng từ chối quyền. Nhờ IT xác nhận quyền đọc collection PATTERN và token.")
-                elif response.status_code == 404:
-                    st.warning("Máy chủ đã phản hồi nhưng không tìm thấy endpoint. Xác nhận collection /items/PATTERN với IT.")
-            else:
-                try:
-                    payload = response.json()
-                except ValueError:
-                    st.error("HTTP 200 nhưng nội dung trả về không phải JSON.")
-                    st.code(response.text[:3000], language="text")
-                else:
-                    records = payload.get("data", payload) if isinstance(payload, dict) else payload
-                    if isinstance(records, dict):
-                        records = [records]
-                    if not isinstance(records, list):
-                        records = []
-                    records = [r for r in records if isinstance(r, dict)]
-                    st.success(f"Kết nối thành công — HTTP 200. Nhận được {len(records)} bản ghi PATTERN trong lượt này.")
-                    st.session_state["pattern_records_phase1"] = records
-                    st.session_state["pattern_url_phase1"] = response.url
-                    if records:
-                        df = pd.json_normalize(records, sep=".")
-                        st.markdown('<div class="section-title">Bảng dữ liệu PATTERN</div>', unsafe_allow_html=True)
-                        st.caption(f"Số trường nhận được: {len(df.columns)}. Các trường hiển thị là dữ liệu API trả về, chưa tự suy đoán ý nghĩa trường.")
-                        st.dataframe(df, use_container_width=True, hide_index=True)
-                        st.download_button(
-                            "⬇️ Tải dữ liệu PATTERN dạng CSV",
-                            data=df.to_csv(index=False).encode("utf-8-sig"),
-                            file_name="GTAS_PATTERN.csv",
-                            mime="text/csv",
-                            use_container_width=True,
-                        )
-                        with st.expander("Xem JSON gốc", expanded=False):
-                            st.json(records[:20])
-                    else:
-                        st.warning("API kết nối thành công nhưng lượt truy vấn không có bản ghi. Thử bỏ từ khóa hoặc đặt Bỏ qua bản ghi đầu = 0.")
-        except requests.exceptions.SSLError as exc:
-            st.error("Lỗi TLS/SSL: ứng dụng không hoàn tất được bắt tay HTTPS nên chưa nhận HTTP status từ GTAS.")
-            st.write("**Endpoint đã gọi:**")
-            st.code(url, language="text")
-            st.write("**Chi tiết lỗi:**")
-            st.code(str(exc), language="text")
-            st.warning("Nếu mở URL được trong trình duyệt công ty nhưng app vẫn gặp lỗi này, cần kiểm tra môi trường chạy Streamlit, proxy/firewall hoặc cấu hình TLS của máy chủ. Không nên dùng verify=False để né lỗi.")
-        except requests.exceptions.Timeout as exc:
-            st.error("Kết nối bị timeout — app chưa nhận được phản hồi trong thời gian chờ.")
-            st.code(str(exc), language="text")
-        except requests.exceptions.RequestException as exc:
-            st.error("Lỗi mạng khi gọi GTAS — chưa nhận được HTTP status.")
-            st.code(str(exc), language="text")
+        # Tính tỷ lệ chênh lệch từng thông số
+        weighted_change = 0.0
+        details = []
 
-if st.session_state.get("pattern_records_phase1"):
-    st.caption(f"Dữ liệu PATTERN đã nhận trong phiên này: {len(st.session_state['pattern_records_phase1'])} bản ghi. URL: {st.session_state.get('pattern_url_phase1', base_default + PATTERN_ENDPOINT)}")
+        for x in values:
+            change = (x["new"] - x["old"]) / x["old"]
 
-st.markdown("---")
-st.caption("Build D chỉ có một lệnh gọi API: GET /items/PATTERN. Các chức năng Styles Lib, BOM, POM, tải ảnh và so sánh chưa được bật trong giai đoạn kiểm tra kết nối.")
+            # Chuẩn hóa trọng số để tổng bằng 100%
+            normalized_weight = x["weight"] / total_weight
+
+            contribution = change * normalized_weight
+            weighted_change += contribution
+
+            details.append({
+                "Thông số": x["name"],
+                "Mã cũ": x["old"],
+                "Mã mới": x["new"],
+                "Chênh lệch (%)": change * 100,
+                "Trọng số chuẩn hóa (%)": normalized_weight * 100,
+                "Mức ảnh hưởng (%)": contribution * 100
+            })
+
+        # Hiệu chỉnh khổ vải theo giả định đơn giản:
+        # khổ mới hẹp hơn thì ĐM tăng tỷ lệ nghịch.
+        width_factor = fabric_width_old / fabric_width_new
+
+        # Công thức ước tính thử nghiệm
+        predicted_dm = old_dm * (1 + weighted_change) * width_factor
+
+        dm_change = predicted_dm - old_dm
+        dm_change_percent = dm_change / old_dm * 100
+
+        st.divider()
+        st.subheader("3. Kết quả dự đoán")
+
+        c1, c2, c3 = st.columns(3)
+
+        c1.metric("Định mức cũ", f"{old_dm:.4f} yd/pcs")
+        c2.metric("Định mức mới dự đoán", f"{predicted_dm:.4f} yd/pcs")
+        c3.metric("Chênh lệch", f"{dm_change:+.4f} yd/pcs",
+                  f"{dm_change_percent:+.2f}%")
+
+        st.write("**Chi tiết mức ảnh hưởng của từng thông số:**")
+        st.dataframe(
+            details,
+            use_container_width=True,
+            hide_index=True
+        )
+
+        st.write("**Thông tin kiểm tra:**")
+        st.write(f"- Mã cũ: `{old_style}`")
+        st.write(f"- Mã mới: `{new_style}`")
+        st.write(f"- Chênh lệch thông số có trọng số: "
+                 f"{weighted_change * 100:+.2f}%")
+        st.write(f"- Hệ số hiệu chỉnh khổ vải giả định: "
+                 f"{width_factor:.4f}")
+
+        st.warning(
+            "Đây là mô hình thử nghiệm, chưa phải công thức ĐM sản xuất. "
+            "Các thông số không nhất thiết ảnh hưởng tuyến tính đến lượng "
+            "vải; khổ vải cũng không thể hiệu chỉnh chính xác chỉ bằng "
+            "tỷ lệ nghịch trong mọi trường hợp. Cần đối chiếu với marker "
+            "và định mức thực tế trước khi sử dụng."
+        )
