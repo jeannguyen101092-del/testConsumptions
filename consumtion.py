@@ -1,29 +1,30 @@
 
 import streamlit as st
+import pandas as pd
 
 st.set_page_config(
-    page_title="Test dự đoán định mức",
+    page_title="Test định mức vải",
     page_icon="🧵",
     layout="wide"
 )
 
 st.title("🧵 TEST DỰ ĐOÁN ĐỊNH MỨC VẢI")
-st.caption("So sánh thông số mã hàng cũ và mới để ước tính định mức.")
+st.caption("So sánh thông số cơ bản của mã hàng cũ và mã hàng mới.")
 
 st.info(
-    "Công thức thử nghiệm: ĐM mới = ĐM cũ × "
-    "(1 + tổng tỷ lệ chênh lệch thông số có trọng số)."
+    "Cách tính: % chênh lệch trung bình của các thông số cơ bản "
+    "→ áp dụng vào định mức cũ. Đây là mô hình thử nghiệm."
 )
 
 # =====================================================
-# 1. ĐỊNH MỨC MÃ HÀNG CŨ
+# 1. THÔNG TIN MÃ HÀNG
 # =====================================================
-st.subheader("1. Dữ liệu mã hàng cũ")
+st.subheader("1. Thông tin mã hàng")
 
-col1, col2 = st.columns(2)
+c1, c2 = st.columns(2)
 
-with col1:
-    old_style = st.text_input("Mã hàng cũ", "STYLE_OLD")
+with c1:
+    old_style = st.text_input("Mã hàng cũ", "JEAN_OLD")
     old_dm = st.number_input(
         "Định mức vải cũ (yard/pcs)",
         min_value=0.001,
@@ -32,161 +33,230 @@ with col1:
         format="%.4f"
     )
 
-with col2:
-    new_style = st.text_input("Mã hàng mới", "STYLE_NEW")
-    fabric_width_old = st.number_input(
-        "Khổ vải mã cũ (inch)",
-        min_value=1.0,
-        value=58.0,
-        step=1.0
+with c2:
+    new_style = st.text_input("Mã hàng mới", "JEAN_NEW")
+    new_dm_actual = st.number_input(
+        "Định mức thực tế mã mới (nếu đã biết)",
+        min_value=0.0,
+        value=0.0,
+        step=0.01,
+        format="%.4f",
+        help="Để 0 nếu chưa có định mức thực tế."
     )
 
 # =====================================================
-# 2. SO SÁNH THÔNG SỐ
+# 2. CHỌN NHÓM THÔNG SỐ CƠ BẢN
 # =====================================================
-st.subheader("2. Nhập thông số kỹ thuật")
+st.subheader("2. Thông số cơ bản")
 
-st.caption(
-    "Ví dụ bên dưới dành cho quần. Có thể đổi tên chỉ tiêu "
-    "và trọng số theo loại sản phẩm."
+product_type = st.selectbox(
+    "Loại sản phẩm",
+    ["Quần dài / Jean", "Quần short", "Áo sơ mi", "T-shirt / Polo", "Jacket"]
 )
 
-specs = [
-    ("Vòng eo", 80.0, 84.0, 0.20),
-    ("Vòng mông", 100.0, 104.0, 0.40),
-    ("Dài quần", 100.0, 102.0, 0.25),
-    ("Rộng ống", 20.0, 21.0, 0.15),
-]
+# Chỉ các thông số chính được đưa vào phép tính
+spec_groups = {
+    "Quần dài / Jean": [
+        "Inseam - Dài giàng trong",
+        "Outseam - Dài quần ngoài",
+        "Waist - Vòng eo",
+        "Hip - Vòng mông",
+        "Thigh - Rộng đùi",
+        "Knee - Rộng gối",
+        "Leg Opening - Rộng ống",
+        "Front Rise - Cao đáy trước",
+        "Back Rise - Cao đáy sau",
+    ],
+    "Quần short": [
+        "Outseam - Dài quần ngoài",
+        "Waist - Vòng eo",
+        "Hip - Vòng mông",
+        "Thigh - Rộng đùi",
+        "Leg Opening - Rộng ống",
+        "Front Rise - Cao đáy trước",
+        "Back Rise - Cao đáy sau",
+    ],
+    "Áo sơ mi": [
+        "Body Length - Dài áo",
+        "Chest - Rộng ngực",
+        "Shoulder - Rộng vai",
+        "Sleeve Length - Dài tay",
+        "Hem Width - Rộng lai",
+    ],
+    "T-shirt / Polo": [
+        "Body Length - Dài áo",
+        "Chest - Rộng ngực",
+        "Shoulder - Rộng vai",
+        "Sleeve Length - Dài tay",
+        "Hem Width - Rộng lai",
+    ],
+    "Jacket": [
+        "Body Length - Dài áo",
+        "Chest - Rộng ngực",
+        "Shoulder - Rộng vai",
+        "Sleeve Length - Dài tay",
+        "Hem Width - Rộng lai",
+    ],
+}
 
-header = st.columns([2, 2, 2, 2])
-header[0].markdown("**Thông số**")
-header[1].markdown("**Mã cũ**")
-header[2].markdown("**Mã mới**")
-header[3].markdown("**Trọng số (%)**")
+spec_names = spec_groups[product_type]
 
-values = []
+st.caption(
+    "Nhập cùng đơn vị cho thông số cũ và mới. "
+    "Không nhập thông số túi, passant, vị trí may hoặc chi tiết nhỏ."
+)
 
-for i, (name, old_default, new_default, weight_default) in enumerate(specs):
-    c1, c2, c3, c4 = st.columns([2, 2, 2, 2])
+# Dữ liệu mẫu được đổi theo loại sản phẩm
+defaults = {
+    "Inseam - Dài giàng trong": (30.0, 30.6),
+    "Outseam - Dài quần ngoài": (40.0, 40.5),
+    "Waist - Vòng eo": (32.0, 32.0),
+    "Hip - Vòng mông": (40.0, 38.8),
+    "Thigh - Rộng đùi": (20.0, 22.0),
+    "Knee - Rộng gối": (16.0, 16.0),
+    "Leg Opening - Rộng ống": (14.0, 13.86),
+    "Front Rise - Cao đáy trước": (11.0, 11.0),
+    "Back Rise - Cao đáy sau": (15.0, 15.0),
 
-    c1.write(name)
+    "Body Length - Dài áo": (28.0, 28.5),
+    "Chest - Rộng ngực": (22.0, 22.5),
+    "Shoulder - Rộng vai": (18.0, 18.0),
+    "Sleeve Length - Dài tay": (25.0, 25.5),
+    "Hem Width - Rộng lai": (22.0, 22.0),
+}
+
+rows = []
+
+for i, name in enumerate(spec_names):
+    old_default, new_default = defaults[name]
+
+    c1, c2, c3 = st.columns([2, 2, 2])
+
+    c1.markdown(f"**{name}**")
 
     old_value = c2.number_input(
-        f"Cũ - {name}",
+        "Mã cũ",
         min_value=0.0,
         value=float(old_default),
-        key=f"old_{i}",
-        label_visibility="collapsed"
+        key=f"old_{i}_{product_type}",
+        format="%.3f"
     )
 
     new_value = c3.number_input(
-        f"Mới - {name}",
+        "Mã mới",
         min_value=0.0,
         value=float(new_default),
-        key=f"new_{i}",
-        label_visibility="collapsed"
+        key=f"new_{i}_{product_type}",
+        format="%.3f"
     )
 
-    weight = c4.number_input(
-        f"Trọng số - {name}",
-        min_value=0.0,
-        max_value=100.0,
-        value=float(weight_default * 100),
-        step=5.0,
-        key=f"weight_{i}",
-        label_visibility="collapsed"
-    )
-
-    values.append({
-        "name": name,
-        "old": old_value,
-        "new": new_value,
-        "weight": weight
+    rows.append({
+        "Thông số": name,
+        "Giá trị cũ": old_value,
+        "Giá trị mới": new_value
     })
 
-fabric_width_new = st.number_input(
-    "Khổ vải mã mới (inch)",
-    min_value=1.0,
-    value=58.0,
-    step=1.0
+# =====================================================
+# 3. TÙY CHỌN CÁCH TÍNH
+# =====================================================
+st.subheader("3. Phương pháp tính")
+
+method = st.radio(
+    "Cách tính phần trăm",
+    [
+        "Trung bình % chênh lệch có dấu (tăng +, giảm -)",
+        "Trung bình % chênh lệch tuyệt đối (chỉ xem độ lớn)"
+    ],
+    index=0
+)
+
+st.caption(
+    "Nên chọn cách có dấu nếu muốn phần tăng và giảm bù trừ nhau. "
+    "Cách tuyệt đối không cho phép hai chiều triệt tiêu nhau."
 )
 
 # =====================================================
-# 3. TÍNH TOÁN
+# 4. TÍNH KẾT QUẢ
 # =====================================================
 if st.button("🧮 TÍNH ĐỊNH MỨC MỚI", type="primary",
              use_container_width=True):
 
-    total_weight = sum(x["weight"] for x in values)
+    detail = []
+    valid_changes = []
 
-    if total_weight <= 0:
-        st.error("Tổng trọng số phải lớn hơn 0.")
+    for row in rows:
+        old = row["Giá trị cũ"]
+        new = row["Giá trị mới"]
 
-    elif any(x["old"] <= 0 for x in values):
-        st.error("Thông số mã cũ phải lớn hơn 0.")
+        if old <= 0 or new <= 0:
+            change = None
+            status = "Bỏ qua: thiếu số đo hợp lệ"
+        else:
+            change = (new - old) / old * 100
+            valid_changes.append(change)
+            status = "Đã tính"
 
+        detail.append({
+            "Thông số": row["Thông số"],
+            "Mã cũ": old,
+            "Mã mới": new,
+            "Chênh lệch (%)": (
+                round(change, 3) if change is not None else None
+            ),
+            "Trạng thái": status
+        })
+
+    if not valid_changes:
+        st.error("Không có thông số hợp lệ để tính.")
     else:
-        # Tính tỷ lệ chênh lệch từng thông số
-        weighted_change = 0.0
-        details = []
+        if "tuyệt đối" in method:
+            avg_change = sum(abs(x) for x in valid_changes) / len(valid_changes)
+        else:
+            avg_change = sum(valid_changes) / len(valid_changes)
 
-        for x in values:
-            change = (x["new"] - x["old"]) / x["old"]
-
-            # Chuẩn hóa trọng số để tổng bằng 100%
-            normalized_weight = x["weight"] / total_weight
-
-            contribution = change * normalized_weight
-            weighted_change += contribution
-
-            details.append({
-                "Thông số": x["name"],
-                "Mã cũ": x["old"],
-                "Mã mới": x["new"],
-                "Chênh lệch (%)": change * 100,
-                "Trọng số chuẩn hóa (%)": normalized_weight * 100,
-                "Mức ảnh hưởng (%)": contribution * 100
-            })
-
-        # Hiệu chỉnh khổ vải theo giả định đơn giản:
-        # khổ mới hẹp hơn thì ĐM tăng tỷ lệ nghịch.
-        width_factor = fabric_width_old / fabric_width_new
-
-        # Công thức ước tính thử nghiệm
-        predicted_dm = old_dm * (1 + weighted_change) * width_factor
-
-        dm_change = predicted_dm - old_dm
-        dm_change_percent = dm_change / old_dm * 100
+        predicted_dm = old_dm * (1 + avg_change / 100)
 
         st.divider()
-        st.subheader("3. Kết quả dự đoán")
+        st.subheader("4. Kết quả dự đoán")
 
         c1, c2, c3 = st.columns(3)
 
         c1.metric("Định mức cũ", f"{old_dm:.4f} yd/pcs")
-        c2.metric("Định mức mới dự đoán", f"{predicted_dm:.4f} yd/pcs")
-        c3.metric("Chênh lệch", f"{dm_change:+.4f} yd/pcs",
-                  f"{dm_change_percent:+.2f}%")
+        c2.metric("% chênh lệch trung bình", f"{avg_change:+.2f}%")
+        c3.metric("Định mức mới dự đoán", f"{predicted_dm:.4f} yd/pcs")
 
-        st.write("**Chi tiết mức ảnh hưởng của từng thông số:**")
+        st.write("**Bảng kiểm tra chênh lệch từng thông số**")
         st.dataframe(
-            details,
+            pd.DataFrame(detail),
             use_container_width=True,
             hide_index=True
         )
 
-        st.write("**Thông tin kiểm tra:**")
-        st.write(f"- Mã cũ: `{old_style}`")
-        st.write(f"- Mã mới: `{new_style}`")
-        st.write(f"- Chênh lệch thông số có trọng số: "
-                 f"{weighted_change * 100:+.2f}%")
-        st.write(f"- Hệ số hiệu chỉnh khổ vải giả định: "
-                 f"{width_factor:.4f}")
+        st.write(f"**Số thông số được tính:** {len(valid_changes)}")
+
+        if new_dm_actual > 0:
+            error_pct = (
+                (predicted_dm - new_dm_actual) / new_dm_actual * 100
+            )
+
+            st.subheader("5. So sánh với định mức thực tế")
+            c1, c2, c3 = st.columns(3)
+
+            c1.metric("ĐM dự đoán", f"{predicted_dm:.4f}")
+            c2.metric("ĐM thực tế", f"{new_dm_actual:.4f}")
+            c3.metric("Sai lệch dự đoán", f"{error_pct:+.2f}%")
+
+            if abs(error_pct) <= 3:
+                st.success("Sai lệch nằm trong ±3% ở lần kiểm tra này.")
+            else:
+                st.warning(
+                    "Sai lệch vượt ±3%. Cần xem lại cách tính "
+                    "hoặc các yếu tố cấu trúc và sơ đồ cắt."
+                )
 
         st.warning(
-            "Đây là mô hình thử nghiệm, chưa phải công thức ĐM sản xuất. "
-            "Các thông số không nhất thiết ảnh hưởng tuyến tính đến lượng "
-            "vải; khổ vải cũng không thể hiệu chỉnh chính xác chỉ bằng "
-            "tỷ lệ nghịch trong mọi trường hợp. Cần đối chiếu với marker "
-            "và định mức thực tế trước khi sử dụng."
+            "Kết quả là ước tính thử nghiệm, không đảm bảo định mức "
+            "thực tế thay đổi cùng tỷ lệ với thông số thành phẩm. "
+            "Chưa tính khổ vải, hiệu suất marker, cấu trúc chi tiết "
+            "hoặc thay đổi chất liệu."
         )
