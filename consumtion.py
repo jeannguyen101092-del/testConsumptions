@@ -87,6 +87,13 @@ class GTASClient:
         if not endpoint.startswith("/") or endpoint.startswith("//"):
             return {"ok": False, "status": None, "data": None,
                     "error": "Endpoint phải là đường dẫn tương đối bắt đầu bằng /."}
+        # Normalize stale/malformed endpoint values that can survive Streamlit reruns.
+        endpoint = endpoint.strip()
+        if endpoint.startswith("/items/stylepatternpkt?filter/items/PATTERN") or endpoint == "/items/stylepatternpkt?filter/items/PATTERN":
+            endpoint = "/items/PATTERN"
+        # Collection endpoint should be a path only; query parameters are passed via params.
+        if "?" in endpoint:
+            endpoint = endpoint.split("?", 1)[0]
         url = self.base_url + endpoint
         try:
             response = self.session.get(url, params=params or {}, timeout=(8, 45))
@@ -503,7 +510,7 @@ st.sidebar.markdown("""
 with st.sidebar.expander("⚙️ Cấu hình kết nối GTAS", expanded=True):
     base_url_ui = st.text_input("GTAS API URL", value=GTAS_BASE_URL, placeholder="Dán URL API do IT cấp")
     token_ui = st.text_input("GTAS Token", value=GTAS_TOKEN, type="password", help="Không chia sẻ token.")
-    pattern_endpoint_ui = st.text_input("PATTERN endpoint (đã xác nhận)", value=GTAS_PATTERN_ENDPOINT)
+    pattern_endpoint_ui = st.text_input("PATTERN endpoint (đã xác nhận)", value="/items/PATTERN", key="pattern_endpoint_v2", help="Phải là /items/PATTERN; không dùng endpoint Styles Lib ở ô này.")
     sketch_endpoint_ui = st.text_input("Styles Lib endpoint", value=GTAS_SKETCH_ENDPOINT)
     bom_endpoint_ui = st.text_input("BOM endpoint", value=GTAS_BOM_ENDPOINT)
     pom_endpoint_ui = st.text_input("POM endpoint (nếu đã biết)", value=GTAS_POM_ENDPOINT)
@@ -553,6 +560,8 @@ if st.button("🔌 KẾT NỐI VÀ ĐỌC PATTERN", type="primary", use_containe
             st.warning("API trả về thành công nhưng không có bản ghi. Thử xóa từ khóa hoặc tăng số lượng bản ghi.")
     else:
         st.error(f"Không kết nối được PATTERN — HTTP {pattern_result['status'] or 'không nhận được phản hồi'}: {pattern_result['error']}")
+        if "SSLError" in str(pattern_result.get("error", "")) or "TLSV1_ALERT_INTERNAL_ERROR" in str(pattern_result.get("error", "")):
+            st.warning("Lỗi TLS xảy ra trước khi GTAS trả HTTP. Đã chuẩn hóa endpoint PATTERN trong code; nếu lỗi TLS vẫn còn, cần kiểm tra kết nối từ Streamlit Cloud hoặc cấu hình TLS/proxy phía máy chủ GTAS. Không nên tắt xác minh SSL.")
         if pattern_result["status"] == 403:
             st.warning("HTTP 403 nghĩa là quyền truy cập API hiện tại bị từ chối. Kiểm tra quyền đọc collection PATTERN/token với quản trị GTAS.")
         elif pattern_result["status"] == 401:
