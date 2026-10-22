@@ -30,6 +30,8 @@ except ImportError:
 # =============================================================================
 # PPJ TECHPACK AI + GTAS SKETCH SIMILARITY
 # =============================================================================
+APP_BUILD_ID = "GTAS-PATTERN-FIX-20261022-B"
+
 st.set_page_config(
     page_title="PPJ Techpack AI - GTAS Sketch Match",
     page_icon="⚙️",
@@ -526,22 +528,22 @@ client = GTASClient(base_url_ui, token_ui)
 # PHASE 1: CONNECT TO GTAS PATTERN COLLECTION FIRST
 # =============================================================================
 st.markdown("<div class='component-title-box'>🔌 0. KIỂM TRA KẾT NỐI GTAS — PATTERN</div>", unsafe_allow_html=True)
-st.caption("Giai đoạn đầu chỉ đọc collection PATTERN. Chưa gọi BOM/POM hoặc các collection đang báo FORBIDDEN.")
+st.caption(f"Giai đoạn đầu chỉ đọc collection PATTERN. Chưa gọi BOM/POM hoặc các collection đang báo FORBIDDEN. | Build: {APP_BUILD_ID}")
 pat_col1, pat_col2, pat_col3 = st.columns([2, 1, 2])
 with pat_col1:
     pattern_keyword = st.text_input("Tìm nhanh theo mã hàng / buyer / mô tả", value="", key="pattern_keyword")
 with pat_col2:
     pattern_limit = st.selectbox("Số bản ghi PATTERN", [1, 10, 25, 50, 100], index=1, key="pattern_limit")
 with pat_col3:
-    st.text_input("Collection đang kiểm tra", value=pattern_endpoint_ui, disabled=True, key="pattern_endpoint_display")
+    st.text_input("Collection đang kiểm tra", value="/items/PATTERN (cố định trong giai đoạn 1)", disabled=True, key="pattern_endpoint_display")
 
 if st.button("🔌 KẾT NỐI VÀ ĐỌC PATTERN", type="primary", use_container_width=True, key="connect_pattern"):
     with st.spinner("Đang gọi GTAS PATTERN API..."):
-        pattern_result = client.list_collection(pattern_endpoint_ui.strip(), limit=int(pattern_limit), keyword=pattern_keyword)
+        pattern_result = client.list_collection(GTAS_PATTERN_ENDPOINT, limit=int(pattern_limit), keyword=pattern_keyword)
     if pattern_result["ok"]:
         pattern_records = records_from(pattern_result["data"])
         st.session_state["gtas_pattern_records"] = pattern_records
-        st.session_state["gtas_pattern_endpoint"] = pattern_endpoint_ui.strip()
+        st.session_state["gtas_pattern_endpoint"] = GTAS_PATTERN_ENDPOINT
         st.success(f"Kết nối thành công — HTTP 200. Đọc được {len(pattern_records)} bản ghi PATTERN trong lượt này.")
         if pattern_records:
             df_pattern = pd.DataFrame(pattern_records)
