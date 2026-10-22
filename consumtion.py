@@ -39,8 +39,9 @@ st.set_page_config(
 
 # IMPORTANT: Paste the correct GTAS API host supplied by company IT.
 # Example format only: https://your-gtas-host.company.com
-GTAS_BASE_URL = ""  # <-- DÁN ĐỊA CHỈ API GTAS ĐÚNG VÀO ĐÂY, KHÔNG THÊM /items/... 
+GTAS_BASE_URL = "https://cms.ppj-international.com"  # API GTAS đã xác nhận truy cập được qua trình duyệt
 GTAS_TOKEN = ""      # <-- DÁN TOKEN ĐƯỢC IT CẤP; nên chuyển sang st.secrets khi chạy thật
+GTAS_PATTERN_ENDPOINT = "/items/PATTERN"  # Collection đã xác nhận trả JSON
 GTAS_SKETCH_ENDPOINT = "/items/stylepatternpkt"
 GTAS_BOM_ENDPOINT = "/items/manual_pattern7"
 GTAS_POM_ENDPOINT = ""  # <-- DÁN endpoint POM filter1/search đã được IT xác nhận
@@ -502,6 +503,7 @@ st.sidebar.markdown("""
 with st.sidebar.expander("⚙️ Cấu hình kết nối GTAS", expanded=True):
     base_url_ui = st.text_input("GTAS API URL", value=GTAS_BASE_URL, placeholder="Dán URL API do IT cấp")
     token_ui = st.text_input("GTAS Token", value=GTAS_TOKEN, type="password", help="Không chia sẻ token.")
+    pattern_endpoint_ui = st.text_input("PATTERN endpoint (đã xác nhận)", value=GTAS_PATTERN_ENDPOINT)
     sketch_endpoint_ui = st.text_input("Styles Lib endpoint", value=GTAS_SKETCH_ENDPOINT)
     bom_endpoint_ui = st.text_input("BOM endpoint", value=GTAS_BOM_ENDPOINT)
     pom_endpoint_ui = st.text_input("POM endpoint (nếu đã biết)", value=GTAS_POM_ENDPOINT)
@@ -509,6 +511,57 @@ with st.sidebar.expander("⚙️ Cấu hình kết nối GTAS", expanded=True):
     model_ui = st.text_input("Gemini model", value=GEMINI_MODEL)
 
 client = GTASClient(base_url_ui, token_ui)
+
+# =============================================================================
+# PHASE 1: CONNECT TO GTAS PATTERN COLLECTION FIRST
+# =============================================================================
+st.markdown("<div class='component-title-box'>🔌 0. KIỂM TRA KẾT NỐI GTAS — PATTERN</div>", unsafe_allow_html=True)
+st.caption("Giai đoạn đầu chỉ đọc collection PATTERN. Chưa gọi BOM/POM hoặc các collection đang báo FORBIDDEN.")
+pat_col1, pat_col2, pat_col3 = st.columns([2, 1, 2])
+with pat_col1:
+    pattern_keyword = st.text_input("Tìm nhanh theo mã hàng / buyer / mô tả", value="", key="pattern_keyword")
+with pat_col2:
+    pattern_limit = st.selectbox("Số bản ghi PATTERN", [1, 10, 25, 50, 100], index=1, key="pattern_limit")
+with pat_col3:
+    st.text_input("Collection đang kiểm tra", value=pattern_endpoint_ui, disabled=True, key="pattern_endpoint_display")
+
+if st.button("🔌 KẾT NỐI VÀ ĐỌC PATTERN", type="primary", use_container_width=True, key="connect_pattern"):
+    with st.spinner("Đang gọi GTAS PATTERN API..."):
+        pattern_result = client.list_collection(pattern_endpoint_ui.strip(), limit=int(pattern_limit), keyword=pattern_keyword)
+    if pattern_result["ok"]:
+        pattern_records = records_from(pattern_result["data"])
+        st.session_state["gtas_pattern_records"] = pattern_records
+        st.session_state["gtas_pattern_endpoint"] = pattern_endpoint_ui.strip()
+        st.success(f"Kết nối thành công — HTTP 200. Đọc được {len(pattern_records)} bản ghi PATTERN trong lượt này.")
+        if pattern_records:
+            df_pattern = pd.DataFrame(pattern_records)
+            preferred_fields = ["id", "STYLE", "name", "Buyer", "Category", "GENDER", "DIVISION", "BLOCK", "DESCRIPTION", "Cons", "Shrinkage_W", "Shrinkage_L", "Cut", "UNIT", "Waist_Top", "Waist_Bottom", "Low_Hip", "Inseam", "Outseam", "Front_Rise", "Back_Rise", "Thigh", "Knee", "Leg_Opening"]
+            visible_fields = [field for field in preferred_fields if field in df_pattern.columns]
+            if visible_fields:
+                st.markdown("**Dữ liệu PATTERN — các trường kỹ thuật đã nhận diện**")
+                st.dataframe(df_pattern[visible_fields], use_container_width=True, hide_index=True)
+            with st.expander("Xem JSON gốc từ GTAS", expanded=True):
+                st.json(pattern_records[:10])
+            st.download_button(
+                "⬇️ Tải dữ liệu PATTERN đang xem (CSV)",
+                data=df_pattern.to_csv(index=False).encode("utf-8-sig"),
+                file_name="gtas_pattern_export.csv",
+                mime="text/csv",
+                use_container_width=True,
+            )
+        else:
+            st.warning("API trả về thành công nhưng không có bản ghi. Thử xóa từ khóa hoặc tăng số lượng bản ghi.")
+    else:
+        st.error(f"Không kết nối được PATTERN — HTTP {pattern_result['status'] or 'không nhận được phản hồi'}: {pattern_result['error']}")
+        if pattern_result["status"] == 403:
+            st.warning("HTTP 403 nghĩa là quyền truy cập API hiện tại bị từ chối. Kiểm tra quyền đọc collection PATTERN/token với quản trị GTAS.")
+        elif pattern_result["status"] == 401:
+            st.warning("HTTP 401: kiểm tra token/API permission. Không dán token vào tin nhắn công khai.")
+        elif pattern_result["status"] is None:
+            st.warning("Nếu trình duyệt mở API được nhưng Streamlit Cloud báo lỗi SSL/TLS, đây có thể là khác biệt môi trường mạng/chứng chỉ. Code vẫn giữ xác minh SSL mặc định; không dùng verify=False để né lỗi bảo mật.")
+
+if st.session_state.get("gtas_pattern_records"):
+    st.caption(f"Lần đọc PATTERN gần nhất: {len(st.session_state['gtas_pattern_records'])} bản ghi từ {st.session_state.get('gtas_pattern_endpoint', '/items/PATTERN')}.")
 
 st.markdown("<div class='component-title-box'>📁 1. TẢI TECHPACK / SKETCH CẦN TÌM</div>", unsafe_allow_html=True)
 uploaded = st.file_uploader("Tải PDF Techpack hoặc hình Sketch (PNG/JPG/JPEG)", type=["pdf", "png", "jpg", "jpeg"])
@@ -824,4 +877,4 @@ if matches:
                 st.error("Không đủ dòng BOM hợp lệ để tính định mức.")
 
 st.markdown("---")
-st.caption("GTAS API endpoints theo thông tin hiện có: Styles Lib /items/stylepatternpkt · BOM /items/manual_pattern7. POM chưa được gọi cho đến khi có endpoint filter1/search chính xác.")
+st.caption("Giai đoạn hiện tại ưu tiên kiểm tra /items/PATTERN. Styles Lib /items/stylepatternpkt đã trả JSON; BOM và ảnh có thể cần xác nhận quyền truy cập hoặc endpoint với quản trị GTAS.")
