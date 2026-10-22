@@ -18,7 +18,7 @@ st.caption(
 # 1. CẤU HÌNH MÔ HÌNH THỬ NGHIỆM
 # =========================================================
 
-DEFAULT_K =2
+DEFAULT_K = 2.0
 
 # Trọng số giữa 3 nhóm, tổng = 1.00
 GROUP_WEIGHTS = {
