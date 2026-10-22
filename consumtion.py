@@ -30,7 +30,7 @@ except ImportError:
 # =============================================================================
 # PPJ TECHPACK AI + GTAS SKETCH SIMILARITY
 # =============================================================================
-APP_BUILD_ID = "GTAS-PATTERN-FIX-20261022-B"
+APP_BUILD_ID = "GTAS-PATTERN-FIX-20261022-C"
 
 st.set_page_config(
     page_title="PPJ Techpack AI - GTAS Sketch Match",
@@ -89,19 +89,38 @@ class GTASClient:
         if not endpoint.startswith("/") or endpoint.startswith("//"):
             return {"ok": False, "status": None, "data": None,
                     "error": "Endpoint phải là đường dẫn tương đối bắt đầu bằng /."}
-        # Normalize malformed/stale endpoint values. Older UI state may contain
-        # '/items/stylepatternpkt?filter/items/PATTERN'; always route PATTERN
-        # requests to the confirmed collection endpoint before stripping query text.
+        # Normalize collection path and guard against the malformed legacy query
+        # seen in deployment logs: /items/stylepatternpkt?filter/items/PATTERN&...
         endpoint = endpoint.strip()
         endpoint_lower = endpoint.lower()
-        if "filter/items/pattern" in endpoint_lower or endpoint_lower.rstrip("/") == "/items/pattern":
+        request_params = dict(params or {})
+
+        # A legacy UI/config may accidentally pass the string "filter/items/PATTERN"
+        # as a query key while still pointing to Styles Lib. Detect it and route to
+        # the confirmed PATTERN collection, removing only that malformed key.
+        malformed_pattern_key = any(
+            str(key).strip().lower().replace("?", "").strip("/&") == "filter/items/pattern"
+            for key in request_params
+        )
+        if ("filter/items/pattern" in endpoint_lower
+                or endpoint_lower.rstrip("/") == "/items/pattern"
+                or malformed_pattern_key):
             endpoint = "/items/PATTERN"
-        # Collection endpoint should be a path only; query parameters are passed via params.
-        elif "?" in endpoint:
+            request_params = {
+                key: value for key, value in request_params.items()
+                if str(key).strip().lower().replace("?", "").strip("/&") != "filter/items/pattern"
+            }
+
+        # Keep query parameters separate from the collection path.
+        if "?" in endpoint:
             endpoint = endpoint.split("?", 1)[0]
+        if not endpoint.startswith("/") or endpoint.startswith("//"):
+            return {"ok": False, "status": None, "data": None,
+                    "error": f"Endpoint không hợp lệ sau chuẩn hóa: {endpoint!r}"}
+
         url = self.base_url + endpoint
         try:
-            response = self.session.get(url, params=params or {}, timeout=(8, 45))
+            response = self.session.get(url, params=request_params, timeout=(8, 45))
             if response.status_code != 200:
                 messages = {
                     401: "HTTP 401: token thiếu, sai hoặc hết hạn.",
