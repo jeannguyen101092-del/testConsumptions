@@ -87,12 +87,15 @@ class GTASClient:
         if not endpoint.startswith("/") or endpoint.startswith("//"):
             return {"ok": False, "status": None, "data": None,
                     "error": "Endpoint phải là đường dẫn tương đối bắt đầu bằng /."}
-        # Normalize stale/malformed endpoint values that can survive Streamlit reruns.
+        # Normalize malformed/stale endpoint values. Older UI state may contain
+        # '/items/stylepatternpkt?filter/items/PATTERN'; always route PATTERN
+        # requests to the confirmed collection endpoint before stripping query text.
         endpoint = endpoint.strip()
-        if endpoint.startswith("/items/stylepatternpkt?filter/items/PATTERN") or endpoint == "/items/stylepatternpkt?filter/items/PATTERN":
+        endpoint_lower = endpoint.lower()
+        if "filter/items/pattern" in endpoint_lower or endpoint_lower.rstrip("/") == "/items/pattern":
             endpoint = "/items/PATTERN"
         # Collection endpoint should be a path only; query parameters are passed via params.
-        if "?" in endpoint:
+        elif "?" in endpoint:
             endpoint = endpoint.split("?", 1)[0]
         url = self.base_url + endpoint
         try:
