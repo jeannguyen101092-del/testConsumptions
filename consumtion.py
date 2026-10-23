@@ -1,418 +1,399 @@
-
 import streamlit as st
 import pandas as pd
 
-st.set_page_config(
-    page_title="Test dự đoán định mức",
-    page_icon="🧵",
-    layout="wide"
-)
-
-st.title("🧵 DỰ ĐOÁN ĐỊNH MỨC VẢI – QUẦN SHORT")
-st.caption(
-    "Mô hình thử nghiệm: phân nhóm thông số, "
-    "tính mức thay đổi có trọng số và hiệu chỉnh bằng K."
-)
+st.set_page_config(page_title="Test dự đoán định mức vải", page_icon="🧵", layout="wide")
 
 # =========================================================
-# 1. CẤU HÌNH MÔ HÌNH THỬ NGHIỆM
+# 1. DANH MỤC DÒNG HÀNG - CHỌN ĐƯỢC TẤT CẢ CÁC DÒNG
 # =========================================================
-
-DEFAULT_K = 2.0
-
-# Trọng số giữa 3 nhóm, tổng = 1.00
-GROUP_WEIGHTS = {
-    "Chiều dài": 0.35,
-    "Chiều rộng thân quần": 0.45,
-    "Độ sâu đáy": 0.20,
+CATEGORIES = {
+    "Quần short": {
+        "K": 2.00,
+        "specs": [
+            ("Outseam - Dài quần ngoài", "length"),
+            ("Waist - Vòng eo", "width"),
+            ("Hip - Vòng mông", "width"),
+            ("Thigh - Rộng đùi", "width"),
+            ("Leg Opening - Rộng ống", "width"),
+            ("Front Rise - Cao đáy trước", "rise"),
+            ("Back Rise - Cao đáy sau", "rise"),
+        ],
+        "defaults": {
+            "Outseam - Dài quần ngoài": (14.750, 14.500),
+            "Waist - Vòng eo": (16.500, 16.250),
+            "Hip - Vòng mông": (21.000, 20.250),
+            "Thigh - Rộng đùi": (14.250, 13.625),
+            "Leg Opening - Rộng ống": (13.625, 13.375),
+            "Front Rise - Cao đáy trước": (11.250, 12.125),
+            "Back Rise - Cao đáy sau": (16.250, 16.000),
+        },
+    },
+    "Quần jean dài": {
+        "K": 0.65,
+        "specs": [
+            ("Outseam - Dài quần ngoài", "length"),
+            ("Inseam - Dài trong", "length"),
+            ("Waist - Vòng eo", "width"),
+            ("Hip - Vòng mông", "width"),
+            ("Thigh - Rộng đùi", "width"),
+            ("Knee - Rộng gối", "width"),
+            ("Leg Opening - Rộng ống", "width"),
+            ("Front Rise - Cao đáy trước", "rise"),
+            ("Back Rise - Cao đáy sau", "rise"),
+        ],
+        "defaults": {},
+    },
+    "Quần kaki / quần dài": {
+        "K": 0.65,
+        "specs": [
+            ("Outseam - Dài quần ngoài", "length"),
+            ("Inseam - Dài trong", "length"),
+            ("Waist - Vòng eo", "width"),
+            ("Hip - Vòng mông", "width"),
+            ("Thigh - Rộng đùi", "width"),
+            ("Knee - Rộng gối", "width"),
+            ("Leg Opening - Rộng ống", "width"),
+            ("Front Rise - Cao đáy trước", "rise"),
+            ("Back Rise - Cao đáy sau", "rise"),
+        ],
+        "defaults": {},
+    },
+    "Áo sơ mi": {
+        "K": 0.65,
+        "specs": [
+            ("Body Length - Dài áo", "length"),
+            ("Chest - Vòng ngực", "width"),
+            ("Shoulder - Ngang vai", "width"),
+            ("Sleeve Length - Dài tay", "length"),
+            ("Hem Width - Rộng lai", "width"),
+        ],
+        "defaults": {},
+    },
+    "T-shirt / Polo": {
+        "K": 0.65,
+        "specs": [
+            ("Body Length - Dài áo", "length"),
+            ("Chest - Vòng ngực", "width"),
+            ("Shoulder - Ngang vai", "width"),
+            ("Sleeve Length - Dài tay", "length"),
+            ("Hem Width - Rộng lai", "width"),
+        ],
+        "defaults": {},
+    },
+    "Hoodie / Sweatshirt": {
+        "K": 0.65,
+        "specs": [
+            ("Body Length - Dài áo", "length"),
+            ("Chest - Vòng ngực", "width"),
+            ("Shoulder - Ngang vai", "width"),
+            ("Sleeve Length - Dài tay", "length"),
+            ("Hem Width - Rộng lai", "width"),
+        ],
+        "defaults": {},
+    },
+    "Jacket": {
+        "K": 0.65,
+        "specs": [
+            ("Body Length - Dài áo", "length"),
+            ("Chest - Vòng ngực", "width"),
+            ("Shoulder - Ngang vai", "width"),
+            ("Sleeve Length - Dài tay", "length"),
+            ("Hem Width - Rộng lai", "width"),
+        ],
+        "defaults": {},
+    },
+    "Váy / đầm": {
+        "K": 0.65,
+        "specs": [
+            ("Body Length - Dài váy", "length"),
+            ("Chest - Vòng ngực", "width"),
+            ("Waist - Vòng eo", "width"),
+            ("Hip - Vòng mông", "width"),
+            ("Hem Width - Rộng lai", "width"),
+        ],
+        "defaults": {},
+    },
 }
-
-# Trọng số bên trong nhóm chiều rộng, tổng = 1.00
-WIDTH_WEIGHTS = {
-    "Waist - Vòng eo": 0.15,
-    "Hip - Vòng mông": 0.35,
-    "Thigh - Rộng đùi": 0.30,
-    "Leg Opening - Rộng ống": 0.20,
-}
-
-SPEC_GROUPS = {
-    "Chiều dài": [
-        "Outseam - Dài quần ngoài",
-    ],
-    "Chiều rộng thân quần": [
-        "Waist - Vòng eo",
-        "Hip - Vòng mông",
-        "Thigh - Rộng đùi",
-        "Leg Opening - Rộng ống",
-    ],
-    "Độ sâu đáy": [
-        "Front Rise - Cao đáy trước",
-        "Back Rise - Cao đáy sau",
-    ],
-}
-
-DEFAULTS = {
-    "Outseam - Dài quần ngoài": ("14.750", "14.500"),
-    "Waist - Vòng eo": ("16.500", "16.250"),
-    "Hip - Vòng mông": ("21.000", "20.250"),
-    "Thigh - Rộng đùi": ("14.250", "13.625"),
-    "Leg Opening - Rộng ống": ("13.625", "13.375"),
-    "Front Rise - Cao đáy trước": ("11.250", "12.125"),
-    "Back Rise - Cao đáy sau": ("16.250", "16.000"),
-}
-
-# =========================================================
-# 2. HÀM XỬ LÝ
-# =========================================================
 
 def parse_number(value):
-    """Chấp nhận số thập phân dùng dấu chấm hoặc dấu phẩy."""
-    value = str(value).strip().replace(" ", "")
-
-    if not value:
-        raise ValueError("Chưa nhập giá trị.")
-
-    # Ví dụ: 14,750 -> 14.750
-    if "," in value and "." not in value:
-        value = value.replace(",", ".")
-    elif "," in value and "." in value:
-        # Ví dụ: 1,234.56 -> 1234.56
-        if value.rfind(",") < value.rfind("."):
-            value = value.replace(",", "")
-        # Ví dụ: 1.234,56 -> 1234.56
+    s = str(value).strip().replace(" ", "")
+    if not s:
+        raise ValueError("Có thông số chưa nhập.")
+    if "," in s and "." in s:
+        if s.rfind(",") < s.rfind("."):
+            s = s.replace(",", "")
         else:
-            value = value.replace(".", "").replace(",", ".")
-
-    return float(value)
-
+            s = s.replace(".", "").replace(",", ".")
+    else:
+        s = s.replace(",", ".")
+    return float(s)
 
 def pct_change(old, new):
-    if old == 0:
-        raise ValueError("Thông số cũ không được bằng 0.")
-    return (new - old) / old * 100
+    if old <= 0 or new <= 0:
+        raise ValueError("Thông số phải lớn hơn 0.")
+    return (new / old - 1) * 100
 
+def weighted_mean(values, weights):
+    total = sum(weights.values())
+    if total <= 0:
+        raise ValueError("Tổng trọng số phải lớn hơn 0.")
+    return sum(values[k] * weights[k] for k in weights) / total
 
-def weighted_average(values, weights):
-    """values và weights dùng chung khóa."""
-    total_weight = sum(weights.values())
-    if total_weight == 0:
-        raise ValueError("Tổng trọng số không được bằng 0.")
+def width_weights(specs):
+    names = [name for name, group in specs if group == "width"]
+    raw = {}
+    for name in names:
+        low = name.lower()
+        if "hip" in low or "ngực" in low or "chest" in low:
+            raw[name] = 0.35
+        elif "thigh" in low or "đùi" in low:
+            raw[name] = 0.30
+        elif "opening" in low or "gối" in low or "knee" in low or "lai" in low:
+            raw[name] = 0.20
+        else:
+            raw[name] = 0.15
+    total = sum(raw.values()) or 1
+    return {k: v / total for k, v in raw.items()}
 
-    return sum(
-        values[key] * weights[key]
-        for key in weights
-    ) / total_weight
+def calculate(old_values, new_values, specs, old_dm, k, group_weights):
+    changes = {name: pct_change(old_values[name], new_values[name]) for name, _ in specs}
+    model1 = sum(changes.values()) / len(changes)
 
+    grouped = {}
+    for name, group in specs:
+        grouped.setdefault(group, []).append(name)
 
-# =========================================================
-# 3. THÔNG TIN MÃ HÀNG
-# =========================================================
+    group_changes = {}
+    for group, names in grouped.items():
+        if group == "width":
+            ww = width_weights(specs)
+            group_changes[group] = weighted_mean(
+                {n: changes[n] for n in names},
+                {n: ww[n] for n in names}
+            )
+        else:
+            group_changes[group] = sum(changes[n] for n in names) / len(names)
 
-c1, c2, c3 = st.columns(3)
+    active_weights = {g: group_weights[g] for g in group_changes}
+    model2 = weighted_mean(group_changes, active_weights)
 
-with c1:
-    old_code = st.text_input("Mã hàng cũ", "R06-494141")
+    def ratio(names):
+        if not names:
+            return 1.0
+        old_avg = sum(old_values[n] for n in names) / len(names)
+        new_avg = sum(new_values[n] for n in names) / len(names)
+        return new_avg / old_avg
 
-with c2:
-    new_code = st.text_input("Mã hàng mới", "R06-494148")
+    length_names = [n for n, g in specs if g == "length"]
+    width_names = [n for n, g in specs if g == "width"]
+    model3 = (ratio(length_names) * ratio(width_names) - 1) * 100
 
-with c3:
-    old_dm = st.number_input(
-        "ĐM cũ (yd/pcs)",
-        min_value=0.0001,
-        value=0.8240,
-        step=0.0010,
-        format="%.4f"
-    )
+    rows = []
+    for name, change in [
+        ("Mô hình 1 - Trung bình thông số", model1),
+        ("Mô hình 2 - Phân nhóm trọng số", model2),
+        ("Mô hình 3 - Kích thước tổng hợp", model3),
+    ]:
+        adjusted = change * k
+        rows.append({
+            "Mô hình": name,
+            "Thay đổi trước K (%)": change,
+            "Điều chỉnh sau K (%)": adjusted,
+            "ĐM dự đoán (yd/pcs)": old_dm * (1 + adjusted / 100),
+        })
 
-st.divider()
+    details = pd.DataFrame([
+        {
+            "Nhóm": group,
+            "Thông số": name,
+            "Mã cũ": old_values[name],
+            "Mã mới": new_values[name],
+            "Thay đổi (%)": changes[name],
+        }
+        for name, group in specs
+    ])
+    return pd.DataFrame(rows), details
 
-# =========================================================
-# 4. NHẬP THÔNG SỐ
-# =========================================================
+st.title("🧵 APP TEST DỰ ĐOÁN ĐỊNH MỨC VẢI")
+st.caption("Chọn dòng hàng, nhập thông số chính và so sánh 3 mô hình dự đoán.")
 
-st.subheader("3. Nhập thông số cũ và mới")
-st.caption(
-    "Chỉ nhập thông số chính. Mã cũ và mã mới phải cùng đơn vị. "
-    "Chi tiết nhỏ không tham gia tính."
+if "history" not in st.session_state:
+    st.session_state.history = []
+
+# Chọn dòng hàng hiển thị nổi bật ngay đầu app
+st.subheader("1. CHỌN DÒNG HÀNG")
+category = st.selectbox(
+    "Chọn chủng loại sản phẩm:",
+    options=list(CATEGORIES.keys()),
+    index=0,
+    key="product_category",
+    help="Bấm vào ô này để chọn Quần short, Quần jean dài, Quần kaki/quần dài, Áo sơ mi, T-shirt/Polo, Hoodie/Sweatshirt, Jacket hoặc Váy/đầm."
 )
+cfg = CATEGORIES[category]
+st.info(f"Đang chọn: **{category}** — Hệ số K mặc định của dòng này: **{cfg['K']:.2f}**")
 
-old_values = {}
-new_values = {}
+a, b, c = st.columns(3)
+with a:
+    old_code = st.text_input("Mã hàng cũ", "R06-494141")
+with b:
+    new_code = st.text_input("Mã hàng mới", "R06-494148")
+with c:
+    old_dm = st.number_input("ĐM cũ (yd/pcs)", min_value=0.0001, value=0.8240, step=0.001, format="%.4f")
 
-for group_name, specs in SPEC_GROUPS.items():
-    st.markdown(f"**{group_name}**")
-
-    headers = st.columns([2, 1, 1])
-
-    headers[0].markdown("Thông số")
-    headers[1].markdown("Mã cũ")
-    headers[2].markdown("Mã mới")
-
-    for spec in specs:
-        default_old, default_new = DEFAULTS[spec]
-        cols = st.columns([2, 1, 1])
-
-        cols[0].write(spec)
-
-        old_text = cols[1].text_input(
-            "Mã cũ",
-            value=default_old,
-            key=f"old_{spec}",
-            label_visibility="collapsed"
-        )
-
-        new_text = cols[2].text_input(
-            "Mã mới",
-            value=default_new,
-            key=f"new_{spec}",
-            label_visibility="collapsed"
-        )
-
-        try:
-            old_values[spec] = parse_number(old_text)
-            new_values[spec] = parse_number(new_text)
-        except ValueError:
-            st.error(f"Giá trị không hợp lệ tại: {spec}")
-
-    st.write("")
-
-# =========================================================
-# 5. HỆ SỐ VÀ TRỌNG SỐ CÓ THỂ CHỈNH
-# =========================================================
-
-with st.expander("⚙️ Cài đặt hệ số và trọng số", expanded=False):
-    st.caption(
-        "Các trọng số dưới đây là giả định để thử nghiệm, "
-        "chưa được xác nhận bằng dữ liệu nhà máy."
+d, e = st.columns(2)
+with d:
+    k = st.number_input(
+        "Hệ số K áp dụng",
+        min_value=0.0, max_value=5.0,
+        value=float(cfg["K"]), step=0.05, format="%.2f",
+        key=f"k_{category}"
     )
-
-    K = st.number_input(
-        "Hệ số K",
-        min_value=0.0,
-        max_value=3.0,
-        value=DEFAULT_K,
-        step=0.05,
-        format="%.2f"
-    )
-
-    st.markdown("**Trọng số các nhóm**")
-
-    w_length = st.number_input(
-        "Chiều dài",
-        0.0, 1.0, 0.35, 0.05,
-        format="%.2f"
-    )
-
-    w_width = st.number_input(
-        "Chiều rộng thân quần",
-        0.0, 1.0, 0.45, 0.05,
-        format="%.2f"
-    )
-
-    w_rise = st.number_input(
-        "Độ sâu đáy",
-        0.0, 1.0, 0.20, 0.05,
-        format="%.2f"
-    )
-
-    st.markdown("**Trọng số trong nhóm chiều rộng**")
-
-    ww_waist = st.number_input(
-        "Waist",
-        0.0, 1.0, 0.15, 0.05,
-        format="%.2f"
-    )
-
-    ww_hip = st.number_input(
-        "Hip",
-        0.0, 1.0, 0.35, 0.05,
-        format="%.2f"
-    )
-
-    ww_thigh = st.number_input(
-        "Thigh",
-        0.0, 1.0, 0.30, 0.05,
-        format="%.2f"
-    )
-
-    ww_opening = st.number_input(
-        "Leg Opening",
-        0.0, 1.0, 0.20, 0.05,
-        format="%.2f"
-    )
-
-# =========================================================
-# 6. TÍNH TOÁN
-# =========================================================
+with e:
+    actual_str = st.text_input("ĐM thực tế mã mới (để trống nếu chưa có)", "0.7390")
 
 st.divider()
+st.subheader("2. NHẬP THÔNG SỐ CŨ VÀ MỚI")
+st.caption("Dùng cùng đơn vị cho cả hai mã. Ví dụ 14.750 hoặc 14,750. Chi tiết nhỏ không tính.")
 
-if st.button("🧮 TÍNH ĐỊNH MỨC DỰ ĐOÁN", type="primary"):
+old_values, new_values = {}, {}
+specs = cfg["specs"]
+
+for name, group in specs:
+    default_old, default_new = cfg["defaults"].get(name, ("", ""))
+    x, y, z = st.columns([2.2, 1, 1])
+    with x:
+        st.write(name)
+    with y:
+        old_txt = st.text_input(
+            "Mã cũ", value=f"{default_old:.3f}" if default_old != "" else "",
+            key=f"old_{category}_{name}", label_visibility="collapsed", placeholder="Mã cũ"
+        )
+    with z:
+        new_txt = st.text_input(
+            "Mã mới", value=f"{default_new:.3f}" if default_new != "" else "",
+            key=f"new_{category}_{name}", label_visibility="collapsed", placeholder="Mã mới"
+        )
     try:
-        if len(old_values) != 7 or len(new_values) != 7:
-            raise ValueError("Vui lòng nhập đầy đủ 7 thông số.")
+        if old_txt.strip() and new_txt.strip():
+            old_values[name] = parse_number(old_txt)
+            new_values[name] = parse_number(new_txt)
+    except ValueError:
+        st.error(f"Thông số không hợp lệ: {name}")
 
-        changes = {
-            spec: pct_change(old_values[spec], new_values[spec])
-            for spec in old_values
+st.divider()
+st.subheader("3. TRỌNG SỐ MÔ HÌNH PHÂN NHÓM")
+with st.expander("Mở để chỉnh trọng số (không bắt buộc)", expanded=False):
+    q1, q2, q3 = st.columns(3)
+    with q1:
+        w_length = st.number_input("Chiều dài", 0.0, 1.0, 0.35, 0.05, key="w_length")
+    with q2:
+        w_width = st.number_input("Chiều rộng", 0.0, 1.0, 0.45, 0.05, key="w_width")
+    with q3:
+        w_rise = st.number_input("Độ sâu đáy", 0.0, 1.0, 0.20, 0.05, key="w_rise")
+st.caption("Trọng số là giả định để thử nghiệm, chưa phải hệ số chuẩn của nhà máy.")
+
+if st.button("🧮 TÍNH VÀ LƯU LẦN TEST", type="primary"):
+    try:
+        if not old_code.strip() or not new_code.strip():
+            raise ValueError("Nhập mã hàng cũ và mã hàng mới.")
+        if old_dm <= 0:
+            raise ValueError("ĐM cũ phải lớn hơn 0.")
+        if len(old_values) != len(specs) or len(new_values) != len(specs):
+            raise ValueError("Hãy nhập đủ thông số cũ và mới của dòng hàng đang chọn.")
+        gw = {"length": w_length, "width": w_width, "rise": w_rise}
+        if sum(gw[g] for g in set(group for _, group in specs)) <= 0:
+            raise ValueError("Tổng trọng số các nhóm đang dùng phải lớn hơn 0.")
+
+        results, details = calculate(old_values, new_values, specs, old_dm, k, gw)
+        actual = parse_number(actual_str) if actual_str.strip() else None
+        if actual is not None and actual <= 0:
+            raise ValueError("ĐM thực tế phải lớn hơn 0.")
+
+        if actual is not None:
+            results["ĐM thực tế"] = actual
+            results["Sai lệch (%)"] = (
+                (results["ĐM dự đoán (yd/pcs)"] - actual) / actual * 100
+            )
+
+        st.session_state.current_result = {
+            "category": category,
+            "old_code": old_code,
+            "new_code": new_code,
+            "old_dm": old_dm,
+            "k": k,
+            "results": results,
+            "details": details,
+            "actual": actual,
         }
 
-        width_weights = {
-            "Waist - Vòng eo": ww_waist,
-            "Hip - Vòng mông": ww_hip,
-            "Thigh - Rộng đùi": ww_thigh,
-            "Leg Opening - Rộng ống": ww_opening,
-        }
+        for _, row in results.iterrows():
+            st.session_state.history.append({
+                "Dòng hàng": category,
+                "Mã cũ": old_code,
+                "Mã mới": new_code,
+                "ĐM cũ": old_dm,
+                "K": k,
+                "Mô hình": row["Mô hình"],
+                "Thay đổi trước K (%)": row["Thay đổi trước K (%)"],
+                "Điều chỉnh sau K (%)": row["Điều chỉnh sau K (%)"],
+                "ĐM dự đoán": row["ĐM dự đoán (yd/pcs)"],
+                "ĐM thực tế": actual,
+                "Sai lệch (%)": row.get("Sai lệch (%)", None),
+            })
+    except (ValueError, ZeroDivisionError) as ex:
+        st.error(str(ex))
 
-        if sum(width_weights.values()) <= 0:
-            raise ValueError("Tổng trọng số chiều rộng phải lớn hơn 0.")
+if "current_result" in st.session_state:
+    result = st.session_state.current_result
+    st.subheader("4. KẾT QUẢ DỰ ĐOÁN")
+    st.write(f"**Dòng hàng:** {result['category']}")
+    st.write(f"**Mã cũ:** {result['old_code']}  |  **Mã mới:** {result['new_code']}  |  **K:** {result['k']:.2f}")
+    st.dataframe(
+        result["results"].style.format({
+            "Thay đổi trước K (%)": "{:+.2f}%",
+            "Điều chỉnh sau K (%)": "{:+.2f}%",
+            "ĐM dự đoán (yd/pcs)": "{:.4f}",
+            "ĐM thực tế": lambda x: "" if pd.isna(x) else f"{x:.4f}",
+            "Sai lệch (%)": lambda x: "" if pd.isna(x) else f"{x:+.2f}%",
+        }),
+        use_container_width=True, hide_index=True
+    )
 
-        group_changes = {
-            "Chiều dài": changes["Outseam - Dài quần ngoài"],
+    st.subheader("5. CHI TIẾT THAY ĐỔI THÔNG SỐ")
+    st.dataframe(
+        result["details"].style.format({
+            "Mã cũ": "{:.3f}", "Mã mới": "{:.3f}", "Thay đổi (%)": "{:+.2f}%"
+        }),
+        use_container_width=True, hide_index=True
+    )
 
-            "Chiều rộng thân quần": weighted_average(
-                {
-                    spec: changes[spec]
-                    for spec in width_weights
-                },
-                width_weights
-            ),
+st.subheader("6. LỊCH SỬ CÁC LẦN TEST")
+if st.session_state.history:
+    hist = pd.DataFrame(st.session_state.history)
+    st.dataframe(
+        hist.style.format({
+            "ĐM cũ": "{:.4f}", "K": "{:.2f}",
+            "Thay đổi trước K (%)": "{:+.2f}%",
+            "Điều chỉnh sau K (%)": "{:+.2f}%",
+            "ĐM dự đoán": "{:.4f}",
+            "ĐM thực tế": lambda x: "" if pd.isna(x) else f"{x:.4f}",
+            "Sai lệch (%)": lambda x: "" if pd.isna(x) else f"{x:+.2f}%",
+        }),
+        use_container_width=True, hide_index=True
+    )
+    st.download_button(
+        "⬇️ Tải lịch sử test CSV",
+        hist.to_csv(index=False).encode("utf-8-sig"),
+        file_name="lich_su_test_dinh_muc.csv",
+        mime="text/csv"
+    )
+    if st.button("Xóa lịch sử test"):
+        st.session_state.history = []
+        st.rerun()
+else:
+    st.info("Chưa có lần test nào được lưu. Lịch sử hiện lưu trong phiên chạy app.")
 
-            "Độ sâu đáy": (
-                changes["Front Rise - Cao đáy trước"]
-                + changes["Back Rise - Cao đáy sau"]
-            ) / 2,
-        }
-
-        group_weights = {
-            "Chiều dài": w_length,
-            "Chiều rộng thân quần": w_width,
-            "Độ sâu đáy": w_rise,
-        }
-
-        if sum(group_weights.values()) <= 0:
-            raise ValueError("Tổng trọng số nhóm phải lớn hơn 0.")
-
-        avg_change = weighted_average(
-            group_changes,
-            group_weights
-        )
-
-        adjusted_change = avg_change * K
-        predicted_dm = old_dm * (1 + adjusted_change / 100)
-
-        st.subheader("4. Kết quả dự đoán")
-
-        r1, r2, r3 = st.columns(3)
-
-        r1.metric("ĐM cũ", f"{old_dm:.4f} yd/pcs")
-        r2.metric("Thay đổi có trọng số", f"{avg_change:+.2f}%")
-        r3.metric("Điều chỉnh sau K", f"{adjusted_change:+.2f}%")
-
-        st.success(f"ĐM mới dự đoán: {predicted_dm:.4f} yd/pcs")
-
-        st.markdown("**Chi tiết thay đổi từng thông số**")
-
-        detail_rows = []
-
-        for group_name, specs in SPEC_GROUPS.items():
-            for spec in specs:
-                detail_rows.append({
-                    "Nhóm": group_name,
-                    "Thông số": spec,
-                    "Mã cũ": old_values[spec],
-                    "Mã mới": new_values[spec],
-                    "Thay đổi (%)": changes[spec],
-                })
-
-        df_detail = pd.DataFrame(detail_rows)
-        st.dataframe(
-            df_detail.style.format({
-                "Mã cũ": "{:.3f}",
-                "Mã mới": "{:.3f}",
-                "Thay đổi (%)": "{:+.2f}%"
-            }),
-            use_container_width=True,
-            hide_index=True
-        )
-
-        st.markdown("**Mức thay đổi theo nhóm**")
-
-        df_groups = pd.DataFrame([
-            {
-                "Nhóm": name,
-                "Trọng số": group_weights[name],
-                "Thay đổi nhóm (%)": group_changes[name],
-                "Đóng góp vào tổng (%)":
-                    group_changes[name]
-                    * group_weights[name]
-                    / sum(group_weights.values()),
-            }
-            for name in group_changes
-        ])
-
-        st.dataframe(
-            df_groups.style.format({
-                "Trọng số": "{:.2f}",
-                "Thay đổi nhóm (%)": "{:+.2f}%",
-                "Đóng góp vào tổng (%)": "{:+.2f}%"
-            }),
-            use_container_width=True,
-            hide_index=True
-        )
-
-        st.markdown("**5. So sánh định mức thực tế**")
-
-        actual_text = st.text_input(
-            "Nhập ĐM thực tế của mã mới (yd/pcs)",
-            value="0.7390",
-            key="actual_dm"
-        )
-
-        if st.button("So sánh với ĐM thực tế"):
-            actual_dm = parse_number(actual_text)
-
-            if actual_dm <= 0:
-                st.error("ĐM thực tế phải lớn hơn 0.")
-            else:
-                error_pct = (
-                    (predicted_dm - actual_dm)
-                    / actual_dm
-                    * 100
-                )
-
-                delta = predicted_dm - actual_dm
-
-                a1, a2, a3 = st.columns(3)
-
-                a1.metric(
-                    "ĐM dự đoán",
-                    f"{predicted_dm:.4f}"
-                )
-
-                a2.metric(
-                    "ĐM thực tế",
-                    f"{actual_dm:.4f}"
-                )
-
-                a3.metric(
-                    "Sai lệch",
-                    f"{error_pct:+.2f}%",
-                    delta=f"{delta:+.4f} yd/pcs",
-                    delta_color="inverse"
-                )
-
-                st.caption(
-                    "Sai lệch (%) = (ĐM dự đoán - ĐM thực tế) "
-                    "/ ĐM thực tế × 100."
-                )
-
-    except ValueError as exc:
-        st.error(str(exc))
-
-st.info(
-    "Lưu ý: trọng số và K là giả định để kiểm thử. "
-    "Mô hình chưa tính trực tiếp diện tích rập, khổ vải, "
-    "hiệu suất giác hoặc hao hụt sản xuất."
+st.warning(
+    "K và trọng số là giả định thử nghiệm. Các mô hình chưa tính trực tiếp diện tích rập, "
+    "hiệu suất giác hoặc hao hụt sản xuất; cần kiểm tra bằng nhiều cặp mã có ĐM thực tế."
 )
