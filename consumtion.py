@@ -29,7 +29,7 @@ CATEGORIES = {
         },
     },
     "Quần jean dài": {
-        "K": 0.65,
+        "K": 0.75,
         "specs": [
             ("Outseam - Dài quần ngoài", "length"),
             ("Inseam - Dài trong", "length"),
@@ -44,7 +44,7 @@ CATEGORIES = {
         "defaults": {},
     },
     "Quần kaki / quần dài": {
-        "K": 0.65,
+        "K": 0.75,
         "specs": [
             ("Outseam - Dài quần ngoài", "length"),
             ("Inseam - Dài trong", "length"),
@@ -59,7 +59,7 @@ CATEGORIES = {
         "defaults": {},
     },
     "Áo sơ mi": {
-        "K": 0.65,
+        "K": 0.75,
         "specs": [
             ("Body Length - Dài áo", "length"),
             ("Chest - Vòng ngực", "width"),
@@ -70,7 +70,7 @@ CATEGORIES = {
         "defaults": {},
     },
     "T-shirt / Polo": {
-        "K": 0.65,
+        "K": 0.75,
         "specs": [
             ("Body Length - Dài áo", "length"),
             ("Chest - Vòng ngực", "width"),
@@ -81,7 +81,7 @@ CATEGORIES = {
         "defaults": {},
     },
     "Hoodie / Sweatshirt": {
-        "K": 0.65,
+        "K": 0.75,
         "specs": [
             ("Body Length - Dài áo", "length"),
             ("Chest - Vòng ngực", "width"),
@@ -92,7 +92,7 @@ CATEGORIES = {
         "defaults": {},
     },
     "Jacket": {
-        "K": 0.65,
+        "K": 0.75,
         "specs": [
             ("Body Length - Dài áo", "length"),
             ("Chest - Vòng ngực", "width"),
@@ -103,7 +103,7 @@ CATEGORIES = {
         "defaults": {},
     },
     "Váy / đầm": {
-        "K": 0.65,
+        "K": 0.75,
         "specs": [
             ("Body Length - Dài váy", "length"),
             ("Chest - Vòng ngực", "width"),
