@@ -479,15 +479,21 @@ def calculate_full_poms(df_input, specs, old_dm):
     if not valid_changes:
         raise ValueError("Cần ít nhất 1 thông số POM có giá trị > 0 ở cả Mã cũ và Mã mới để tính tỷ lệ thay đổi.")
 
-    # Cộng thêm 1.2% cho mỗi chi tiết mới phát sinh ở Mã mới mà Mã cũ không có
+        # Cộng thêm 1.2% cho mỗi chi tiết mới phát sinh ở Mã mới mà Mã cũ không có
     extra_detail_pct = new_only_count * 1.2
 
-        # Công thức chuẩn bạn đã chốt: Cộng hưởng mức tăng đỉnh (Dài + Rộng + Đáy)
-    max_len_pct = max([valid_changes[n] for n in grouped_valid.get("length", [])], default=0.0)
-    max_wid_pct = max([valid_changes[n] for n in grouped_valid.get("width", [])], default=0.0)
-    max_rise_pct = max([valid_changes[n] for n in grouped_valid.get("rise", [])], default=0.0)
+    # Hàm lấy biến động đại diện của nhóm (tính đúng cả khi tăng (+) lẫn khi giảm (-))
+    def dominant_group_pct(grp_name):
+        names = grouped_valid.get(grp_name, [])
+        if not names:
+            return 0.0
+        vals = [valid_changes[n] for n in names]
+        active_vals = [v for v in vals if abs(v) > 0.01]
+        if not active_vals:
+            return 0.0
+        return max(active_vals, key=abs)
 
-        # 1. Tính tỷ lệ thay đổi Chiều dài tổng hợp (Đáy trung bình + Inseam nếu thiếu Outseam)
+    # 1. Tính tỷ lệ thay đổi Chiều dài tổng hợp (Đáy trung bình + Inseam nếu thiếu Outseam)
     len_names = grouped_valid.get("length", [])
     rise_names = grouped_valid.get("rise", [])
 
@@ -502,15 +508,14 @@ def calculate_full_poms(df_input, specs, old_dm):
         total_len_new = avg_rise_new + valid_new["Inseam - Dài quần trong"]
         len_pct = (total_len_new / total_len_old - 1) * 100
     else:
-        len_pct = max([valid_changes[n] for n in len_names], default=0.0)
+        len_pct = dominant_group_pct("length")
 
-    max_wid_pct = max([valid_changes[n] for n in grouped_valid.get("width", [])], default=0.0)
-    max_rise_pct = max([valid_changes[n] for n in rise_names], default=0.0)
+    max_wid_pct = dominant_group_pct("width")
+    max_rise_pct = dominant_group_pct("rise")
 
-    # 2. Áp dụng tỷ trọng thực tế: Chiều dài ống chỉ chiếm 65% tổng định mức (35% còn lại là túi, cạp, moi cố định)
+    # 2. Áp dụng tỷ trọng thực tế: Chiều dài ống chiếm 65% tổng định mức
     final_pct = (len_pct * 0.65) + max_wid_pct + (max_rise_pct * 0.5) + extra_detail_pct
     pred_dm = old_dm * (1 + final_pct / 100)
-
 
 
     summary_df = pd.DataFrame([{
