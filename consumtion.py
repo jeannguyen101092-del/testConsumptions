@@ -267,11 +267,11 @@ def parse_number(value):
             return 0.0
     except Exception:
         pass
-    s = str(value).strip().replace(" ", "")
-    if not s:
-        return 0.0
-    # Xử lý phân số trong Techpack hệ inch (ví dụ: "14 3/4" -> 14.75 hoặc "3/8" -> 0.375)
     raw_str = str(value).strip()
+    if not raw_str:
+        return 0.0
+
+    # Đổi phân số inch (VD: "14 3/4" -> 14.75, "3/8" -> 0.375)
     frac_match = re.match(r"^(\d+)\s+(\d+)/(\d+)$", raw_str)
     if frac_match:
         return float(frac_match.group(1)) + float(frac_match.group(2)) / float(frac_match.group(3))
@@ -279,11 +279,9 @@ def parse_number(value):
     if only_frac and float(only_frac.group(2)) != 0:
         return float(only_frac.group(1)) / float(only_frac.group(2))
 
+    s = raw_str.replace(" ", "")
     if "," in s and "." in s:
-        if s.rfind(",") < s.rfind("."):
-            s = s.replace(",", "")
-        else:
-            s = s.replace(".", "").replace(",", ".")
+        s = s.replace(",", "") if s.rfind(",") < s.rfind(".") else s.replace(".", "").replace(",", ".")
     else:
         s = s.replace(",", ".")
     return float(s)
@@ -293,8 +291,30 @@ def normalize_text(s):
     s = re.sub(r"[^a-z0-9àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ\s]", " ", s)
     return re.sub(r"\s+", " ", s).strip()
 
+# Bộ quy tắc nhận diện chính xác từng POM (ưu tiên từ khóa chính, loại trừ từ khóa nhiễu)
+POM_RULES = {
+    "Outseam - Dài quần ngoài": (["outseam", "side seam", "side length", "dai quan ngoai"], ["pocket", "flap", "slit"]),
+    "Inseam - Dài quần trong": (["inseam", "inside leg", "dai quan trong"], ["pocket"]),
+    "Waist - Vòng eo / Lưng quần": (["waist"], ["band", "pocket", "drop", "elastic", "loop"]),
+    "Hip - Vòng mông": (["hip", "seat"], ["pocket", "flap"]),
+    "Thigh - Rộng đùi": (["thigh"], ["pocket"]),
+    "Knee - Rộng gối": (["knee"], ["pocket"]),
+    "Leg Opening - Rộng ống": (["leg opening", "bottom opening", "hem opening", "rong ong"], ["pocket"]),
+    "Front Rise - Cao đáy trước": (["front rise", "cf rise", "cao day truoc"], []),
+    "Back Rise - Cao đáy sau": (["back rise", "cb rise", "cao day sau"], []),
+    "Waistband Height - Cao bản lưng / cạp": (["waistband", "ban lung", "cao cap"], ["pocket"]),
+    "Fly Length - Dài moi / dây kéo": (["fly length", "zipper length", "dai moi"], ["width"]),
+    "Fly Width - Rộng moi": (["fly width", "rong moi"], ["length"]),
+    "Body Length Front - Dài áo trước": (["front length", "cf length", "body length front", "dai ao truoc"], ["pocket", "zipper"]),
+    "Body Length Back - Dài áo sau": (["back length", "cb length", "body length back", "hps", "dai ao sau"], ["pocket"]),
+    "Body Length - Dài áo": (["body length", "hps", "cb length", "garment length", "dai ao"], ["sleeve", "pocket"]),
+    "Chest - Vòng ngực": (["chest", "bust", "vong nguc"], ["pocket", "flap"]),
+    "Shoulder - Ngang vai": (["shoulder", "ngang vai"], ["seam", "drop"]),
+    "Sleeve Length - Dài tay": (["sleeve length", "dai tay"], ["opening", "pocket"]),
+    "Hem Width - Rộng lai áo": (["hem width", "bottom width", "sweep", "rong lai"], ["turn", "height"]),
+}
+
 def extract_table_rows_from_file(uploaded_file):
-    """Đọc chuẩn từng hàng và các cột số đo từ bảng trong PDF hoặc Excel."""
     extracted = []
     if uploaded_file is None:
         return extracted
@@ -325,19 +345,17 @@ def extract_table_rows_from_file(uploaded_file):
         if len(cells) < 2:
             continue
 
-        # Bỏ qua cột đầu tiên nếu chỉ là số thứ tự dòng (1, 2, 3...) hoặc mã POM ngắn (A, B, 01, 02...)
-        if re.match(r"^(\d{1,2}|[A-Z]{1,3}\d{0,2})[.)]?$", cells[0]):
+        # Bỏ cột STT hoặc Mã POM ngắn ở đầu dòng
+        if re.match(r"^(\d{1,2}|[A-Z]{1,3}\d{0,2})[.)]?$", cells):
             cells = cells[1:]
 
-        text_cols = []
-        size_nums = []
+        text_cols, size_nums = [], []
         for c in cells:
-            # Bỏ qua cột dung sai (+/- 0.5, ±0.25...)
             if any(sym in c for sym in ["±", "+/-", "+-", "%"]):
                 continue
             try:
                 val = parse_number(c)
-                if 0 < val < 200:
+                if 0.25 <= val <= 150:
                     size_nums.append(val)
             except Exception:
                 clean_txt = re.sub(r"[^a-zA-ZÀ-ỹ\s]", "", c).strip()
@@ -345,38 +363,52 @@ def extract_table_rows_from_file(uploaded_file):
                     text_cols.append(c)
 
         if text_cols and size_nums:
-            pom_name = max(text_cols, key=len)
-            extracted.append((pom_name, size_nums))
+            extracted.append((max(text_cols, key=len), size_nums))
 
     return extracted
 
 def match_tp_to_full_poms(uploaded_file, specs, size_col_idx=0):
-    """Khớp tên POM và lấy đúng cột size được chọn."""
     raw_rows = extract_table_rows_from_file(uploaded_file)
     matched = {}
+    debug_rows = []
     if not raw_rows:
-        return matched
-
-    spec_keywords = {full: [normalize_text(p) for p in full.split("-") if normalize_text(p)] for full, _ in specs}
+        return matched, debug_rows
 
     for raw_label, num_list in raw_rows:
         norm_label = normalize_text(raw_label)
+        idx = min(size_col_idx, len(num_list) - 1)
+        chosen_val = float(num_list[idx])
+
         best_pom, best_score = None, 0.0
-
-        for full_name, kw_list in spec_keywords.items():
-            for kw in kw_list:
-                if kw in norm_label or norm_label in kw:
-                    score = 0.95
+        for full_name, _ in specs:
+            if full_name in POM_RULES:
+                inc_kws, exc_kws = POM_RULES[full_name]
+                if any(ex in norm_label for ex in exc_kws):
+                    continue
+                if any(inc in norm_label for inc in inc_kws):
+                    score = 0.98
                 else:
-                    score = difflib.SequenceMatcher(None, kw, norm_label).ratio()
-                if score > best_score:
-                    best_score, best_pom = score, full_name
+                    score = 0.0
+            else:
+                parts = [normalize_text(p) for p in full_name.split("-") if normalize_text(p)]
+                score = max((difflib.SequenceMatcher(None, kw, norm_label).ratio() for kw in parts), default=0.0)
 
-        if best_pom and best_score >= 0.65 and best_pom not in matched:
-            idx = min(size_col_idx, len(num_list) - 1)
-            matched[best_pom] = float(num_list[idx])
+            if score > best_score:
+                best_score, best_pom = score, full_name
 
-    return matched
+        status_str = f"✅ {best_pom}" if (best_pom and best_score >= 0.72) else "❌ Chưa khớp"
+        debug_rows.append({
+            "Dòng đọc từ Techpack": raw_label,
+            "Các cột số đọc được": str(num_list),
+            "Số đã lấy": chosen_val,
+            "Trạng thái": status_str,
+        })
+
+        if best_pom and best_score >= 0.72 and best_pom not in matched:
+            matched[best_pom] = chosen_val
+
+    return matched, debug_rows
+
 
 
 def width_weights(width_names):
@@ -474,7 +506,7 @@ def calculate_full_poms(df_input, specs, old_dm, group_weights):
 
     return pd.DataFrame(summary_rows), pd.DataFrame(detail_rows)
 st.title("🧵 APP DỰ ĐOÁN ĐỊNH MỨC VẢI (FULL POM & UPLOAD TECHPACK)")
-st.caption("Upload file Techpack (Excel/PDF) để tự động nhận diện thông số hoặc chỉnh sửa trực tiếp. Chi tiết không có để = 0 sẽ không đưa vào so sánh.")
+st.caption("Upload file Techpack (Excel/PDF), chọn đúng cột Size chuẩn để tự động nhận diện thông số. Chi tiết không có để = 0 sẽ không đưa vào so sánh.")
 
 st.subheader("1. THÔNG TIN MÃ HÀNG")
 col_cat, col_old, col_new, col_dm = st.columns([1.2, 1, 1, 1])
@@ -489,18 +521,33 @@ with col_dm:
 
 cfg = CATEGORIES[category]
 
-st.subheader("2. UPLOAD FILE TECHPACK (TÙY CHỌN)")
+st.subheader("2. UPLOAD FILE TECHPACK & CHỌN CỘT SIZE")
+size_col_idx = st.selectbox(
+    "Chọn vị trí cột Size cần lấy trong file Techpack (Tính từ cột số đo đầu tiên sau tên POM):",
+    options=,
+    index=0,
+    format_func=lambda x: f"Cột số đo thứ {x + 1}",
+)
+
 up1, up2 = st.columns(2)
 with up1:
     tp_old_file = st.file_uploader(f"📄 Upload Techpack Mã cũ ({old_code})", type=["xlsx", "xls", "pdf"], key="tp_old")
 with up2:
     tp_new_file = st.file_uploader(f"📄 Upload Techpack Mã mới ({new_code})", type=["xlsx", "xls", "pdf"], key="tp_new")
 
-old_tp_data = match_tp_to_full_poms(tp_old_file, cfg["specs"]) if tp_old_file else {}
-new_tp_data = match_tp_to_full_poms(tp_new_file, cfg["specs"]) if tp_new_file else {}
+old_tp_data, old_debug = match_tp_to_full_poms(tp_old_file, cfg["specs"], size_col_idx) if tp_old_file else ({}, [])
+new_tp_data, new_debug = match_tp_to_full_poms(tp_new_file, cfg["specs"], size_col_idx) if tp_new_file else ({}, [])
 
 if tp_old_file or tp_new_file:
     st.success(f"✅ Đã tự động nhận diện **{len(old_tp_data)}** POM từ TP Mã cũ và **{len(new_tp_data)}** POM từ TP Mã mới.")
+    with st.expander("🔍 BẤM VÀO ĐÂY ĐỂ XEM DỮ LIỆU GỐC ĐỌC ĐƯỢC TỪ FILE PDF", expanded=True):
+        d1, d2 = st.columns(2)
+        with d1:
+            st.markdown("**Dữ liệu gốc TP Mã cũ:**")
+            st.dataframe(pd.DataFrame(old_debug), use_container_width=True, hide_index=True)
+        with d2:
+            st.markdown("**Dữ liệu gốc TP Mã mới:**")
+            st.dataframe(pd.DataFrame(new_debug), use_container_width=True, hide_index=True)
 
 st.subheader("3. BẢNG THÔNG SỐ FULL POM (ĐỂ = 0 NẾU KHÔNG CÓ)")
 init_rows = []
@@ -513,6 +560,9 @@ for spec_name, grp in cfg["specs"]:
         "Mã mới": float(new_tp_data.get(spec_name, def_n)),
     })
 
+old_fname = tp_old_file.name if tp_old_file else "none"
+new_fname = tp_new_file.name if tp_new_file else "none"
+
 edited_df = st.data_editor(
     pd.DataFrame(init_rows),
     num_rows="dynamic",
@@ -524,7 +574,9 @@ edited_df = st.data_editor(
         "Mã cũ": st.column_config.NumberColumn("Mã cũ", min_value=0.0, format="%.3f"),
         "Mã mới": st.column_config.NumberColumn("Mã mới", min_value=0.0, format="%.3f"),
     },
-    key=f"full_pom_editor_{category}",
+    key=f"editor_{category}_{old_fname}_{new_fname}_{size_col_idx}",
+)
+
 )
 with st.expander("Tùy chỉnh trọng số nhóm (dùng cho Mô hình 2)", expanded=False):
     w1, w2, w3, w4 = st.columns(4)
