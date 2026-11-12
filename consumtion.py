@@ -476,34 +476,53 @@ def calculate_full_poms(df_input, specs, old_dm, group_weights):
     if not valid_changes:
         raise ValueError("Cần ít nhất 1 thông số POM có giá trị > 0 ở cả Mã cũ và Mã mới để tính tỷ lệ thay đổi.")
 
-    change_m1 = sum(valid_changes.values()) / len(valid_changes)
-    group_changes = {}
-    for grp, names in grouped_valid.items():
-        if grp == "width":
-            ww = width_weights(names)
-            group_changes[grp] = sum(valid_changes[n] * ww[n] for n in names)
+    # 1. Mô hình 1: Trung bình biến động tuyệt đối có xét hướng (tránh triệt tiêu ảo khi tăng/giảm)
+    # Thông số tăng giữ nguyên 100% tác động, thông số giảm tính 60% tác động do giới hạn khổ vải
+    adjusted_pcts = [p if p >= 0 else p * 0.6 for p in valid_changes.values()]
+    change_m1 = sum(adjusted_pcts) / len(adjusted_pcts)
+
+    # 2. Mô hình 2: Trọng số ưu tiên chi tiết lớn (Dài chính, Mông/Ngực, Đùi) & giảm tác động chi tiết nhỏ
+    weighted_sum, total_w = 0.0, 0.0
+    for pom, pct in valid_changes.items():
+        low = pom.lower()
+        if any(k in low for k in ["outseam", "inseam", "body length", "dài quần", "dài áo", "dài váy"]):
+            w = 3.0
+        elif any(k in low for k in ["hip", "chest", "thigh", "mông", "ngực", "đùi"]):
+            w = 2.5
+        elif any(k in low for k in ["waist", "leg opening", "shoulder", "sleeve", "eo", "ống", "vai", "tay"]):
+            w = 1.5
         else:
-            group_changes[grp] = sum(valid_changes[n] for n in names) / len(names)
+            w = 0.5
+        eff_pct = pct if pct >= 0 else pct * 0.6
+        weighted_sum += eff_pct * w
+        total_w += w
+    change_m2 = weighted_sum / (total_w or 1.0)
 
-    active_w = {g: group_weights.get(g, 0.1) for g in group_changes}
-    total_w = sum(active_w.values()) or 1.0
-    change_m2 = sum(group_changes[g] * active_w[g] for g in group_changes) / total_w
+    # 3. Mô hình 3 (Chuẩn sơ đồ Marker): Diện tích khung rập (Dài lớn nhất × Tổng Rộng chính)
+    len_names = grouped_valid.get("length", [])
+    wid_names = grouped_valid.get("width", [])
 
-    def group_ratio(grp_key):
-        names = grouped_valid.get(grp_key, [])
-        if not names:
-            return 1.0
-        o_avg = sum(valid_old[n] for n in names) / len(names)
-        n_avg = sum(valid_new[n] for n in names) / len(names)
-        return (n_avg / o_avg) if o_avg > 0 else 1.0
+    if len_names:
+        max_len_old = max(valid_old[n] for n in len_names)
+        max_len_new = max(valid_new[n] for n in len_names)
+        ratio_len = max_len_new / max_len_old if max_len_old > 0 else 1.0
+    else:
+        ratio_len = 1.0
 
-    change_m3 = (group_ratio("length") * group_ratio("width") - 1) * 100
+    if wid_names:
+        sum_wid_old = sum(valid_old[n] for n in wid_names)
+        sum_wid_new = sum(valid_new[n] for n in wid_names)
+        ratio_wid = sum_wid_new / sum_wid_old if sum_wid_old > 0 else 1.0
+    else:
+        ratio_wid = 1.0
+
+    change_m3 = (ratio_len * ratio_wid - 1) * 100
 
     summary_rows = []
     for model_name, pct in [
-        ("Mô hình 1 - Trung bình toàn bộ POM hợp lệ", change_m1),
-        ("Mô hình 2 - Phân nhóm trọng số (Thân + Chi tiết phụ)", change_m2),
-        ("Mô hình 3 - Tỷ lệ Dài × Rộng tổng hợp (Khuyên dùng)", change_m3),
+        ("Mô hình 1 - Trung bình có điều chỉnh khổ vải", change_m1),
+        ("Mô hình 2 - Trọng số chi tiết chính (Dài/Mông/Ngực/Đùi)", change_m2),
+        ("Mô hình 3 - Diện tích khung rập Marker (Max Dài × Tổng Rộng)", change_m3),
     ]:
         pred_dm = old_dm * (1 + pct / 100)
         summary_rows.append({
@@ -516,6 +535,7 @@ def calculate_full_poms(df_input, specs, old_dm, group_weights):
         })
 
     return pd.DataFrame(summary_rows), pd.DataFrame(detail_rows)
+
 st.title("🧵 APP DỰ ĐOÁN ĐỊNH MỨC VẢI (FULL POM & UPLOAD TECHPACK)")
 st.caption("Upload file Techpack (Excel/PDF) để tự động lấy tên mã hàng và thông số. Chi tiết không có để = 0 sẽ không đưa vào so sánh.")
 
