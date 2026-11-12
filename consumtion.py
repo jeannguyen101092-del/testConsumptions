@@ -596,7 +596,8 @@ if st.button("🚀 Tính toán & Dự đoán định mức mới", type="primary
         df_summary, df_details = calculate_full_poms(edited_df, cfg["specs"], old_dm)
 
         st.subheader("4. KẾT QUẢ DỰ ĐOÁN ĐỊNH MỨC MỚI")
-        res = df_summary.iloc
+        res = df_summary.to_dict(orient="records")[0]
+
 
         m1, m2, m3, m4 = st.columns(4)
         m1.metric("ĐM cũ (yd/pcs)", f"{res['ĐM cũ (yd/pcs)']:.4f}")
