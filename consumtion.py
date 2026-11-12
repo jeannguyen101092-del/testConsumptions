@@ -561,18 +561,27 @@ if tp_old_file or tp_new_file:
             st.markdown("**Dữ liệu gốc TP Mã mới:**")
             st.dataframe(pd.DataFrame(new_debug), use_container_width=True, hide_index=True)
 st.subheader("3. BẢNG THÔNG SỐ FULL POM (ĐỂ = 0 NẾU KHÔNG CÓ)")
+has_uploaded = bool(tp_old_file or tp_new_file)
+
 init_rows = []
 for spec_name, grp in cfg["specs"]:
-    def_o, def_n = cfg["defaults"].get(spec_name, (0.0, 0.0)) if not (tp_old_file or tp_new_file) else (0.0, 0.0)
+    if has_uploaded:
+        # Khi đã upload file TP: lấy số đọc từ TP, thông số nào không có tự về 0.0
+        o_val = float(old_tp_data.get(spec_name, 0.0))
+        n_val = float(new_tp_data.get(spec_name, 0.0))
+    else:
+        # Khi chưa upload file TP: hiển thị số mẫu để tham khảo
+        o_val, n_val = cfg["defaults"].get(spec_name, (0.0, 0.0))
+
     init_rows.append({
         "Nhóm": grp,
         "Tên POM": spec_name,
-        "Mã cũ": float(old_tp_data.get(spec_name, def_o)),
-        "Mã mới": float(new_tp_data.get(spec_name, def_n)),
+        "Mã cũ": o_val,
+        "Mã mới": n_val,
     })
 
-old_fname = tp_old_file.name if tp_old_file else "none"
-new_fname = tp_new_file.name if tp_new_file else "none"
+old_fname = f"{tp_old_file.name}_{tp_old_file.size}" if tp_old_file else "no_old"
+new_fname = f"{tp_new_file.name}_{tp_new_file.size}" if tp_new_file else "no_new"
 
 edited_df = st.data_editor(
     pd.DataFrame(init_rows),
@@ -585,8 +594,10 @@ edited_df = st.data_editor(
         "Mã cũ": st.column_config.NumberColumn("Mã cũ", min_value=0.0, format="%.3f"),
         "Mã mới": st.column_config.NumberColumn("Mã mới", min_value=0.0, format="%.3f"),
     },
-    key=f"editor_{category}_{old_fname}_{new_fname}_{size_col_idx}",
+    key=f"pom_table_{category}_{old_fname}_{new_fname}_{size_col_idx}",
 )
+
+
 
 with st.expander("Tùy chỉnh trọng số nhóm (dùng cho Mô hình 2)", expanded=False):
     w1, w2, w3, w4 = st.columns(4)
