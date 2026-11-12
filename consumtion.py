@@ -511,7 +511,6 @@ def calculate_full_poms(df_input, specs, old_dm):
             continue
         old_val = parse_number(row.get("Mã cũ", 0.0))
         new_val = parse_number(row.get("Mã mới", 0.0))
-        # Ưu tiên lấy nhóm trực tiếp từ bảng (hỗ trợ cả dòng người dùng tự thêm tay)
         group = str(row.get("Nhóm", "")).strip() or spec_map.get(pom, "detail")
 
         if old_val == 0 and new_val == 0:
@@ -542,10 +541,8 @@ def calculate_full_poms(df_input, specs, old_dm):
     if not valid_changes:
         raise ValueError("Cần ít nhất 1 thông số POM có giá trị > 0 ở cả Mã cũ và Mã mới để tính tỷ lệ thay đổi.")
 
-    # Cộng thêm 0.8% cho mỗi chi tiết mới phát sinh ở Mã mới mà Mã cũ không có
     extra_detail_pct = new_only_count * 0.8
 
-    # Hàm tính trung bình đơn giản cho các nhóm thông thường
     def group_active_avg(grp_name):
         names = grouped_valid.get(grp_name, [])
         if not names:
@@ -555,9 +552,7 @@ def calculate_full_poms(df_input, specs, old_dm):
             return 0.0
         return sum(active_vals) / len(active_vals)
 
-    # 1. Tính tỷ lệ thay đổi Chiều dài tổng hợp (Đáy trung bình + Inseam nếu thiếu Outseam)
-        # 1. Tính tỷ lệ thay đổi Chiều dài (Tách biệt Quần short và Quần dài khi thiếu Outseam)
-      # 1. Tính tỷ lệ thay đổi Chiều dài (Xử lý chuẩn cho cả Quần short, Quần dài & Áo)
+    # 1. Tính tỷ lệ thay đổi Chiều dài
     len_names = grouped_valid.get("length", [])
     rise_names = grouped_valid.get("rise", [])
     has_out = "Outseam - Dài quần ngoài" in len_names
@@ -568,7 +563,6 @@ def calculate_full_poms(df_input, specs, old_dm):
         o_in, n_in = valid_old["Inseam - Dài quần trong"], valid_new["Inseam - Dài quần trong"]
         pct_out = (n_out / o_out - 1) * 100
         pct_in = (n_in / o_in - 1) * 100
-        # Nếu là Quần short (Inseam < 15") và ống quần biến động mạnh hơn dài ngoài -> lấy trung bình cả 2
         if o_in < 15.0:
             len_pct = (pct_out + pct_in) / 2
         else:
@@ -581,22 +575,15 @@ def calculate_full_poms(df_input, specs, old_dm):
         o_in = valid_old["Inseam - Dài quần trong"]
         n_in = valid_new["Inseam - Dài quần trong"]
         if rise_names:
-            # Luôn cộng Đáy TB + Inseam khi thiếu Outseam để tránh tăng/giảm ảo tỷ lệ %
             avg_rise_old = sum(valid_old[r] for r in rise_names) / len(rise_names)
             avg_rise_new = sum(valid_new[r] for r in rise_names) / len(rise_names)
             len_pct = ((avg_rise_new + n_in) / (avg_rise_old + o_in) - 1) * 100
         else:
             len_pct = (n_in / o_in - 1) * 100
-
-        else:
-            avg_rise_old = sum(valid_old[r] for r in rise_names) / len(rise_names)
-            avg_rise_new = sum(valid_new[r] for r in rise_names) / len(rise_names)
-            len_pct = ((avg_rise_new + n_in) / (avg_rise_old + o_in) - 1) * 100
     else:
         len_pct = group_active_avg("length")
 
-
-    # 2. Tính tỷ lệ thay đổi Chiều rộng CÓ TRỌNG SỐ (Ưu tiên Mông/Đùi hoặc Ngực/Vai)
+    # 2. Tính tỷ lệ thay đổi Chiều rộng CÓ TRỌNG SỐ
     active_widths = [n for n in grouped_valid.get("width", []) if abs(valid_changes[n]) > 0.01]
     if active_widths:
         w_map = width_weights(active_widths)
@@ -606,7 +593,7 @@ def calculate_full_poms(df_input, specs, old_dm):
 
     rise_pct = group_active_avg("rise")
 
-    # 3. Công thức cân bằng sát thực tế cắt may (điều hòa hệ số 0.75)
+    # 3. Công thức cân bằng sát thực tế cắt may
     raw_pct = (len_pct * 0.65) + wid_pct + (rise_pct * 0.5) + extra_detail_pct
     final_pct = raw_pct * 0.75
     pred_dm = old_dm * (1 + final_pct / 100)
