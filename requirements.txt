@@ -3,3 +3,7 @@ pandas
 pdfplumber
 pdf2image
 google-genai
+streamlit
+pandas
+openpyxl
+pdfplumber
