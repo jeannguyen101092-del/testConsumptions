@@ -593,9 +593,16 @@ def calculate_full_poms(df_input, specs, old_dm):
 
     rise_pct = group_active_avg("rise")
 
-    # 3. Công thức cân bằng sát thực tế cắt may
-    raw_pct = (len_pct * 0.65) + wid_pct + (rise_pct * 0.5) + extra_detail_pct
-    final_pct = raw_pct * 0.75
+    # 3. Công thức cân bằng sát thực tế cắt may (Tự điều chỉnh khi chiều dài biến động mạnh > 25%)
+    if abs(len_pct) > 25.0:
+        len_weight = 0.85
+        harmony_factor = 1.00
+    else:
+        len_weight = 0.65
+        harmony_factor = 0.75
+
+    raw_pct = (len_pct * len_weight) + wid_pct + (rise_pct * 0.5) + extra_detail_pct
+    final_pct = raw_pct * harmony_factor
     pred_dm = old_dm * (1 + final_pct / 100)
 
     summary_df = pd.DataFrame([{
