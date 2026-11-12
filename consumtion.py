@@ -260,8 +260,13 @@ CATEGORIES = {
     },
 }
 def parse_number(value):
-    if value is None or pd.isna(value):
+    if value is None or isinstance(value, (list, tuple, dict)):
         return 0.0
+    try:
+        if pd.isna(value):
+            return 0.0
+    except Exception:
+        pass
     s = str(value).strip().replace(" ", "")
     if not s:
         return 0.0
@@ -302,7 +307,7 @@ def extract_raw_pairs_from_file(uploaded_file):
                         if len(c) >= 3:
                             text_parts.append(c)
                 if text_parts and num_parts:
-                    pairs.append((max(text_parts, key=len), num_parts))
+                    pairs.append((max(text_parts, key=len), num_parts[0]))
     elif fname.endswith(".pdf") and pdfplumber is not None:
         with pdfplumber.open(uploaded_file) as pdf:
             for page in pdf.pages:
@@ -311,7 +316,7 @@ def extract_raw_pairs_from_file(uploaded_file):
                     nums = re.findall(r"\b\d+(?:[.,]\d+)?\b", line)
                     label = re.sub(r"\b\d+(?:[.,]\d+)?\b", "", line).strip(" :-–—|")
                     if len(label) >= 3 and nums:
-                        val = parse_number(nums)
+                        val = parse_number(nums[0])
                         if 0 < val < 200:
                             pairs.append((label, val))
     return pairs
@@ -331,8 +336,10 @@ def match_tp_to_full_poms(uploaded_file, specs):
                 if score > best_score:
                     best_score, best_pom = score, full_name
         if best_pom and best_score >= 0.62 and best_pom not in matched:
-            matched[best_pom] = val
+            matched[best_pom] = float(val)
     return matched
+
+
 def width_weights(width_names):
     raw = {}
     for name in width_names:
