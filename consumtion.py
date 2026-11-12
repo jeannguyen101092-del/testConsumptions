@@ -270,6 +270,15 @@ def parse_number(value):
     s = str(value).strip().replace(" ", "")
     if not s:
         return 0.0
+    # Xử lý phân số trong Techpack hệ inch (ví dụ: "14 3/4" -> 14.75 hoặc "3/8" -> 0.375)
+    raw_str = str(value).strip()
+    frac_match = re.match(r"^(\d+)\s+(\d+)/(\d+)$", raw_str)
+    if frac_match:
+        return float(frac_match.group(1)) + float(frac_match.group(2)) / float(frac_match.group(3))
+    only_frac = re.match(r"^(\d+)/(\d+)$", raw_str)
+    if only_frac and float(only_frac.group(2)) != 0:
+        return float(only_frac.group(1)) / float(only_frac.group(2))
+
     if "," in s and "." in s:
         if s.rfind(",") < s.rfind("."):
             s = s.replace(",", "")
@@ -284,59 +293,89 @@ def normalize_text(s):
     s = re.sub(r"[^a-z0-9àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ\s]", " ", s)
     return re.sub(r"\s+", " ", s).strip()
 
-def extract_raw_pairs_from_file(uploaded_file):
-    pairs = []
+def extract_table_rows_from_file(uploaded_file):
+    """Đọc chuẩn từng hàng và các cột số đo từ bảng trong PDF hoặc Excel."""
+    extracted = []
     if uploaded_file is None:
-        return pairs
+        return extracted
+
     fname = uploaded_file.name.lower()
+    rows_to_process = []
+
     if fname.endswith((".xlsx", ".xls")):
         xls = pd.ExcelFile(uploaded_file)
         for sheet in xls.sheet_names:
             df = xls.parse(sheet, header=None)
-            for _, row in df.iterrows():
-                cells = [str(c).strip() for c in row.tolist() if pd.notna(c) and str(c).strip() != ""]
-                if len(cells) < 2:
-                    continue
-                text_parts, num_parts = [], []
-                for c in cells:
-                    try:
-                        val = parse_number(c)
-                        if 0 < val < 200:
-                            num_parts.append(val)
-                    except Exception:
-                        if len(c) >= 3:
-                            text_parts.append(c)
-                if text_parts and num_parts:
-                    pairs.append((max(text_parts, key=len), num_parts[0]))
+            rows_to_process.extend(df.values.tolist())
+
     elif fname.endswith(".pdf") and pdfplumber is not None:
         with pdfplumber.open(uploaded_file) as pdf:
             for page in pdf.pages:
-                text = page.extract_text() or ""
-                for line in text.splitlines():
-                    nums = re.findall(r"\b\d+(?:[.,]\d+)?\b", line)
-                    label = re.sub(r"\b\d+(?:[.,]\d+)?\b", "", line).strip(" :-–—|")
-                    if len(label) >= 3 and nums:
-                        val = parse_number(nums[0])
-                        if 0 < val < 200:
-                            pairs.append((label, val))
-    return pairs
+                tables = page.extract_tables()
+                if tables:
+                    for tbl in tables:
+                        rows_to_process.extend(tbl)
+                else:
+                    text = page.extract_text() or ""
+                    for line in text.splitlines():
+                        rows_to_process.append([line])
 
-def match_tp_to_full_poms(uploaded_file, specs):
-    raw_pairs = extract_raw_pairs_from_file(uploaded_file)
+    for row in rows_to_process:
+        cells = [str(c).replace("\n", " ").strip() for c in row if c is not None and str(c).strip() != ""]
+        if len(cells) < 2:
+            continue
+
+        # Bỏ qua cột đầu tiên nếu chỉ là số thứ tự dòng (1, 2, 3...) hoặc mã POM ngắn (A, B, 01, 02...)
+        if re.match(r"^(\d{1,2}|[A-Z]{1,3}\d{0,2})[.)]?$", cells[0]):
+            cells = cells[1:]
+
+        text_cols = []
+        size_nums = []
+        for c in cells:
+            # Bỏ qua cột dung sai (+/- 0.5, ±0.25...)
+            if any(sym in c for sym in ["±", "+/-", "+-", "%"]):
+                continue
+            try:
+                val = parse_number(c)
+                if 0 < val < 200:
+                    size_nums.append(val)
+            except Exception:
+                clean_txt = re.sub(r"[^a-zA-ZÀ-ỹ\s]", "", c).strip()
+                if len(clean_txt) >= 3:
+                    text_cols.append(c)
+
+        if text_cols and size_nums:
+            pom_name = max(text_cols, key=len)
+            extracted.append((pom_name, size_nums))
+
+    return extracted
+
+def match_tp_to_full_poms(uploaded_file, specs, size_col_idx=0):
+    """Khớp tên POM và lấy đúng cột size được chọn."""
+    raw_rows = extract_table_rows_from_file(uploaded_file)
     matched = {}
-    if not raw_pairs:
+    if not raw_rows:
         return matched
+
     spec_keywords = {full: [normalize_text(p) for p in full.split("-") if normalize_text(p)] for full, _ in specs}
-    for raw_label, val in raw_pairs:
+
+    for raw_label, num_list in raw_rows:
         norm_label = normalize_text(raw_label)
         best_pom, best_score = None, 0.0
+
         for full_name, kw_list in spec_keywords.items():
             for kw in kw_list:
-                score = 0.95 if (kw in norm_label or norm_label in kw) else difflib.SequenceMatcher(None, kw, norm_label).ratio()
+                if kw in norm_label or norm_label in kw:
+                    score = 0.95
+                else:
+                    score = difflib.SequenceMatcher(None, kw, norm_label).ratio()
                 if score > best_score:
                     best_score, best_pom = score, full_name
-        if best_pom and best_score >= 0.62 and best_pom not in matched:
-            matched[best_pom] = float(val)
+
+        if best_pom and best_score >= 0.65 and best_pom not in matched:
+            idx = min(size_col_idx, len(num_list) - 1)
+            matched[best_pom] = float(num_list[idx])
+
     return matched
 
 
