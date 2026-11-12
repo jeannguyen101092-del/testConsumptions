@@ -290,35 +290,72 @@ def normalize_text(s):
     s = re.sub(r"[^a-z0-9àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ\s]", " ", s)
     return re.sub(r"\s+", " ", s).strip()
 
-# Bộ quy tắc khớp chính xác theo đúng thuật ngữ Techpack của bạn
+# Bộ quy tắc khớp chính xác cho cả Quần, Áo & Váy (đã chặn các từ khóa phụ gây nhiễu)
 POM_RULES = {
-    "Outseam - Dài quần ngoài": (["outseam", "side seam", "side length", "leg 015"], ["pocket", "flap"]),
-    "Inseam - Dài quần trong": (["inseam", "inside leg", "leg 012"], ["pocket"]),
-    "Waist - Vòng eo / Lưng quần": (["waist width", "waist"], ["band", "pocket", "drop", "elastic", "loop", "level"]),
-    "Hip - Vòng mông": (["low hip width", "hip width", "high hip width", "hip", "seat"], ["level", "pocket", "flap", "placement"]),
-    "Thigh - Rộng đùi": (["thigh width", "thigh"], ["pocket", "level"]),
-    "Knee - Rộng gối": (["knee width", "knee"], ["pocket", "level"]),
-    "Leg Opening - Rộng ống": (["leg opening", "bottom opening", "hem opening"], ["pocket"]),
-    "Front Rise - Cao đáy trước": (["front rise", "cf rise"], ["crotch"]),
-    "Back Rise - Cao đáy sau": (["back rise", "cb rise"], ["crotch"]),
-    "Waistband Height - Cao bản lưng / cạp": (["waistband width", "waistband height", "waistband"], ["pocket"]),
+    # --- NHÓM QUẦN ---
+    "Outseam - Dài quần ngoài": (["outseam", "side seam", "side length", "total length", "leg 015"], ["pocket", "flap", "inseam", "opening", "slit"]),
+    "Inseam - Dài quần trong": (["inseam", "inside leg", "crotch to hem", "leg 012"], ["pocket", "outseam", "opening", "leg 015"]),
+    "Waist - Vòng eo / Lưng quần": (["waist width", "waist"], ["band", "pocket", "drop", "elastic", "loop", "level", "below", "edge", "stitch", "seam", "placement"]),
+    "Hip - Vòng mông": (["low hip width", "hip width", "high hip width", "hip", "seat"], ["level", "pocket", "flap", "placement", "below", "seam"]),
+    "Thigh - Rộng đùi": (["thigh width", "thigh"], ["pocket", "level", "below", "seam"]),
+    "Knee - Rộng gối": (["knee width", "knee"], ["pocket", "level", "below", "seam"]),
+    "Leg Opening - Rộng ống": (["leg opening", "bottom opening", "hem opening"], ["pocket", "height", "turn"]),
+    "Front Rise - Cao đáy trước": (["front rise", "cf rise"], ["crotch", "seam"]),
+    "Back Rise - Cao đáy sau": (["back rise", "cb rise"], ["crotch", "seam"]),
+    "Waistband Height - Cao bản lưng / cạp": (["waistband width", "waistband height", "waistband"], ["pocket", "length"]),
     "Fly Length - Dài moi / dây kéo": (["fly length", "zipper length", "j stitch length"], ["width"]),
     "Fly Width - Rộng moi": (["fly width", "j stitch width"], ["length"]),
-    "Front Pocket Opening - Miệng túi trước": (["pocket opening along waist", "front pocket opening"], ["coin", "back"]),
+    "Front Pocket Opening - Miệng túi trước": (["pocket opening along waist", "front pocket opening", "side pocket opening"], ["coin", "back"]),
     "Coin Pocket Width - Rộng túi đồng hồ": (["coin pocket width"], ["height", "length"]),
     "Coin Pocket Height - Cao túi đồng hồ": (["coin pocket height", "coin pocket length"], ["width"]),
-    "Back Pocket Width - Rộng túi sau": (["back pocket width"], ["flap", "height"]),
-    "Back Pocket Height - Cao túi sau": (["back pocket height", "back pocket length"], ["flap", "width"]),
+    "Back Pocket Width - Rộng túi sau": (["back pocket width"], ["flap", "height", "placement"]),
+    "Back Pocket Height - Cao túi sau": (["back pocket height", "back pocket length"], ["flap", "width", "placement"]),
     "Back Pocket Flap Width - Rộng nắp túi sau": (["back pocket flap width", "flap width"], ["height"]),
     "Back Pocket Flap Height - Cao nắp túi sau": (["back pocket flap height", "flap height"], ["width"]),
-    "Body Length Front - Dài áo trước": (["front length", "cf length", "body length front"], ["pocket"]),
-    "Body Length Back - Dài áo sau": (["back length", "cb length", "body length back", "hps"], ["pocket"]),
-    "Body Length - Dài áo": (["body length", "hps", "cb length", "garment length"], ["sleeve", "pocket"]),
-    "Chest - Vòng ngực": (["chest width", "chest", "bust"], ["pocket", "flap"]),
-    "Shoulder - Ngang vai": (["across shoulder", "shoulder width", "shoulder"], ["seam", "drop"]),
-    "Sleeve Length - Dài tay": (["sleeve length"], ["opening", "pocket"]),
-    "Hem Width - Rộng lai áo": (["hem width", "bottom width", "sweep"], ["turn", "height"]),
+
+    # --- NHÓM ÁO & VÁY / ĐẦM ---
+    "Body Length Front - Dài áo trước": (["front length", "cf length", "body length front"], ["pocket", "zipper", "placket", "drop"]),
+    "Body Length Back - Dài áo sau": (["back length", "cb length", "body length back", "hps"], ["pocket", "drop", "yoke"]),
+    "Body Length - Dài áo": (["body length", "hps", "cb length", "garment length"], ["sleeve", "pocket", "drop", "slit"]),
+    "Body Length - Dài váy / đầm": (["body length", "dress length", "skirt length", "hps", "cb length"], ["sleeve", "pocket", "slit"]),
+    "Chest - Vòng ngực": (["chest width", "chest", "bust", "across chest"], ["pocket", "flap", "below", "placement", "seam"]),
+    "Waist - Vòng eo áo": (["waist width", "waist"], ["band", "pocket", "below", "seam", "placement"]),
+    "Waist - Vòng eo": (["waist width", "waist"], ["band", "pocket", "below", "seam", "placement"]),
+    "Shoulder - Ngang vai": (["across shoulder", "shoulder width", "shoulder"], ["seam", "drop", "slope", "forward"]),
+    "Bicep - Rộng bắp tay": (["bicep", "muscle", "upper arm"], ["below", "seam"]),
+    "Sleeve Length - Dài tay": (["sleeve length", "overarm"], ["opening", "pocket", "placket", "short"]),
+    "Sleeve Length - Dài tay dài": (["long sleeve length", "sleeve length"], ["opening", "pocket", "short"]),
+    "Short Sleeve Length - Dài tay ngắn": (["short sleeve length"], ["opening", "pocket"]),
+    "Sleeve Opening - Rộng cửa tay": (["sleeve opening", "cuff opening"], ["height", "rib"]),
+    "Hem Width - Rộng lai áo": (["hem width", "bottom width", "sweep"], ["turn", "height", "rib"]),
+    "Hem Width - Rộng lai váy": (["hem width", "bottom width", "sweep"], ["turn", "height"]),
+    "Collar Length - Dài lá cổ": (["collar length", "collar spread"], ["height", "band"]),
+    "Cuff Height - Cao măng sét": (["cuff height", "cuff width"], ["opening"]),
+    "Hood Height - Cao mũ / nón": (["hood height", "hood length"], ["width"]),
+    "Hood Width - Rộng mũ / nón": (["hood width", "hood depth"], ["height"]),
+    "Chest Pocket Width - Rộng túi ngực": (["chest pocket width", "pocket width"], ["height", "flap", "placement"]),
+    "Chest Pocket Height - Cao túi ngực": (["chest pocket height", "pocket height"], ["width", "flap", "placement"]),
 }
+
+# Ngưỡng kích thước tối thiểu (inch) để chặn bắt nhầm số đo vị trí / dung sai (0.125, 0.75, 1.5...)
+MIN_POM_VALUES = {
+    "Waist": 8.0,
+    "Hip": 10.0,
+    "Chest": 10.0,
+    "Thigh": 6.0,
+    "Knee": 5.0,
+    "Leg Opening": 4.0,
+    "Outseam": 8.0,
+    "Inseam": 3.0,
+    "Body Length": 10.0,
+    "Shoulder": 8.0,
+    "Hem Width": 8.0,
+    "Bicep": 4.0,
+    "Sleeve Length": 4.0,
+    "Front Rise": 5.0,
+    "Back Rise": 7.0,
+}
+
 
 def extract_table_rows_from_file(uploaded_file):
     extracted = []
