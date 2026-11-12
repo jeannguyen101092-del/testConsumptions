@@ -597,6 +597,7 @@ if st.button("🚀 Tính toán & Dự đoán định mức mới", type="primary
 
         st.subheader("4. KẾT QUẢ DỰ ĐOÁN ĐỊNH MỨC MỚI")
         res = df_summary.iloc
+
         m1, m2, m3, m4 = st.columns(4)
         m1.metric("ĐM cũ (yd/pcs)", f"{res['ĐM cũ (yd/pcs)']:.4f}")
         m2.metric("Tỷ lệ thay đổi tổng hợp", f"{res['Tỷ lệ thay đổi tổng hợp (%)']:+.2f}%")
