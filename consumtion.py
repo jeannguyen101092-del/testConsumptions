@@ -517,22 +517,9 @@ def calculate_full_poms(df_input, specs, old_dm, group_weights):
 
     return pd.DataFrame(summary_rows), pd.DataFrame(detail_rows)
 st.title("🧵 APP DỰ ĐOÁN ĐỊNH MỨC VẢI (FULL POM & UPLOAD TECHPACK)")
-st.caption("Upload file Techpack (Excel/PDF), chọn đúng cột Size chuẩn để tự động nhận diện thông số. Chi tiết không có để = 0 sẽ không đưa vào so sánh.")
+st.caption("Upload file Techpack (Excel/PDF) để tự động lấy tên mã hàng và thông số. Chi tiết không có để = 0 sẽ không đưa vào so sánh.")
 
-st.subheader("1. THÔNG TIN MÃ HÀNG")
-col_cat, col_old, col_new, col_dm = st.columns([1.2, 1, 1, 1])
-with col_cat:
-    category = st.selectbox("Chủng loại sản phẩm", options=list(CATEGORIES.keys()), index=0)
-with col_old:
-    old_code = st.text_input("Mã hàng cũ", "R06-494141")
-with col_new:
-    new_code = st.text_input("Mã hàng mới", "R06-494148")
-with col_dm:
-    old_dm = st.number_input("ĐM cũ (yd/pcs)", min_value=0.0001, value=0.8240, step=0.001, format="%.4f")
-
-cfg = CATEGORIES[category]
-
-st.subheader("2. UPLOAD FILE TECHPACK & CHỌN CỘT SIZE")
+st.subheader("1. UPLOAD FILE TECHPACK & CHỌN CỘT SIZE")
 size_col_idx = st.selectbox(
     "Chọn vị trí cột Size cần lấy trong file Techpack (Đã tự động bỏ qua cột Dung sai 0.25):",
     options=list(range(10)),
@@ -540,26 +527,43 @@ size_col_idx = st.selectbox(
     format_func=lambda x: f"Size thứ {x + 1} (Ví dụ: 1 = XS, 2 = S, 3 = M/Base Size, 4 = L...)",
 )
 
-
 up1, up2 = st.columns(2)
 with up1:
-    tp_old_file = st.file_uploader(f"📄 Upload Techpack Mã cũ ({old_code})", type=["xlsx", "xls", "pdf"], key="tp_old")
+    tp_old_file = st.file_uploader("📄 Upload Techpack Mã cũ", type=["xlsx", "xls", "pdf"], key="tp_old")
 with up2:
-    tp_new_file = st.file_uploader(f"📄 Upload Techpack Mã mới ({new_code})", type=["xlsx", "xls", "pdf"], key="tp_new")
+    tp_new_file = st.file_uploader("📄 Upload Techpack Mã mới", type=["xlsx", "xls", "pdf"], key="tp_new")
+
+# Tự động tách tên mã hàng từ tên file vừa upload (bỏ đuôi .pdf / .xlsx)
+auto_old_code = tp_old_file.name.rsplit(".", 1)[0] if tp_old_file else "R06-494141"
+auto_new_code = tp_new_file.name.rsplit(".", 1)[0] if tp_new_file else "R06-494148"
+
+st.subheader("2. THÔNG TIN MÃ HÀNG")
+col_cat, col_old, col_new, col_dm = st.columns([1.2, 1, 1, 1])
+with col_cat:
+    category = st.selectbox("Chủng loại sản phẩm", options=list(CATEGORIES.keys()), index=0)
+with col_old:
+    old_code = st.text_input("Mã hàng cũ", value=auto_old_code, key=f"old_code_{auto_old_code}")
+with col_new:
+    new_code = st.text_input("Mã hàng mới", value=auto_new_code, key=f"new_code_{auto_new_code}")
+with col_dm:
+    old_dm = st.number_input("ĐM cũ (yd/pcs)", min_value=0.0001, value=0.8240, step=0.001, format="%.4f")
+
+cfg = CATEGORIES[category]
 
 old_tp_data, old_debug = match_tp_to_full_poms(tp_old_file, cfg["specs"], size_col_idx) if tp_old_file else ({}, [])
 new_tp_data, new_debug = match_tp_to_full_poms(tp_new_file, cfg["specs"], size_col_idx) if tp_new_file else ({}, [])
 
 if tp_old_file or tp_new_file:
-    st.success(f"✅ Đã tự động nhận diện **{len(old_tp_data)}** POM từ TP Mã cũ và **{len(new_tp_data)}** POM từ TP Mã mới.")
-    with st.expander("🔍 BẤM VÀO ĐÂY ĐỂ XEM DỮ LIỆU GỐC ĐỌC ĐƯỢC TỪ FILE PDF", expanded=True):
+    st.success(f"✅ Đã nhận diện **{len(old_tp_data)}** POM từ **{old_code}** và **{len(new_tp_data)}** POM từ **{new_code}**.")
+    with st.expander("🔍 BẤM VÀO ĐÂY ĐỂ XEM DỮ LIỆU GỐC ĐỌC ĐƯỢC TỪ FILE PDF", expanded=False):
         d1, d2 = st.columns(2)
         with d1:
-            st.markdown("**Dữ liệu gốc TP Mã cũ:**")
+            st.markdown(f"**Dữ liệu gốc TP Mã cũ ({old_code}):**")
             st.dataframe(pd.DataFrame(old_debug), use_container_width=True, hide_index=True)
         with d2:
-            st.markdown("**Dữ liệu gốc TP Mã mới:**")
+            st.markdown(f"**Dữ liệu gốc TP Mã mới ({new_code}):**")
             st.dataframe(pd.DataFrame(new_debug), use_container_width=True, hide_index=True)
+
 st.subheader("3. BẢNG THÔNG SỐ FULL POM (ĐỂ = 0 NẾU KHÔNG CÓ)")
 has_uploaded = bool(tp_old_file or tp_new_file)
 
