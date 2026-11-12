@@ -524,7 +524,7 @@ cfg = CATEGORIES[category]
 st.subheader("2. UPLOAD FILE TECHPACK & CHỌN CỘT SIZE")
 size_col_idx = st.selectbox(
     "Chọn vị trí cột Size cần lấy trong file Techpack (Tính từ cột số đo đầu tiên sau tên POM):",
-    options=,
+    options=list(range(10)),
     index=0,
     format_func=lambda x: f"Cột số đo thứ {x + 1}",
 )
@@ -548,7 +548,6 @@ if tp_old_file or tp_new_file:
         with d2:
             st.markdown("**Dữ liệu gốc TP Mã mới:**")
             st.dataframe(pd.DataFrame(new_debug), use_container_width=True, hide_index=True)
-
 st.subheader("3. BẢNG THÔNG SỐ FULL POM (ĐỂ = 0 NẾU KHÔNG CÓ)")
 init_rows = []
 for spec_name, grp in cfg["specs"]:
@@ -577,7 +576,6 @@ edited_df = st.data_editor(
     key=f"editor_{category}_{old_fname}_{new_fname}_{size_col_idx}",
 )
 
-)
 with st.expander("Tùy chỉnh trọng số nhóm (dùng cho Mô hình 2)", expanded=False):
     w1, w2, w3, w4 = st.columns(4)
     w_len = w1.number_input("Nhóm Dài (length)", value=0.40, step=0.05)
