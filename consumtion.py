@@ -577,11 +577,17 @@ def calculate_full_poms(df_input, specs, old_dm):
         o_out = valid_old["Outseam - Dài quần ngoài"]
         n_out = valid_new["Outseam - Dài quần ngoài"]
         len_pct = (n_out / o_out - 1) * 100
-    elif has_in:
+        elif has_in:
         o_in = valid_old["Inseam - Dài quần trong"]
         n_in = valid_new["Inseam - Dài quần trong"]
-        if o_in < 15.0 or not rise_names:
+        if rise_names:
+            # Luôn cộng Đáy TB + Inseam khi thiếu Outseam để tránh tăng/giảm ảo tỷ lệ %
+            avg_rise_old = sum(valid_old[r] for r in rise_names) / len(rise_names)
+            avg_rise_new = sum(valid_new[r] for r in rise_names) / len(rise_names)
+            len_pct = ((avg_rise_new + n_in) / (avg_rise_old + o_in) - 1) * 100
+        else:
             len_pct = (n_in / o_in - 1) * 100
+
         else:
             avg_rise_old = sum(valid_old[r] for r in rise_names) / len(rise_names)
             avg_rise_new = sum(valid_new[r] for r in rise_names) / len(rise_names)
