@@ -271,7 +271,6 @@ def parse_number(value):
     if not raw_str:
         return 0.0
 
-    # Đổi phân số inch (VD: "14 3/4" -> 14.75, "3/8" -> 0.375)
     frac_match = re.match(r"^(\d+)\s+(\d+)/(\d+)$", raw_str)
     if frac_match:
         return float(frac_match.group(1)) + float(frac_match.group(2)) / float(frac_match.group(3))
@@ -291,27 +290,34 @@ def normalize_text(s):
     s = re.sub(r"[^a-z0-9àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ\s]", " ", s)
     return re.sub(r"\s+", " ", s).strip()
 
-# Bộ quy tắc nhận diện chính xác từng POM (ưu tiên từ khóa chính, loại trừ từ khóa nhiễu)
+# Bộ quy tắc khớp chính xác theo đúng thuật ngữ Techpack của bạn
 POM_RULES = {
-    "Outseam - Dài quần ngoài": (["outseam", "side seam", "side length", "dai quan ngoai"], ["pocket", "flap", "slit"]),
-    "Inseam - Dài quần trong": (["inseam", "inside leg", "dai quan trong"], ["pocket"]),
-    "Waist - Vòng eo / Lưng quần": (["waist"], ["band", "pocket", "drop", "elastic", "loop"]),
-    "Hip - Vòng mông": (["hip", "seat"], ["pocket", "flap"]),
-    "Thigh - Rộng đùi": (["thigh"], ["pocket"]),
-    "Knee - Rộng gối": (["knee"], ["pocket"]),
-    "Leg Opening - Rộng ống": (["leg opening", "bottom opening", "hem opening", "rong ong"], ["pocket"]),
-    "Front Rise - Cao đáy trước": (["front rise", "cf rise", "cao day truoc"], []),
-    "Back Rise - Cao đáy sau": (["back rise", "cb rise", "cao day sau"], []),
-    "Waistband Height - Cao bản lưng / cạp": (["waistband", "ban lung", "cao cap"], ["pocket"]),
-    "Fly Length - Dài moi / dây kéo": (["fly length", "zipper length", "dai moi"], ["width"]),
-    "Fly Width - Rộng moi": (["fly width", "rong moi"], ["length"]),
-    "Body Length Front - Dài áo trước": (["front length", "cf length", "body length front", "dai ao truoc"], ["pocket", "zipper"]),
-    "Body Length Back - Dài áo sau": (["back length", "cb length", "body length back", "hps", "dai ao sau"], ["pocket"]),
-    "Body Length - Dài áo": (["body length", "hps", "cb length", "garment length", "dai ao"], ["sleeve", "pocket"]),
-    "Chest - Vòng ngực": (["chest", "bust", "vong nguc"], ["pocket", "flap"]),
-    "Shoulder - Ngang vai": (["shoulder", "ngang vai"], ["seam", "drop"]),
-    "Sleeve Length - Dài tay": (["sleeve length", "dai tay"], ["opening", "pocket"]),
-    "Hem Width - Rộng lai áo": (["hem width", "bottom width", "sweep", "rong lai"], ["turn", "height"]),
+    "Outseam - Dài quần ngoài": (["outseam", "side seam", "side length", "leg 015"], ["pocket", "flap"]),
+    "Inseam - Dài quần trong": (["inseam", "inside leg", "leg 012"], ["pocket"]),
+    "Waist - Vòng eo / Lưng quần": (["waist width", "waist"], ["band", "pocket", "drop", "elastic", "loop", "level"]),
+    "Hip - Vòng mông": (["low hip width", "hip width", "high hip width", "hip", "seat"], ["level", "pocket", "flap", "placement"]),
+    "Thigh - Rộng đùi": (["thigh width", "thigh"], ["pocket", "level"]),
+    "Knee - Rộng gối": (["knee width", "knee"], ["pocket", "level"]),
+    "Leg Opening - Rộng ống": (["leg opening", "bottom opening", "hem opening"], ["pocket"]),
+    "Front Rise - Cao đáy trước": (["front rise", "cf rise"], ["crotch"]),
+    "Back Rise - Cao đáy sau": (["back rise", "cb rise"], ["crotch"]),
+    "Waistband Height - Cao bản lưng / cạp": (["waistband width", "waistband height", "waistband"], ["pocket"]),
+    "Fly Length - Dài moi / dây kéo": (["fly length", "zipper length", "j stitch length"], ["width"]),
+    "Fly Width - Rộng moi": (["fly width", "j stitch width"], ["length"]),
+    "Front Pocket Opening - Miệng túi trước": (["pocket opening along waist", "front pocket opening"], ["coin", "back"]),
+    "Coin Pocket Width - Rộng túi đồng hồ": (["coin pocket width"], ["height", "length"]),
+    "Coin Pocket Height - Cao túi đồng hồ": (["coin pocket height", "coin pocket length"], ["width"]),
+    "Back Pocket Width - Rộng túi sau": (["back pocket width"], ["flap", "height"]),
+    "Back Pocket Height - Cao túi sau": (["back pocket height", "back pocket length"], ["flap", "width"]),
+    "Back Pocket Flap Width - Rộng nắp túi sau": (["back pocket flap width", "flap width"], ["height"]),
+    "Back Pocket Flap Height - Cao nắp túi sau": (["back pocket flap height", "flap height"], ["width"]),
+    "Body Length Front - Dài áo trước": (["front length", "cf length", "body length front"], ["pocket"]),
+    "Body Length Back - Dài áo sau": (["back length", "cb length", "body length back", "hps"], ["pocket"]),
+    "Body Length - Dài áo": (["body length", "hps", "cb length", "garment length"], ["sleeve", "pocket"]),
+    "Chest - Vòng ngực": (["chest width", "chest", "bust"], ["pocket", "flap"]),
+    "Shoulder - Ngang vai": (["across shoulder", "shoulder width", "shoulder"], ["seam", "drop"]),
+    "Sleeve Length - Dài tay": (["sleeve length"], ["opening", "pocket"]),
+    "Hem Width - Rộng lai áo": (["hem width", "bottom width", "sweep"], ["turn", "height"]),
 }
 
 def extract_table_rows_from_file(uploaded_file):
@@ -327,7 +333,6 @@ def extract_table_rows_from_file(uploaded_file):
         for sheet in xls.sheet_names:
             df = xls.parse(sheet, header=None)
             rows_to_process.extend(df.values.tolist())
-
     elif fname.endswith(".pdf") and pdfplumber is not None:
         with pdfplumber.open(uploaded_file) as pdf:
             for page in pdf.pages:
@@ -345,9 +350,8 @@ def extract_table_rows_from_file(uploaded_file):
         if len(cells) < 2:
             continue
 
-        # Bỏ cột STT hoặc Mã POM ngắn ở đầu dòng
-        if re.match(r"^(\d{1,2}|[A-Z]{1,3}\d{0,2})[.)]?$", cells[0]):
-
+        # Bỏ cột STT ở đầu nếu là số nguyên nhỏ (1..99)
+        if re.match(r"^\d{1,2}[.)]?$", cells[0]):
             cells = cells[1:]
 
         text_cols, size_nums = [], []
@@ -356,15 +360,21 @@ def extract_table_rows_from_file(uploaded_file):
                 continue
             try:
                 val = parse_number(c)
-                if 0.25 <= val <= 150:
+                if 0.1 <= val <= 150:
                     size_nums.append(val)
             except Exception:
-                clean_txt = re.sub(r"[^a-zA-ZÀ-ỹ\s]", "", c).strip()
+                clean_txt = re.sub(r"[^a-zA-ZÀ-ỹ0-9\-\s]", "", c).strip()
                 if len(clean_txt) >= 3:
                     text_cols.append(c)
 
+        # Tự động loại bỏ cột đầu tiên nếu đó là Dung sai (Tolerance <= 0.75 và nhỏ hơn hẳn các size phía sau)
+        if len(size_nums) >= 3 and size_nums[0] <= 0.75 and size_nums[1] > size_nums[0] * 2:
+            size_nums = size_nums[1:]
+
         if text_cols and size_nums:
-            extracted.append((max(text_cols, key=len), size_nums))
+            # Ghép mã POM (nếu có) với tên mô tả để không sót dòng như LEG-015
+            full_label = " - ".join(text_cols[:2]) if len(text_cols) >= 2 else text_cols[0]
+            extracted.append((full_label, size_nums))
 
     return extracted
 
@@ -397,15 +407,15 @@ def match_tp_to_full_poms(uploaded_file, specs, size_col_idx=0):
             if score > best_score:
                 best_score, best_pom = score, full_name
 
-        status_str = f"✅ {best_pom}" if (best_pom and best_score >= 0.72) else "❌ Chưa khớp"
+        status_str = f"✅ {best_pom}" if (best_pom and best_score >= 0.75) else "❌ Bỏ qua"
         debug_rows.append({
             "Dòng đọc từ Techpack": raw_label,
-            "Các cột số đọc được": str(num_list),
+            "Các Size (đã bỏ Dung sai)": str(num_list),
             "Số đã lấy": chosen_val,
             "Trạng thái": status_str,
         })
 
-        if best_pom and best_score >= 0.72 and best_pom not in matched:
+        if best_pom and best_score >= 0.75 and best_pom not in matched:
             matched[best_pom] = chosen_val
 
     return matched, debug_rows
@@ -524,11 +534,12 @@ cfg = CATEGORIES[category]
 
 st.subheader("2. UPLOAD FILE TECHPACK & CHỌN CỘT SIZE")
 size_col_idx = st.selectbox(
-    "Chọn vị trí cột Size cần lấy trong file Techpack (Tính từ cột số đo đầu tiên sau tên POM):",
+    "Chọn vị trí cột Size cần lấy trong file Techpack (Đã tự động bỏ qua cột Dung sai 0.25):",
     options=list(range(10)),
-    index=0,
-    format_func=lambda x: f"Cột số đo thứ {x + 1}",
+    index=2,
+    format_func=lambda x: f"Size thứ {x + 1} (Ví dụ: 1 = XS, 2 = S, 3 = M/Base Size, 4 = L...)",
 )
+
 
 up1, up2 = st.columns(2)
 with up1:
