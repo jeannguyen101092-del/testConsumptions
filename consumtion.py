@@ -290,13 +290,12 @@ def normalize_text(s):
     s = re.sub(r"[^a-z0-9àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ\s]", " ", s)
     return re.sub(r"\s+", " ", s).strip()
 
-# Bộ quy tắc khớp chính xác cho cả Quần, Áo & Váy (đã chặn các từ khóa phụ gây nhiễu)
 POM_RULES = {
     # --- NHÓM QUẦN ---
-    "Outseam - Dài quần ngoài": (["outseam", "side seam", "side length", "total length", "leg 015"], ["pocket", "flap", "inseam", "opening", "slit"]),
+    "Outseam - Dài quần ngoài": (["outseam", "side seam", "side length", "total length", "leg 015"], ["pocket", "flap", "inseam", "opening", "slit", "fm", "from"]),
     "Inseam - Dài quần trong": (["inseam", "inside leg", "crotch to hem", "leg 012"], ["pocket", "outseam", "opening", "leg 015"]),
-    "Waist - Vòng eo / Lưng quần": (["waist width", "waist"], ["band", "pocket", "drop", "elastic", "loop", "level", "below", "edge", "stitch", "seam", "placement"]),
-    "Hip - Vòng mông": (["low hip width", "hip width", "high hip width", "hip", "seat"], ["level", "pocket", "flap", "placement", "below", "seam"]),
+    "Waist - Vòng eo / Lưng quần": (["waist width", "waist"], ["band", "pocket", "drop", "elastic", "loop", "level", "below", "edge", "stitch", "seam", "placement", "plcmnt", "position", "pitch"]),
+    "Hip - Vòng mông": (["low hip width", "hip width", "high hip width", "hip", "seat"], ["level", "pocket", "flap", "placement", "plcmnt", "below", "seam"]),
     "Thigh - Rộng đùi": (["thigh width", "thigh"], ["pocket", "level", "below", "seam"]),
     "Knee - Rộng gối": (["knee width", "knee"], ["pocket", "level", "below", "seam"]),
     "Leg Opening - Rộng ống": (["leg opening", "bottom opening", "hem opening"], ["pocket", "height", "turn"]),
@@ -305,11 +304,17 @@ POM_RULES = {
     "Waistband Height - Cao bản lưng / cạp": (["waistband width", "waistband height", "waistband"], ["pocket", "length"]),
     "Fly Length - Dài moi / dây kéo": (["fly length", "zipper length", "j stitch length"], ["width"]),
     "Fly Width - Rộng moi": (["fly width", "j stitch width"], ["length"]),
-    "Front Pocket Opening - Miệng túi trước": (["pocket opening along waist", "front pocket opening", "side pocket opening"], ["coin", "back"]),
+
+    # --- TÚI & NẮP TÚI (ĐÃ BỔ SUNG ĐÚNG MẪU FILE CỦA BẠN) ---
+    "Front Pocket Opening - Miệng túi trước": (["front pocket opening", "pocket opening"], ["coin", "back", "side pocket"]),
+    "Front Pocket Bag Length - Dài lót túi trước": (["front pocket height", "front pocket length", "front pocket bag length"], ["width", "opening", "placement", "plcmnt", "fm"]),
+    "Front Pocket Bag Width - Rộng lót túi trước": (["front pocket width", "front pocket bag width"], ["height", "length", "opening", "placement", "plcmnt", "fm"]),
     "Coin Pocket Width - Rộng túi đồng hồ": (["coin pocket width"], ["height", "length"]),
     "Coin Pocket Height - Cao túi đồng hồ": (["coin pocket height", "coin pocket length"], ["width"]),
-    "Back Pocket Width - Rộng túi sau": (["back pocket width"], ["flap", "height", "placement"]),
-    "Back Pocket Height - Cao túi sau": (["back pocket height", "back pocket length"], ["flap", "width", "placement"]),
+    "Back Pocket Width - Rộng túi sau": (["back pocket width"], ["flap", "height", "placement", "plcmnt", "fm"]),
+    "Back Welt Pocket Width - Rộng miệng túi hậu mổ": (["back pocket width", "back welt pocket"], ["flap", "height", "placement", "plcmnt", "fm"]),
+    "Back Pocket Height - Cao túi sau": (["back pocket height", "back pocket length"], ["flap", "width", "placement", "plcmnt", "fm"]),
+    "Back Pocket Bag Length - Dài lót túi hậu": (["back pocket height", "back pocket length"], ["flap", "width", "placement", "plcmnt", "fm"]),
     "Back Pocket Flap Width - Rộng nắp túi sau": (["back pocket flap width", "flap width"], ["height"]),
     "Back Pocket Flap Height - Cao nắp túi sau": (["back pocket flap height", "flap height"], ["width"]),
 
@@ -336,6 +341,7 @@ POM_RULES = {
     "Chest Pocket Width - Rộng túi ngực": (["chest pocket width", "pocket width"], ["height", "flap", "placement"]),
     "Chest Pocket Height - Cao túi ngực": (["chest pocket height", "pocket height"], ["width", "flap", "placement"]),
 }
+
 
 # Ngưỡng kích thước tối thiểu (inch) để chặn bắt nhầm số đo vị trí / dung sai (0.125, 0.75, 1.5...)
 MIN_POM_VALUES = {
