@@ -507,19 +507,33 @@ def calculate_full_poms(df_input, specs, old_dm):
 st.title("🧵 APP DỰ ĐOÁN ĐỊNH MỨC VẢI (FULL POM & UPLOAD TECHPACK)")
 st.caption("Upload file Techpack (Excel/PDF) để tự động lấy tên mã hàng và thông số. Chi tiết không có để = 0 sẽ không đưa vào so sánh.")
 
-st.subheader("1. UPLOAD FILE TECHPACK & CHỌN CỘT SIZE")
+if "reset_counter" not in st.session_state:
+    st.session_state.reset_counter = 0
+
+rc = st.session_state.reset_counter
+
+col_title_up, col_btn_reset = st.columns([3.5, 1])
+with col_title_up:
+    st.subheader("1. UPLOAD FILE TECHPACK & CHỌN CỘT SIZE")
+with col_btn_reset:
+    if st.button("🔄 Xóa dữ liệu & Nạp lại", use_container_width=True):
+        st.session_state.reset_counter += 1
+        st.rerun()
+
 size_col_idx = st.selectbox(
     "Chọn vị trí cột Size cần lấy trong file Techpack (Đã tự động bỏ qua cột Dung sai 0.25):",
     options=list(range(10)),
     index=2,
     format_func=lambda x: f"Size thứ {x + 1} (Ví dụ: 1 = XS, 2 = S, 3 = M/Base Size, 4 = L...)",
+    key=f"size_col_{rc}",
 )
 
 up1, up2 = st.columns(2)
 with up1:
-    tp_old_file = st.file_uploader("📄 Upload Techpack Mã cũ", type=["xlsx", "xls", "pdf"], key="tp_old")
+    tp_old_file = st.file_uploader("📄 Upload Techpack Mã cũ", type=["xlsx", "xls", "pdf"], key=f"tp_old_{rc}")
 with up2:
-    tp_new_file = st.file_uploader("📄 Upload Techpack Mã mới", type=["xlsx", "xls", "pdf"], key="tp_new")
+    tp_new_file = st.file_uploader("📄 Upload Techpack Mã mới", type=["xlsx", "xls", "pdf"], key=f"tp_new_{rc}")
+
 
 # Tự động tách tên mã hàng từ tên file vừa upload (bỏ đuôi .pdf / .xlsx)
 auto_old_code = tp_old_file.name.rsplit(".", 1)[0] if tp_old_file else "R06-494141"
@@ -584,7 +598,8 @@ edited_df = st.data_editor(
         "Mã cũ": st.column_config.NumberColumn("Mã cũ", min_value=0.0, format="%.3f"),
         "Mã mới": st.column_config.NumberColumn("Mã mới", min_value=0.0, format="%.3f"),
     },
-    key=f"pom_table_{category}_{old_fname}_{new_fname}_{size_col_idx}",
+    key=f"pom_table_{category}_{old_fname}_{new_fname}_{size_col_idx}_{rc}",
+
 )
 
 if st.button("🚀 Tính toán & Dự đoán định mức mới", type="primary"):
