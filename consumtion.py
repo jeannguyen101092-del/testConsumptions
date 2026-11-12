@@ -346,7 +346,8 @@ def extract_table_rows_from_file(uploaded_file):
             continue
 
         # Bỏ cột STT hoặc Mã POM ngắn ở đầu dòng
-        if re.match(r"^(\d{1,2}|[A-Z]{1,3}\d{0,2})[.)]?$", cells):
+        if re.match(r"^(\d{1,2}|[A-Z]{1,3}\d{0,2})[.)]?$", cells[0]):
+
             cells = cells[1:]
 
         text_cols, size_nums = [], []
