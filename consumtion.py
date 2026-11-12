@@ -483,15 +483,16 @@ def calculate_full_poms(df_input, specs, old_dm):
     extra_detail_pct = new_only_count * 1.2
 
     # Hàm lấy biến động đại diện của nhóm (tính đúng cả khi tăng (+) lẫn khi giảm (-))
-    def dominant_group_pct(grp_name):
+        # Tính trung bình các thông số thực sự có biến động (khác 0%) trong từng nhóm
+    def group_active_avg(grp_name):
         names = grouped_valid.get(grp_name, [])
         if not names:
             return 0.0
-        vals = [valid_changes[n] for n in names]
-        active_vals = [v for v in vals if abs(v) > 0.01]
+        active_vals = [valid_changes[n] for n in names if abs(valid_changes[n]) > 0.01]
         if not active_vals:
             return 0.0
-        return max(active_vals, key=abs)
+        return sum(active_vals) / len(active_vals)
+
 
     # 1. Tính tỷ lệ thay đổi Chiều dài tổng hợp (Đáy trung bình + Inseam nếu thiếu Outseam)
     len_names = grouped_valid.get("length", [])
