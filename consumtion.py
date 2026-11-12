@@ -487,8 +487,30 @@ def calculate_full_poms(df_input, specs, old_dm):
     max_wid_pct = max([valid_changes[n] for n in grouped_valid.get("width", [])], default=0.0)
     max_rise_pct = max([valid_changes[n] for n in grouped_valid.get("rise", [])], default=0.0)
 
-    final_pct = (max_len_pct + max_wid_pct + max_rise_pct * 0.5) + extra_detail_pct
+        # 1. Tính tỷ lệ thay đổi Chiều dài tổng hợp (Đáy trung bình + Inseam nếu thiếu Outseam)
+    len_names = grouped_valid.get("length", [])
+    rise_names = grouped_valid.get("rise", [])
+
+    if "Outseam - Dài quần ngoài" in len_names:
+        o_out = valid_old["Outseam - Dài quần ngoài"]
+        n_out = valid_new["Outseam - Dài quần ngoài"]
+        len_pct = (n_out / o_out - 1) * 100
+    elif "Inseam - Dài quần trong" in len_names and rise_names:
+        avg_rise_old = sum(valid_old[r] for r in rise_names) / len(rise_names)
+        avg_rise_new = sum(valid_new[r] for r in rise_names) / len(rise_names)
+        total_len_old = avg_rise_old + valid_old["Inseam - Dài quần trong"]
+        total_len_new = avg_rise_new + valid_new["Inseam - Dài quần trong"]
+        len_pct = (total_len_new / total_len_old - 1) * 100
+    else:
+        len_pct = max([valid_changes[n] for n in len_names], default=0.0)
+
+    max_wid_pct = max([valid_changes[n] for n in grouped_valid.get("width", [])], default=0.0)
+    max_rise_pct = max([valid_changes[n] for n in rise_names], default=0.0)
+
+    # 2. Áp dụng tỷ trọng thực tế: Chiều dài ống chỉ chiếm 65% tổng định mức (35% còn lại là túi, cạp, moi cố định)
+    final_pct = (len_pct * 0.65) + max_wid_pct + (max_rise_pct * 0.5) + extra_detail_pct
     pred_dm = old_dm * (1 + final_pct / 100)
+
 
 
     summary_df = pd.DataFrame([{
