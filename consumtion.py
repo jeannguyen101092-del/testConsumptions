@@ -1,5 +1,13 @@
+import io
+import re
+import difflib
 import streamlit as st
 import pandas as pd
+
+try:
+    import pdfplumber
+except ImportError:
+    pdfplumber = None
 
 st.set_page_config(page_title="Dự đoán định mức vải - Full POM", page_icon="🧵", layout="wide")
 
@@ -266,6 +274,65 @@ def parse_number(value):
         s = s.replace(",", ".")
     return float(s)
 
+def normalize_text(s):
+    s = str(s).lower()
+    s = re.sub(r"[^a-z0-9àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ\s]", " ", s)
+    return re.sub(r"\s+", " ", s).strip()
+
+def extract_raw_pairs_from_file(uploaded_file):
+    pairs = []
+    if uploaded_file is None:
+        return pairs
+    fname = uploaded_file.name.lower()
+    if fname.endswith((".xlsx", ".xls")):
+        xls = pd.ExcelFile(uploaded_file)
+        for sheet in xls.sheet_names:
+            df = xls.parse(sheet, header=None)
+            for _, row in df.iterrows():
+                cells = [str(c).strip() for c in row.tolist() if pd.notna(c) and str(c).strip() != ""]
+                if len(cells) < 2:
+                    continue
+                text_parts, num_parts = [], []
+                for c in cells:
+                    try:
+                        val = parse_number(c)
+                        if 0 < val < 200:
+                            num_parts.append(val)
+                    except Exception:
+                        if len(c) >= 3:
+                            text_parts.append(c)
+                if text_parts and num_parts:
+                    pairs.append((max(text_parts, key=len), num_parts))
+    elif fname.endswith(".pdf") and pdfplumber is not None:
+        with pdfplumber.open(uploaded_file) as pdf:
+            for page in pdf.pages:
+                text = page.extract_text() or ""
+                for line in text.splitlines():
+                    nums = re.findall(r"\b\d+(?:[.,]\d+)?\b", line)
+                    label = re.sub(r"\b\d+(?:[.,]\d+)?\b", "", line).strip(" :-–—|")
+                    if len(label) >= 3 and nums:
+                        val = parse_number(nums)
+                        if 0 < val < 200:
+                            pairs.append((label, val))
+    return pairs
+
+def match_tp_to_full_poms(uploaded_file, specs):
+    raw_pairs = extract_raw_pairs_from_file(uploaded_file)
+    matched = {}
+    if not raw_pairs:
+        return matched
+    spec_keywords = {full: [normalize_text(p) for p in full.split("-") if normalize_text(p)] for full, _ in specs}
+    for raw_label, val in raw_pairs:
+        norm_label = normalize_text(raw_label)
+        best_pom, best_score = None, 0.0
+        for full_name, kw_list in spec_keywords.items():
+            for kw in kw_list:
+                score = 0.95 if (kw in norm_label or norm_label in kw) else difflib.SequenceMatcher(None, kw, norm_label).ratio()
+                if score > best_score:
+                    best_score, best_pom = score, full_name
+        if best_pom and best_score >= 0.62 and best_pom not in matched:
+            matched[best_pom] = val
+    return matched
 def width_weights(width_names):
     raw = {}
     for name in width_names:
@@ -290,7 +357,6 @@ def calculate_full_poms(df_input, specs, old_dm, group_weights):
         pom = str(row.get("Tên POM", "")).strip()
         if not pom or pom == "None":
             continue
-
         old_val = parse_number(row.get("Mã cũ", 0.0))
         new_val = parse_number(row.get("Mã mới", 0.0))
         group = spec_map.get(pom, "detail")
@@ -317,11 +383,11 @@ def calculate_full_poms(df_input, specs, old_dm, group_weights):
             "Thay đổi (%)": pct_str,
             "Trạng thái": status,
         })
+
     if not valid_changes:
         raise ValueError("Cần ít nhất 1 thông số POM có giá trị > 0 ở cả Mã cũ và Mã mới để tính tỷ lệ thay đổi.")
 
     change_m1 = sum(valid_changes.values()) / len(valid_changes)
-
     group_changes = {}
     for grp, names in grouped_valid.items():
         if grp == "width":
@@ -361,8 +427,8 @@ def calculate_full_poms(df_input, specs, old_dm, group_weights):
         })
 
     return pd.DataFrame(summary_rows), pd.DataFrame(detail_rows)
-st.title("🧵 APP DỰ ĐOÁN ĐỊNH MỨC VẢI (FULL POM CHI TIẾT)")
-st.caption("Danh sách đầy đủ tất cả chi tiết (thân chính, túi, nắp túi, cạp, cổ, măng sét, nón...). Mã nào không có để = 0 sẽ tự động không đưa vào so sánh.")
+st.title("🧵 APP DỰ ĐOÁN ĐỊNH MỨC VẢI (FULL POM & UPLOAD TECHPACK)")
+st.caption("Upload file Techpack (Excel/PDF) để tự động nhận diện thông số hoặc chỉnh sửa trực tiếp. Chi tiết không có để = 0 sẽ không đưa vào so sánh.")
 
 st.subheader("1. THÔNG TIN MÃ HÀNG")
 col_cat, col_old, col_new, col_dm = st.columns([1.2, 1, 1, 1])
@@ -376,18 +442,36 @@ with col_dm:
     old_dm = st.number_input("ĐM cũ (yd/pcs)", min_value=0.0001, value=0.8240, step=0.001, format="%.4f")
 
 cfg = CATEGORIES[category]
-st.subheader("2. NHẬP THÔNG SỐ POM (ĐỂ = 0 NẾU KHÔNG CÓ CHI TIẾT ĐÓ)")
 
-init_rows = [
-    {"Nhóm": grp, "Tên POM": spec_name, "Mã cũ": cfg["defaults"].get(spec_name, (0.0, 0.0))[0], "Mã mới": cfg["defaults"].get(spec_name, (0.0, 0.0))[1]}
-    for spec_name, grp in cfg["specs"]
-]
+st.subheader("2. UPLOAD FILE TECHPACK (TÙY CHỌN)")
+up1, up2 = st.columns(2)
+with up1:
+    tp_old_file = st.file_uploader(f"📄 Upload Techpack Mã cũ ({old_code})", type=["xlsx", "xls", "pdf"], key="tp_old")
+with up2:
+    tp_new_file = st.file_uploader(f"📄 Upload Techpack Mã mới ({new_code})", type=["xlsx", "xls", "pdf"], key="tp_new")
+
+old_tp_data = match_tp_to_full_poms(tp_old_file, cfg["specs"]) if tp_old_file else {}
+new_tp_data = match_tp_to_full_poms(tp_new_file, cfg["specs"]) if tp_new_file else {}
+
+if tp_old_file or tp_new_file:
+    st.success(f"✅ Đã tự động nhận diện **{len(old_tp_data)}** POM từ TP Mã cũ và **{len(new_tp_data)}** POM từ TP Mã mới.")
+
+st.subheader("3. BẢNG THÔNG SỐ FULL POM (ĐỂ = 0 NẾU KHÔNG CÓ)")
+init_rows = []
+for spec_name, grp in cfg["specs"]:
+    def_o, def_n = cfg["defaults"].get(spec_name, (0.0, 0.0)) if not (tp_old_file or tp_new_file) else (0.0, 0.0)
+    init_rows.append({
+        "Nhóm": grp,
+        "Tên POM": spec_name,
+        "Mã cũ": float(old_tp_data.get(spec_name, def_o)),
+        "Mã mới": float(new_tp_data.get(spec_name, def_n)),
+    })
 
 edited_df = st.data_editor(
     pd.DataFrame(init_rows),
     num_rows="dynamic",
     use_container_width=True,
-    height=520,
+    height=500,
     column_config={
         "Nhóm": st.column_config.SelectboxColumn("Nhóm", options=["length", "width", "rise", "detail"], required=True),
         "Tên POM": st.column_config.TextColumn("Tên POM (Chi tiết đo)", width="large"),
@@ -396,7 +480,6 @@ edited_df = st.data_editor(
     },
     key=f"full_pom_editor_{category}",
 )
-
 with st.expander("Tùy chỉnh trọng số nhóm (dùng cho Mô hình 2)", expanded=False):
     w1, w2, w3, w4 = st.columns(4)
     w_len = w1.number_input("Nhóm Dài (length)", value=0.40, step=0.05)
@@ -409,13 +492,17 @@ if st.button("🚀 Tính toán & Dự đoán định mức mới", type="primary
         group_weights = {"length": w_len, "width": w_wid, "rise": w_ris, "detail": w_det}
         df_summary, df_details = calculate_full_poms(edited_df, cfg["specs"], old_dm, group_weights)
 
-        st.subheader("3. KẾT QUẢ DỰ ĐOÁN ĐỊNH MỨC MỚI")
+        st.subheader("4. KẾT QUẢ DỰ ĐOÁN ĐỊNH MỨC MỚI")
         st.dataframe(df_summary, use_container_width=True, hide_index=True)
 
-        st.subheader("4. BẢNG ĐỐI CHIẾU FULL POM")
+        st.subheader("5. BẢNG ĐỐI CHIẾU FULL POM")
         filter_opt = st.radio(
             "Hiển thị dòng POM:",
-            options=["Tất cả POM", "Chỉ hiện các POM có đưa vào so sánh (> 0 cả 2 bên)", "Chỉ hiện các POM có nhập dữ liệu (> 0 ít nhất 1 bên)"],
+            options=[
+                "Tất cả POM",
+                "Chỉ hiện các POM có đưa vào so sánh (> 0 cả 2 bên)",
+                "Chỉ hiện các POM có nhập dữ liệu (> 0 ít nhất 1 bên)",
+            ],
             horizontal=True,
         )
         if filter_opt == "Chỉ hiện các POM có đưa vào so sánh (> 0 cả 2 bên)":
@@ -426,5 +513,16 @@ if st.button("🚀 Tính toán & Dự đoán định mức mới", type="primary
             df_show = df_details
 
         st.dataframe(df_show, use_container_width=True, hide_index=True)
+
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine="openpyxl") as writer:
+            df_summary.to_excel(writer, index=False, sheet_name="Du_doan_Dinh_muc")
+            df_details.to_excel(writer, index=False, sheet_name="Doi_chieu_Full_POM")
+        st.download_button(
+            label="📥 Tải báo cáo đối chiếu & định mức (.xlsx)",
+            data=output.getvalue(),
+            file_name=f"Dinh_muc_{old_code}_vs_{new_code}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
     except Exception as e:
         st.error(f"Lỗi tính toán: {e}")
