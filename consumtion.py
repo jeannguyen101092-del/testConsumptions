@@ -557,26 +557,35 @@ def calculate_full_poms(df_input, specs, old_dm):
 
     # 1. Tính tỷ lệ thay đổi Chiều dài tổng hợp (Đáy trung bình + Inseam nếu thiếu Outseam)
         # 1. Tính tỷ lệ thay đổi Chiều dài (Tách biệt Quần short và Quần dài khi thiếu Outseam)
+      # 1. Tính tỷ lệ thay đổi Chiều dài (Xử lý chuẩn cho cả Quần short, Quần dài & Áo)
     len_names = grouped_valid.get("length", [])
     rise_names = grouped_valid.get("rise", [])
+    has_out = "Outseam - Dài quần ngoài" in len_names
+    has_in = "Inseam - Dài quần trong" in len_names
 
-    if "Outseam - Dài quần ngoài" in len_names:
+    if has_out and has_in:
+        o_out, n_out = valid_old["Outseam - Dài quần ngoài"], valid_new["Outseam - Dài quần ngoài"]
+        o_in, n_in = valid_old["Inseam - Dài quần trong"], valid_new["Inseam - Dài quần trong"]
+        pct_out = (n_out / o_out - 1) * 100
+        pct_in = (n_in / o_in - 1) * 100
+        # Nếu là Quần short (Inseam < 15") và ống quần biến động mạnh hơn dài ngoài -> lấy trung bình cả 2
+        if o_in < 15.0:
+            len_pct = (pct_out + pct_in) / 2
+        else:
+            len_pct = pct_out
+    elif has_out:
         o_out = valid_old["Outseam - Dài quần ngoài"]
         n_out = valid_new["Outseam - Dài quần ngoài"]
         len_pct = (n_out / o_out - 1) * 100
-    elif "Inseam - Dài quần trong" in len_names:
+    elif has_in:
         o_in = valid_old["Inseam - Dài quần trong"]
         n_in = valid_new["Inseam - Dài quần trong"]
         if o_in < 15.0 or not rise_names:
-            # Quần short (Inseam < 15"): Tính trực tiếp theo Inseam để tránh tính trùng phần Đáy
             len_pct = (n_in / o_in - 1) * 100
         else:
-            # Quần dài (Inseam >= 15"): Cộng Đáy TB + Inseam để phản ánh đúng tổng chiều dài thân quần
             avg_rise_old = sum(valid_old[r] for r in rise_names) / len(rise_names)
             avg_rise_new = sum(valid_new[r] for r in rise_names) / len(rise_names)
-            total_len_old = avg_rise_old + o_in
-            total_len_new = avg_rise_new + n_in
-            len_pct = (total_len_new / total_len_old - 1) * 100
+            len_pct = ((avg_rise_new + n_in) / (avg_rise_old + o_in) - 1) * 100
     else:
         len_pct = group_active_avg("length")
 
