@@ -444,6 +444,23 @@ def match_tp_to_full_poms(uploaded_file, specs, size_col_idx=0):
             if score > best_score:
                 best_score, best_pom = score, full_name
 
+        # Lọc bỏ các thông số quá nhỏ vô lý (VD: 0.125, 0.75 gán nhầm vào Waist/Hip/Chest...)
+        is_too_small = False
+        if best_pom:
+            for key_prefix, min_val in MIN_POM_VALUES.items():
+                if key_prefix in best_pom and chosen_val < min_val:
+                    is_too_small = True
+                    break
+
+        if is_too_small:
+            debug_rows.append({
+                "Dòng đọc từ Techpack": raw_label,
+                "Các Size (đã bỏ Dung sai)": str(num_list),
+                "Số đã lấy": chosen_val,
+                "Trạng thái": f"⚠️ Bỏ qua (Số {chosen_val} quá nhỏ cho {best_pom})",
+            })
+            continue
+
         status_str = f"✅ {best_pom}" if (best_pom and best_score >= 0.75) else "❌ Bỏ qua"
         debug_rows.append({
             "Dòng đọc từ Techpack": raw_label,
@@ -456,7 +473,6 @@ def match_tp_to_full_poms(uploaded_file, specs, size_col_idx=0):
             matched[best_pom] = chosen_val
 
     return matched, debug_rows
-
 
 
 def width_weights(width_names):
