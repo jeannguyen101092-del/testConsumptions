@@ -485,16 +485,19 @@ def width_weights(width_names):
     raw = {}
     for name in width_names:
         low = name.lower()
-        if "hip" in low or "ngực" in low or "chest" in low:
-            raw[name] = 0.35
-        elif "thigh" in low or "đùi" in low:
-            raw[name] = 0.30
-        elif "opening" in low or "gối" in low or "knee" in low or "lai" in low:
-            raw[name] = 0.20
+        if "hip" in low or "mông" in low or "chest" in low or "ngực" in low:
+            raw[name] = 0.45      # Vùng rộng nhất quyết định sơ đồ (Mông / Ngực)
+        elif "thigh" in low or "đùi" in low or "shoulder" in low or "vai" in low:
+            raw[name] = 0.35      # Vùng bản rập lớn thứ hai (Đùi / Vai)
+        elif "waist" in low or "eo" in low or "knee" in low or "gối" in low:
+            raw[name] = 0.15      # Vùng trung gian (Eo / Gối)
+        elif "opening" in low or "ống" in low or "cửa tay" in low or "hem" in low or "lai" in low:
+            raw[name] = 0.05      # Rộng ống / cửa tay ít tốn vải khi lồng sơ đồ đầu-đuôi
         else:
-            raw[name] = 0.15
+            raw[name] = 0.10
     total = sum(raw.values()) or 1.0
     return {k: v / total for k, v in raw.items()}
+
 
 def calculate_full_poms(df_input, specs, old_dm):
     spec_map = dict(specs)
@@ -508,7 +511,8 @@ def calculate_full_poms(df_input, specs, old_dm):
             continue
         old_val = parse_number(row.get("Mã cũ", 0.0))
         new_val = parse_number(row.get("Mã mới", 0.0))
-        group = spec_map.get(pom, "detail")
+        # Ưu tiên lấy nhóm trực tiếp từ bảng (hỗ trợ cả dòng người dùng tự thêm tay)
+        group = str(row.get("Nhóm", "")).strip() or spec_map.get(pom, "detail")
 
         if old_val == 0 and new_val == 0:
             status, pct_str = "Không có ở cả 2 mã (Bỏ qua)", "—"
@@ -538,10 +542,10 @@ def calculate_full_poms(df_input, specs, old_dm):
     if not valid_changes:
         raise ValueError("Cần ít nhất 1 thông số POM có giá trị > 0 ở cả Mã cũ và Mã mới để tính tỷ lệ thay đổi.")
 
-          # Cộng thêm 0.8% cho mỗi chi tiết mới phát sinh ở Mã mới mà Mã cũ không có
+    # Cộng thêm 0.8% cho mỗi chi tiết mới phát sinh ở Mã mới mà Mã cũ không có
     extra_detail_pct = new_only_count * 0.8
 
-    # Tính trung bình các thông số thực sự có biến động (khác 0%) trong từng nhóm
+    # Hàm tính trung bình đơn giản cho các nhóm thông thường
     def group_active_avg(grp_name):
         names = grouped_valid.get(grp_name, [])
         if not names:
@@ -568,14 +572,20 @@ def calculate_full_poms(df_input, specs, old_dm):
     else:
         len_pct = group_active_avg("length")
 
-    wid_pct = group_active_avg("width")
+    # 2. Tính tỷ lệ thay đổi Chiều rộng CÓ TRỌNG SỐ (Ưu tiên Mông/Đùi hoặc Ngực/Vai)
+    active_widths = [n for n in grouped_valid.get("width", []) if abs(valid_changes[n]) > 0.01]
+    if active_widths:
+        w_map = width_weights(active_widths)
+        wid_pct = sum(valid_changes[n] * w_map[n] for n in active_widths)
+    else:
+        wid_pct = 0.0
+
     rise_pct = group_active_avg("rise")
 
-    # 2. Công thức cân bằng sát thực tế cắt may (đã điều hòa hệ số 0.75)
+    # 3. Công thức cân bằng sát thực tế cắt may (điều hòa hệ số 0.75)
     raw_pct = (len_pct * 0.65) + wid_pct + (rise_pct * 0.5) + extra_detail_pct
     final_pct = raw_pct * 0.75
     pred_dm = old_dm * (1 + final_pct / 100)
-
 
     summary_df = pd.DataFrame([{
         "Mã cũ": old_dm,
@@ -587,6 +597,7 @@ def calculate_full_poms(df_input, specs, old_dm):
     }])
 
     return summary_df, pd.DataFrame(detail_rows)
+
 
 
 
