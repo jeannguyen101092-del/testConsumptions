@@ -437,7 +437,7 @@ def width_weights(width_names):
     total = sum(raw.values()) or 1.0
     return {k: v / total for k, v in raw.items()}
 
-def calculate_full_poms(df_input, specs, old_dm, group_weights):
+def calculate_full_poms(df_input, specs, old_dm):
     spec_map = dict(specs)
     detail_rows = []
     valid_changes, valid_old, valid_new, grouped_valid = {}, {}, {}, {}
@@ -479,55 +479,33 @@ def calculate_full_poms(df_input, specs, old_dm, group_weights):
     if not valid_changes:
         raise ValueError("Cần ít nhất 1 thông số POM có giá trị > 0 ở cả Mã cũ và Mã mới để tính tỷ lệ thay đổi.")
 
-    # Tách riêng các thông số tăng và giảm (thông số tăng tác động mạnh gấp đôi khi xếp sơ đồ)
-    pos_changes = [p for p in valid_changes.values() if p > 0]
-    neg_changes = [p for p in valid_changes.values() if p < 0]
-
-    avg_pos = (sum(pos_changes) / len(pos_changes)) if pos_changes else 0.0
-    avg_neg = (sum(neg_changes) / len(neg_changes)) if neg_changes else 0.0
-
     # Cộng thêm 1.2% cho mỗi chi tiết mới phát sinh ở Mã mới mà Mã cũ không có
     extra_detail_pct = new_only_count * 1.2
 
-    # Mô hình 1: Biến động ròng có trọng số hướng tăng (Không bị pha loãng bởi các dòng 0%)
-    change_m1 = (avg_pos * 1.5 + avg_neg * 0.5) + extra_detail_pct
-
-    # Mô hình 2: Tác động theo Nhóm đỉnh (Lấy mức tăng cao nhất của nhóm Dài + Nhóm Rộng)
-    max_len_pct = max([valid_changes[n] for n in grouped_valid.get("length", [])], default=0.0)
-    max_wid_pct = max([valid_changes[n] for n in grouped_valid.get("width", [])], default=0.0)
-    max_rise_pct = max([valid_changes[n] for n in grouped_valid.get("rise", [])], default=0.0)
-    change_m2 = (max_len_pct + max_wid_pct + max_rise_pct * 0.5) + extra_detail_pct
-
-    # Mô hình 3: Hiệu ứng nhảy bước sơ đồ Marker (Tổng hợp Dài × Rộng nhân hệ số cộng hưởng 2.2)
+    # Tính hệ số biến động theo từng nhóm chính (ưu tiên top 2 thông số biến động mạnh nhất)
     def grp_factor(g):
         names = grouped_valid.get(g, [])
         if not names:
             return 1.0
-        # Ưu tiên lấy trung bình top 2 thông số thay đổi lớn nhất trong nhóm
         ratios = sorted([valid_new[n] / valid_old[n] for n in names if valid_old[n] > 0], reverse=True)
         top_r = ratios[:2]
         return sum(top_r) / len(top_r)
 
     raw_area_pct = (grp_factor("length") * grp_factor("width") * (grp_factor("rise") ** 0.5) - 1) * 100
-    change_m3 = raw_area_pct * 2.2 + extra_detail_pct
+    final_pct = raw_area_pct * 2.2 + extra_detail_pct
+    pred_dm = old_dm * (1 + final_pct / 100)
 
-    summary_rows = []
-    for model_name, pct in [
-        ("Mô hình 1 - Trung bình các thông số biến động (Bỏ qua dòng 0%)", change_m1),
-        ("Mô hình 2 - Cộng hưởng mức tăng đỉnh (Dài + Rộng + Đáy)", change_m2),
-        ("Mô hình 3 - Hiệu ứng nhảy bước sơ đồ Marker (Khuyên dùng)", change_m3),
-    ]:
-        pred_dm = old_dm * (1 + pct / 100)
-        summary_rows.append({
-            "Phương pháp tính": model_name,
-            "Số POM so sánh": len(valid_changes),
-            "Tỷ lệ thay đổi tổng hợp (%)": round(pct, 2),
-            "ĐM cũ (yd/pcs)": round(old_dm, 4),
-            "ĐM dự đoán mới (yd/pcs)": round(pred_dm, 4),
-            "Chênh lệch ĐM (yd/pcs)": round(pred_dm - old_dm, 4),
-        })
+    summary_df = pd.DataFrame([{
+        "Mã cũ": old_dm,
+        "Số POM so sánh": len(valid_changes),
+        "Tỷ lệ thay đổi tổng hợp (%)": round(final_pct, 2),
+        "ĐM cũ (yd/pcs)": round(old_dm, 4),
+        "ĐM dự đoán mới (yd/pcs)": round(pred_dm, 4),
+        "Chênh lệch ĐM (yd/pcs)": round(pred_dm - old_dm, 4),
+    }])
 
-    return pd.DataFrame(summary_rows), pd.DataFrame(detail_rows)
+    return summary_df, pd.DataFrame(detail_rows)
+
 
 
 st.title("🧵 APP DỰ ĐOÁN ĐỊNH MỨC VẢI (FULL POM & UPLOAD TECHPACK)")
@@ -584,11 +562,9 @@ has_uploaded = bool(tp_old_file or tp_new_file)
 init_rows = []
 for spec_name, grp in cfg["specs"]:
     if has_uploaded:
-        # Khi đã upload file TP: lấy số đọc từ TP, thông số nào không có tự về 0.0
         o_val = float(old_tp_data.get(spec_name, 0.0))
         n_val = float(new_tp_data.get(spec_name, 0.0))
     else:
-        # Khi chưa upload file TP: hiển thị số mẫu để tham khảo
         o_val, n_val = cfg["defaults"].get(spec_name, (0.0, 0.0))
 
     init_rows.append({
@@ -615,22 +591,17 @@ edited_df = st.data_editor(
     key=f"pom_table_{category}_{old_fname}_{new_fname}_{size_col_idx}",
 )
 
-
-
-with st.expander("Tùy chỉnh trọng số nhóm (dùng cho Mô hình 2)", expanded=False):
-    w1, w2, w3, w4 = st.columns(4)
-    w_len = w1.number_input("Nhóm Dài (length)", value=0.40, step=0.05)
-    w_wid = w2.number_input("Nhóm Rộng (width)", value=0.40, step=0.05)
-    w_ris = w3.number_input("Nhóm Đáy (rise)", value=0.10, step=0.05)
-    w_det = w4.number_input("Nhóm Chi tiết phụ (detail)", value=0.10, step=0.05)
-
 if st.button("🚀 Tính toán & Dự đoán định mức mới", type="primary"):
     try:
-        group_weights = {"length": w_len, "width": w_wid, "rise": w_ris, "detail": w_det}
-        df_summary, df_details = calculate_full_poms(edited_df, cfg["specs"], old_dm, group_weights)
+        df_summary, df_details = calculate_full_poms(edited_df, cfg["specs"], old_dm)
 
         st.subheader("4. KẾT QUẢ DỰ ĐOÁN ĐỊNH MỨC MỚI")
-        st.dataframe(df_summary, use_container_width=True, hide_index=True)
+        res = df_summary.iloc
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("ĐM cũ (yd/pcs)", f"{res['ĐM cũ (yd/pcs)']:.4f}")
+        m2.metric("Tỷ lệ thay đổi tổng hợp", f"{res['Tỷ lệ thay đổi tổng hợp (%)']:+.2f}%")
+        m3.metric("ĐM dự đoán mới (yd/pcs)", f"{res['ĐM dự đoán mới (yd/pcs)']:.4f}", delta=f"{res['Chênh lệch ĐM (yd/pcs)']:+.4f} yd")
+        m4.metric("Số POM đưa vào so sánh", f"{int(res['Số POM so sánh'])} thông số")
 
         st.subheader("5. BẢNG ĐỐI CHIẾU FULL POM")
         filter_opt = st.radio(
