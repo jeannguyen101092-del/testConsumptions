@@ -482,18 +482,14 @@ def calculate_full_poms(df_input, specs, old_dm):
     # Cộng thêm 1.2% cho mỗi chi tiết mới phát sinh ở Mã mới mà Mã cũ không có
     extra_detail_pct = new_only_count * 1.2
 
-    # Tính hệ số biến động theo từng nhóm chính (ưu tiên top 2 thông số biến động mạnh nhất)
-    def grp_factor(g):
-        names = grouped_valid.get(g, [])
-        if not names:
-            return 1.0
-        ratios = sorted([valid_new[n] / valid_old[n] for n in names if valid_old[n] > 0], reverse=True)
-        top_r = ratios[:2]
-        return sum(top_r) / len(top_r)
+        # Công thức chuẩn bạn đã chốt: Cộng hưởng mức tăng đỉnh (Dài + Rộng + Đáy)
+    max_len_pct = max([valid_changes[n] for n in grouped_valid.get("length", [])], default=0.0)
+    max_wid_pct = max([valid_changes[n] for n in grouped_valid.get("width", [])], default=0.0)
+    max_rise_pct = max([valid_changes[n] for n in grouped_valid.get("rise", [])], default=0.0)
 
-    raw_area_pct = (grp_factor("length") * grp_factor("width") * (grp_factor("rise") ** 0.5) - 1) * 100
-    final_pct = raw_area_pct * 2.2 + extra_detail_pct
+    final_pct = (max_len_pct + max_wid_pct + max_rise_pct * 0.5) + extra_detail_pct
     pred_dm = old_dm * (1 + final_pct / 100)
+
 
     summary_df = pd.DataFrame([{
         "Mã cũ": old_dm,
