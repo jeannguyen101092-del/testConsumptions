@@ -577,7 +577,7 @@ def calculate_full_poms(df_input, specs, old_dm):
         o_out = valid_old["Outseam - Dài quần ngoài"]
         n_out = valid_new["Outseam - Dài quần ngoài"]
         len_pct = (n_out / o_out - 1) * 100
-        elif has_in:
+    elif has_in:
         o_in = valid_old["Inseam - Dài quần trong"]
         n_in = valid_new["Inseam - Dài quần trong"]
         if rise_names:
