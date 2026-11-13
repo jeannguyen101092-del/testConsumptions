@@ -11,9 +11,6 @@ except ImportError:
 
 st.set_page_config(page_title="Dự đoán định mức vải - Full POM", page_icon="🧵", layout="wide")
 
-# ==============================================================================
-# 1. DANH MỤC 8 DÒNG HÀNG & BỘ THÔNG SỐ POM CHUẨN
-# ==============================================================================
 CATEGORIES = {
     "Quần short": {
         "specs": [
@@ -195,7 +192,7 @@ CATEGORIES = {
             ("Kangaroo Pocket Width - Rộng túi bụng Kangaroo", "detail"),
             ("Kangaroo Pocket Height - Cao túi bụng Kangaroo", "detail"),
             ("Side Pocket Opening - Miệng túi sườn", "detail"),
-            ("Sleeve Pocket Width - Rộng túi túi tay áo", "detail"),
+            ("Sleeve Pocket Width - Rộng túi tay áo", "detail"),
             ("Sleeve Pocket Height - Cao túi tay áo", "detail"),
             ("Pocket Flap Width - Rộng nắp túi", "detail"),
             ("Pocket Flap Height - Cao nắp túi", "detail"),
@@ -264,11 +261,36 @@ CATEGORIES = {
     },
 }
 
-# ==============================================================================
-# 2. TỪ ĐIỂN NHẬN DIỆN POM & BỘ LỌC NGƯỠNG TỐI THIỂU / VẢI LÓT BOM
-# ==============================================================================
+MIN_POM_VALUES = {
+    "Outseam": 8.0,
+    "Inseam": 2.0,
+    "Body Length": 12.0,
+    "Waist": 8.0,
+    "Hip": 10.0,
+    "Chest": 10.0,
+    "Thigh": 5.0,
+    "Knee": 4.0,
+    "Leg Opening": 3.5,
+    "Hem Width": 8.0,
+    "Shoulder": 8.0,
+    "Front Rise": 5.0,
+    "Back Rise": 7.0,
+    "Sleeve Length": 3.0,
+}
+
+NON_SHELL_KEYWORDS = [
+    "pocket bag",
+    "lót túi",
+    "inside pocket",
+    "túi trong lót",
+    "lining",
+    "rib",
+    "bo cổ",
+    "bo tay",
+    "bo lai",
+]
+
 POM_RULES = {
-    # --- NHÓM QUẦN ---
     "Outseam - Dài quần ngoài": (["outseam", "side seam", "side length", "total length", "leg 015"], ["pocket", "flap", "inseam", "opening", "slit", "fm", "from"]),
     "Inseam - Dài quần trong": (["inseam", "inside leg", "crotch to hem", "leg 012"], ["pocket", "outseam", "opening", "leg 015"]),
     "Waist - Vòng eo / Lưng quần": (["waist width", "waist"], ["band", "pocket", "drop", "elastic", "loop", "level", "below", "edge", "stitch", "seam", "placement", "plcmnt", "position", "pitch"]),
@@ -281,8 +303,6 @@ POM_RULES = {
     "Waistband Height - Cao bản lưng / cạp": (["waistband width", "waistband height", "waistband"], ["pocket", "length"]),
     "Fly Length - Dài moi / dây kéo": (["fly length", "zipper length", "j stitch length"], ["width"]),
     "Fly Width - Rộng moi": (["fly width", "j stitch width"], ["length"]),
-
-    # --- TÚI & NẮP TÚI ---
     "Front Pocket Opening - Miệng túi trước": (["front pocket opening", "pocket opening"], ["coin", "back", "side pocket"]),
     "Front Pocket Bag Length - Dài lót túi trước": (["front pocket height", "front pocket length", "front pocket bag length"], ["width", "opening", "placement", "plcmnt", "fm"]),
     "Front Pocket Bag Width - Rộng lót túi trước": (["front pocket width", "front pocket bag width"], ["height", "length", "opening", "placement", "plcmnt", "fm"]),
@@ -294,51 +314,32 @@ POM_RULES = {
     "Back Pocket Bag Length - Dài lót túi hậu": (["back pocket height", "back pocket length"], ["flap", "width", "placement", "plcmnt", "fm"]),
     "Back Pocket Flap Width - Rộng nắp túi sau": (["back pocket flap width", "flap width"], ["height"]),
     "Back Pocket Flap Height - Cao nắp túi sau": (["back pocket flap height", "flap height"], ["width"]),
-
-    # --- NHÓM ÁO & VÁY / ĐẦM ---
     "Body Length Front - Dài áo trước": (["front length", "cf length", "body length front"], ["pocket", "zipper", "placket", "drop"]),
     "Body Length Back - Dài áo sau": (["back length", "cb length", "body length back"], ["pocket", "zipper", "placket", "drop"]),
-    "Body Length - Dài áo": (["body length", "hps length", "total length", "front length"], ["pocket", "zipper", "placket", "sleeve"]),
-    "Body Length - Dài váy / đầm": (["body length", "dress length", "skirt length", "hps length"], ["pocket", "zipper", "sleeve", "slit"]),
-    "Chest - Vòng ngực": (["chest width", "chest", "bust width", "bust"], ["pocket", "placement", "below", "armhole"]),
-    "Waist - Vòng eo áo": (["waist width", "waist"], ["band", "pocket", "placement", "below"]),
-    "Waist - Vòng eo": (["waist width", "waist"], ["band", "pocket", "placement", "below"]),
+    "Body Length - Dài áo": (["body length", "front length", "back length", "hps length"], ["pocket", "zipper", "placket", "drop", "sleeve"]),
+    "Body Length - Dài váy / đầm": (["body length", "dress length", "skirt length", "hps length"], ["pocket", "zipper", "slit", "sleeve"]),
+    "Chest - Vòng ngực": (["chest width", "chest", "bust"], ["pocket", "level", "below", "placement", "plcmnt"]),
+    "Waist - Vòng eo áo": (["waist width", "waist"], ["band", "pocket", "level", "below", "placement"]),
+    "Waist - Vòng eo": (["waist width", "waist"], ["band", "pocket", "level", "below", "placement"]),
     "Hem Width - Rộng lai áo": (["hem width", "bottom width", "sweep"], ["height", "turn", "rib"]),
-    "Hem Width - Rộng lai váy": (["hem width", "bottom width", "sweep"], ["height", "turn"]),
-    "Shoulder - Ngang vai": (["across shoulder", "shoulder width", "shoulder to shoulder"], ["slope", "drop", "seam", "pocket"]),
-    "Bicep - Rộng bắp tay": (["bicep", "muscle width", "upper arm"], ["below"]),
-    "Sleeve Length - Dài tay": (["sleeve length", "long sleeve length"], ["opening", "placket", "pocket", "short"]),
-    "Sleeve Length - Dài tay dài": (["sleeve length", "long sleeve length"], ["opening", "placket", "pocket", "short"]),
-    "Short Sleeve Length - Dài tay ngắn": (["short sleeve length"], ["opening", "placket"]),
+    "Hem Width - Rộng lai váy": (["hem width", "bottom width", "sweep"], ["height", "turn", "slit"]),
+    "Shoulder - Ngang vai": (["across shoulder", "shoulder width", "shoulder"], ["slope", "drop", "seam"]),
+    "Armhole - Vòng nách": (["armhole"], ["drop", "level"]),
+    "Bicep - Rộng bắp tay": (["bicep", "muscle", "upper arm"], ["level", "below"]),
+    "Sleeve Length - Dài tay": (["sleeve length"], ["opening", "placket", "pocket", "short"]),
+    "Sleeve Length - Dài tay dài": (["long sleeve length", "sleeve length"], ["opening", "placket", "pocket", "short"]),
+    "Short Sleeve Length - Dài tay ngắn": (["short sleeve length"], ["opening"]),
     "Sleeve Opening - Rộng cửa tay": (["sleeve opening", "cuff opening"], ["height", "length"]),
     "Sleeve Opening - Rộng cửa tay ngắn": (["sleeve opening", "short sleeve opening"], ["height", "length"]),
     "Cuff Opening - Rộng cửa tay": (["cuff opening", "sleeve opening"], ["height", "length"]),
     "Hood Height - Cao mũ / nón": (["hood height", "hood length"], ["width"]),
+    "Hood Height - Cao mũ / nón rời hoặc liền": (["hood height", "hood length"], ["width"]),
     "Hood Width - Rộng mũ / nón": (["hood width", "hood depth"], ["height", "length"]),
     "Kangaroo Pocket Width - Rộng túi bụng Kangaroo": (["kangaroo pocket width", "pouch pocket width"], ["height", "length"]),
     "Kangaroo Pocket Height - Cao túi bụng Kangaroo": (["kangaroo pocket height", "pouch pocket height"], ["width"]),
 }
 
-MIN_POM_VALUES = {
-    "Outseam": 8.0,
-    "Body Length": 10.0,
-    "Waist": 8.0,
-    "Hip": 10.0,
-    "Chest": 10.0,
-    "Thigh": 6.0,
-    "Shoulder": 8.0,
-    "Front Rise": 5.0,
-    "Back Rise": 7.0,
-}
 
-# Các chi tiết mặc định thường thuộc Vải lót / Bo Rib theo BOM (có thể tick lại nếu dùng vải chính)
-NON_SHELL_KEYWORDS = [
-    "pocket bag", "lót túi", "inside pocket", "túi trong lót", "lining", "rib height", "cao bo"
-]
-
-# ==============================================================================
-# 3. CÁC HÀM XỬ LÝ DỮ LIỆU TECHPACK & ĐỌC SỐ
-# ==============================================================================
 def parse_number(value):
     if value is None or isinstance(value, (list, tuple, dict)):
         return 0.0
@@ -379,25 +380,27 @@ def extract_table_rows_from_file(uploaded_file):
     rows_to_process = []
 
     if fname.endswith((".xlsx", ".xls")):
-        xls = pd.ExcelFile(uploaded_file)
-        for sheet in xls.sheet_names:
-            df = pd.read_excel(xls, sheet_name=sheet, header=None)
-            rows_to_process.extend(df.values.tolist())
-    elif fname.endswith(".pdf"):
-        if pdfplumber is None:
-            st.warning("Chưa cài thư viện pdfplumber để đọc file PDF.")
-            return []
-        with pdfplumber.open(uploaded_file) as pdf:
-            for page in pdf.pages:
-                tables = page.extract_tables()
-                for tbl in tables:
-                    if tbl:
-                        rows_to_process.extend(tbl)
+        try:
+            excel_data = pd.read_excel(uploaded_file, sheet_name=None, header=None)
+            for _, df_sheet in excel_data.items():
+                for row in df_sheet.values.tolist():
+                    rows_to_process.append(row)
+        except Exception:
+            pass
+    elif fname.endswith(".pdf") and pdfplumber is not None:
+        try:
+            with pdfplumber.open(uploaded_file) as pdf:
+                for page in pdf.pages:
+                    tables = page.extract_tables() or []
+                    for tbl in tables:
+                        for row in tbl:
+                            rows_to_process.append(row)
+        except Exception:
+            pass
 
     extracted = []
     for row in rows_to_process:
-        cells = [str(c).replace("
-", " ").strip() for c in row if c is not None and str(c).strip() != ""]
+        cells = [str(c).replace("\n", " ").strip() for c in row if c is not None and str(c).strip() != ""]
         if len(cells) < 2:
             continue
 
@@ -485,21 +488,19 @@ def match_tp_to_full_poms(uploaded_file, specs, size_col_idx=0):
 
     return matched, debug_rows
 
-# ==============================================================================
-# 4. HÀM TRỌNG SỐ CHIỀU RỘNG & TÍNH ĐỊNH MỨC (ĐỒNG BỘ TÀI LIỆU V8.0)
-# ==============================================================================
+
 def width_weights(width_names):
     raw = {}
     for name in width_names:
         low = name.lower()
         if "hip" in low or "mông" in low or "chest" in low or "ngực" in low:
-            raw[name] = 0.45      # Vùng rộng nhất quyết định sơ đồ (Mông / Ngực)
+            raw[name] = 0.45
         elif "thigh" in low or "đùi" in low or "shoulder" in low or "vai" in low:
-            raw[name] = 0.35      # Vùng bản rập lớn thứ hai (Đùi / Vai)
+            raw[name] = 0.35
         elif "waist" in low or "eo" in low or "knee" in low or "gối" in low:
-            raw[name] = 0.15      # Vùng trung gian (Eo / Gối)
+            raw[name] = 0.15
         elif "opening" in low or "ống" in low or "cửa tay" in low or "hem" in low or "lai" in low:
-            raw[name] = 0.05      # Rộng ống / cửa tay ít tốn vải khi lồng sơ đồ đầu-đuôi
+            raw[name] = 0.05
         else:
             raw[name] = 0.10
     total = sum(raw.values()) or 1.0
@@ -522,7 +523,6 @@ def calculate_full_poms(df_input, specs, old_dm):
         group = str(row.get("Nhóm", "")).strip() or spec_map.get(pom, "detail")
         is_shell = bool(row.get("Vải chính?", True))
 
-        # Lọc theo BOM: Bỏ qua các chi tiết là Vải lót / Vải phối / Bo Rib
         if not is_shell:
             status = "🚫 Vải lót / Vải phối (Loại trừ theo BOM)"
             pct_str = "—"
@@ -566,7 +566,6 @@ def calculate_full_poms(df_input, specs, old_dm):
             return 0.0
         return sum(active_vals) / len(active_vals)
 
-    # 1. Tính tỷ lệ thay đổi Chiều dài (Xử lý Quần short, Quần dài & Áo)
     len_names = grouped_valid.get("length", [])
     rise_names = grouped_valid.get("rise", [])
     has_out = "Outseam - Dài quần ngoài" in len_names
@@ -597,7 +596,6 @@ def calculate_full_poms(df_input, specs, old_dm):
     else:
         len_pct = group_active_avg("length")
 
-    # 2. Tính tỷ lệ thay đổi Chiều rộng CÓ TRỌNG SỐ
     active_widths = [n for n in grouped_valid.get("width", []) if abs(valid_changes[n]) > 0.01]
     if active_widths:
         w_map = width_weights(active_widths)
@@ -607,7 +605,6 @@ def calculate_full_poms(df_input, specs, old_dm):
 
     rise_pct = group_active_avg("rise")
 
-    # 3. Công thức thích ứng 2 chế độ (Bước 1: Tính ĐM mới trên nền Khổ cũ & Độ co cũ)
     if abs(len_pct) > 25.0:
         len_weight = 0.85
         harmony_factor = 1.00
@@ -628,27 +625,29 @@ def calculate_full_poms(df_input, specs, old_dm):
 
     return summary_df, pd.DataFrame(detail_rows)
 
-# ==============================================================================
-# 5. GIAO DIỆN STREAMLIT
-# ==============================================================================
-st.title("🧵 APP DỰ ĐOÁN ĐỊNH MỨC VẢI (FULL POM & QUY ĐỔI KHỔ / ĐỘ CO)")
-st.caption("Đối chiếu BOM lọc Vải chính ➔ Chuẩn hóa cách đo POM ➔ Tính ĐM trên khổ cũ ➔ Quy đổi sang khổ vải & độ co mới.")
+
+st.title("🧵 APP DỰ ĐOÁN ĐỊNH MỨC VẢI (FULL POM, LỌC BOM & QUY ĐỔI KHỔ)")
+st.caption("Tự động đọc Techpack (Excel/PDF), kiểm soát chất liệu theo BOM và tính toán định mức 2 bước (Khổ cũ ➔ Khổ mới & Độ co mới).")
 
 if "reset_counter" not in st.session_state:
     st.session_state.reset_counter = 0
 
 rc = st.session_state.reset_counter
 
-col_title_up, col_size_sel, col_btn_reset = st.columns([2.8, 1.2, 0.8])
+col_title_up, col_btn_reset = st.columns([3.5, 1])
 with col_title_up:
     st.subheader("1. UPLOAD FILE TECHPACK & CHỌN CỘT SIZE")
-with col_size_sel:
-    size_col_idx = st.number_input("Vị trí cột Base Size (0 = cột số đầu tiên)", min_value=0, max_value=15, value=0, step=1)
 with col_btn_reset:
-    st.write("")
     if st.button("🔄 Làm mới dữ liệu", use_container_width=True):
         st.session_state.reset_counter += 1
         st.rerun()
+
+size_col_idx = st.selectbox(
+    "Chọn vị trí cột Base Size trong bảng thông số (tính từ cột số đầu tiên sau khi đã tự động bỏ cột Dung sai)",
+    options=[0, 1, 2, 3, 4],
+    format_func=lambda i: f"Cột số thứ {i + 1} (mặc định Base Size đầu tiên)" if i == 0 else f"Cột số thứ {i + 1}",
+    index=0,
+)
 
 up1, up2 = st.columns(2)
 with up1:
@@ -656,8 +655,8 @@ with up1:
 with up2:
     tp_new_file = st.file_uploader("📄 Upload Techpack Mã mới", type=["xlsx", "xls", "pdf"], key=f"tp_new_{rc}")
 
-auto_old_code = tp_old_file.name.rsplit(".", 1)[0] if tp_old_file else "MA-CU-01"
-auto_new_code = tp_new_file.name.rsplit(".", 1)[0] if tp_new_file else "MA-MOI-02"
+auto_old_code = tp_old_file.name.rsplit(".", 1)[0] if tp_old_file else "R06-494141"
+auto_new_code = tp_new_file.name.rsplit(".", 1)[0] if tp_new_file else "R06-494148"
 
 st.subheader("2. THÔNG TIN MÃ HÀNG, KHỔ VẢI & ĐỘ CO")
 col_cat, col_old, col_new, col_dm = st.columns([1.2, 1, 1, 1])
@@ -696,10 +695,11 @@ if tp_old_file or tp_new_file:
             st.markdown(f"**Dữ liệu gốc TP Mã mới ({new_code}):**")
             st.dataframe(pd.DataFrame(new_debug), use_container_width=True, hide_index=True)
 
-st.subheader("3. BẢNG THÔNG SỐ FULL POM (KIỂM TRA VẢI CHÍNH THEO BOM & CHUẨN ĐO)")
-st.caption("Lưu ý: Bỏ tích cột 'Vải chính?' đối với các chi tiết dùng vải lót (Pocketing/Lining) hoặc bo Rib trên BOM. Quy chuẩn cách đo (ví dụ: cộng thêm bản lưng nếu đo dưới lưng) trước khi tính.")
+st.subheader("3. BẢNG THÔNG SỐ FULL POM (KIỂM TRA CỘT 'VẢI CHÍNH?' THEO BOM)")
+st.caption("Lưu ý: Các chi tiết bằng vải lót/vải phối/bo Rib (như lót túi dùng vải TC/Pocketing) cần bỏ tích ở cột 'Vải chính?'. Nếu lót túi dùng vải chính, hãy tích chọn lại.")
 
 has_uploaded = bool(tp_old_file or tp_new_file)
+
 init_rows = []
 for spec_name, grp in cfg["specs"]:
     if has_uploaded:
@@ -727,7 +727,7 @@ edited_df = st.data_editor(
     use_container_width=True,
     height=500,
     column_config={
-        "Vải chính?": st.column_config.CheckboxColumn("Vải chính?", help="Tích chọn nếu chi tiết làm bằng Vải chính (Shell). Bỏ tích nếu là Vải lót/Phối/Bo Rib."),
+        "Vải chính?": st.column_config.CheckboxColumn("Vải chính?", default=True),
         "Nhóm": st.column_config.SelectboxColumn("Nhóm", options=["length", "width", "rise", "detail"], required=True),
         "Tên POM": st.column_config.TextColumn("Tên POM (Chi tiết đo)", width="large"),
         "Mã cũ": st.column_config.NumberColumn("Mã cũ", min_value=0.0, format="%.3f"),
@@ -738,12 +738,10 @@ edited_df = st.data_editor(
 
 if st.button("🚀 Tính toán & Dự đoán định mức mới", type="primary"):
     try:
-        # BƯỚC 1: Tính định mức mới dựa trên biến động POM (giữ nguyên khổ vải cũ & độ co cũ)
         df_summary, df_details = calculate_full_poms(edited_df, cfg["specs"], old_dm)
         res = df_summary.to_dict(orient="records")[0]
         dm_old_width = res["ĐM mới [Khổ cũ] (yd/pcs)"]
 
-        # BƯỚC 2: Quy đổi sang Khổ vải mới & Độ co mới
         shrink_factor = (1 - old_shrink / 100.0) / (1 - new_shrink / 100.0)
         final_pred_dm = dm_old_width * (old_width / new_width) * shrink_factor
         diff_dm = final_pred_dm - old_dm
@@ -755,8 +753,8 @@ if st.button("🚀 Tính toán & Dự đoán định mức mới", type="primary
         m3.metric("Bước 2: ĐM dự đoán cuối cùng", f"{final_pred_dm:.4f}", delta=f"{diff_dm:+.4f} yd")
         m4.metric("Số POM Vải chính so sánh", f"{int(res['Số POM so sánh'])} thông số")
 
-        df_summary["Khổ cũ -> Mới"] = f"{old_width}\" -> {new_width}\""
-        df_summary["Độ co cũ -> Mới"] = f"{old_shrink}% -> {new_shrink}%"
+        df_summary["Khổ cũ / Mới"] = f"{old_width}\" -> {new_width}\""
+        df_summary["Độ co cũ / Mới"] = f"{old_shrink}% -> {new_shrink}%"
         df_summary["ĐM dự đoán cuối cùng (yd/pcs)"] = round(final_pred_dm, 4)
         df_summary["Chênh lệch tổng (yd/pcs)"] = round(diff_dm, 4)
 
@@ -765,13 +763,13 @@ if st.button("🚀 Tính toán & Dự đoán định mức mới", type="primary
             "Hiển thị dòng POM:",
             options=[
                 "Tất cả POM",
-                "Chỉ hiện các POM Vải chính đưa vào so sánh (> 0 cả 2 bên)",
+                "Chỉ hiện các POM Vải chính có đưa vào so sánh (> 0 cả 2 bên)",
                 "Chỉ hiện các POM có nhập dữ liệu (> 0 ít nhất 1 bên)",
             ],
             horizontal=True,
         )
-        if filter_opt == "Chỉ hiện các POM Vải chính đưa vào so sánh (> 0 cả 2 bên)":
-            df_show = df_details[(df_details["Vải chính?"]) & (df_details["Mã cũ"] > 0) & (df_details["Mã mới"] > 0)]
+        if filter_opt == "Chỉ hiện các POM Vải chính có đưa vào so sánh (> 0 cả 2 bên)":
+            df_show = df_details[(df_details["Vải chính?"] == True) & (df_details["Mã cũ"] > 0) & (df_details["Mã mới"] > 0)]
         elif filter_opt == "Chỉ hiện các POM có nhập dữ liệu (> 0 ít nhất 1 bên)":
             df_show = df_details[(df_details["Mã cũ"] > 0) | (df_details["Mã mới"] > 0)]
         else:
